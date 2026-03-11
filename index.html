@@ -231,7 +231,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
-    min-width: 950px;
+    min-width: 1100px;
   }
   .comp-table th {
     background: #e8f0f8;
@@ -398,6 +398,8 @@
   .save-status.saved  { display: inline-block; background: #e8f5e9; color: #217346; }
   .save-status.err    { display: inline-block; background: #fce8e8; color: #c00000; }
 
+  .tim-size-col { min-width: 80px; }
+
   @media (max-width: 900px) {
     .comp-table { font-size: 0.78rem; }
     .comp-table th, .comp-table td { padding: 8px 3px; }
@@ -553,10 +555,23 @@ const CATEGORIES = {
 };
 
 /* 散熱方向選項 */
-const HEAT_DIR_OPTIONS = ['Top', 'Bottom', 'Both', '—'];
+const HEAT_DIR_OPTIONS = ['IC top', 'IC bot', '雙向'];
 
-/* TIM 種類選項（沿用原始資料庫 + 擴充） */
-const TIM_TYPE_OPTIONS = ['Grease', 'Pad', 'Pad2', 'Putty', 'None', '—'];
+/* TIM 種類選項 */
+const TIM_TYPE_OPTIONS = ['Grease', 'Pad', 'Putty', 'None'];
+
+/* TIM 厚度選項 */
+const TIM_THICKNESS_OPTIONS = ['0.05mm以下', '0.5', '1.0', '1.5', '1.7', '2.0', '2.5', '3.0'];
+
+/* IC 距離 HSK 選項 */
+const IC_TO_HSK_OPTIONS = ['0.5', '1', '1.7', '直觸'];
+
+/* TIM 種類 → 預設對應 */
+const TIM_PRESETS = {
+  Putty:  { timThickness: '0.5',       icToHSK: '0.5' },
+  Grease: { timThickness: '0.05mm以下', icToHSK: '直觸' },
+  Pad:    { timThickness: '2.5',        icToHSK: '1.7' }
+};
 
 function initFirebase() {
   try {
@@ -811,16 +826,17 @@ function renderCategoryTable(catKey, catInfo, items) {
       <table class="comp-table">
         <thead><tr>
           <th class="readonly-col">#</th>
-          <th class="readonly-col">\u5143\u4ef6\u540d\u7a31</th>
-          <th class="readonly-col">\u6578\u91cf</th>
-          <th class="readonly-col">\u767c\u71b1\u74e6\u6578<br>(W)</th>
-          <th class="readonly-col">\u71b1\u6e90\u5927\u5c0f<br>(mm)</th>
-          <th class="editable-col">\u51f8\u53f0\u5927\u5c0f<br>(mm)</th>
-          <th class="readonly-col">TIM \u7a2e\u985e</th>
-          <th class="editable-col">TIM \u539a\u5ea6<br>(mm)</th>
-          <th class="editable-col">\u6563\u71b1\u65b9\u5411</th>
-          <th class="editable-col">IC \u8ddd\u96e2<br>HSK (mm)</th>
-          <th class="editable-col">\u5099\u8a3b</th>
+          <th class="readonly-col">元件名稱</th>
+          <th class="readonly-col">數量</th>
+          <th class="readonly-col">發熱瓦數<br>(W)</th>
+          <th class="editable-col">熱源大小<br>(mm)</th>
+          <th class="editable-col">凸台大小<br>(mm)</th>
+          <th class="editable-col">TIM 種類</th>
+          <th class="editable-col">TIM 厚度<br>(mm)</th>
+          <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
+          <th class="editable-col">散熱方向</th>
+          <th class="editable-col">IC 距離<br>HSK</th>
+          <th class="editable-col">備註</th>
         </tr></thead>
         <tbody>`;
 
@@ -832,59 +848,89 @@ function renderCategoryTable(catKey, catInfo, items) {
     // 唯讀欄位（從資料庫讀取）
     const qty = comp.Qty || '—';
     const power = comp['Power(W)'] || '—';
-    const padL = comp.Pad_L || '';
-    const padW = comp.Pad_W || '';
-    const heatSize = (padL && padW) ? `${padL} \u00d7 ${padW}` : '\u2014';
-    const timType = comp.TIM_Type || '\u2014';
 
     // 可編輯欄位（thermal_specs）
-    const bossSize     = spec.bossSize     || '';
-    const timThickness = spec.timThickness  || '';
-    const heatDir      = spec.heatDirection || '';
-    const icToHSK      = spec.icToHSK       || '';
-    const note         = spec.note          || '';
+    const heatSrcSize  = spec.heatSourceSize || '';
+    const bossSize     = spec.bossSize       || '';
+    const timType      = spec.timType        || '';
+    const timThickness = spec.timThickness   || '';
+    const timSize      = spec.timSize        || '';
+    const heatDir      = spec.heatDirection  || '';
+    const icToHSK      = spec.icToHSK        || '';
+    const note         = spec.note           || '';
+    const showTimSize  = (timType === 'Pad');
 
     html += `
-          <tr>
+          <tr data-speckey="${escapeAttr(specKey)}">
             <td class="readonly-cell">${idx + 1}</td>
             <td class="name-cell readonly-cell">${escapeHtml(compName)}</td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell">${power}</td>
-            <td class="readonly-cell">${heatSize}</td>
+            <td class="editable-cell">
+              <input class="cell-input" type="text"
+                data-comp="${escapeAttr(specKey)}" data-field="heatSourceSize"
+                value="${escapeAttr(heatSrcSize)}"
+                placeholder="L×W" onchange="onCellChange(this)">
+            </td>
             <td class="editable-cell">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSize"
                 value="${escapeAttr(bossSize)}"
-                placeholder="L\u00d7W" onchange="onCellChange(this)">
+                placeholder="L×W" onchange="onCellChange(this)">
             </td>
-            <td class="readonly-cell">${escapeHtml(timType)}</td>
             <td class="editable-cell">
-              <input class="cell-input" type="number" step="0.1"
+              <select class="cell-select"
+                data-comp="${escapeAttr(specKey)}" data-field="timType"
+                onchange="onTimTypeChange(this)">
+                <option value="">—</option>
+                ${TIM_TYPE_OPTIONS.map(o =>
+                  `<option value="${o}" ${timType === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
+            </td>
+            <td class="editable-cell">
+              <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="timThickness"
-                value="${escapeAttr(timThickness)}"
-                placeholder="mm" onchange="onCellChange(this)">
+                onchange="onCellChange(this)">
+                <option value="">—</option>
+                ${TIM_THICKNESS_OPTIONS.map(o =>
+                  `<option value="${o}" ${timThickness === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
+            </td>
+            <td class="editable-cell tim-size-col">
+              <input class="cell-input tim-size-input" type="text"
+                data-comp="${escapeAttr(specKey)}" data-field="timSize"
+                value="${escapeAttr(timSize)}"
+                placeholder="L×W"
+                ${showTimSize ? '' : 'disabled style="background:#f0f0f0;color:#ccc;"'}
+                onchange="onCellChange(this)">
             </td>
             <td class="editable-cell">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
                 onchange="onCellChange(this)">
                 <option value="">—</option>
-                ${HEAT_DIR_OPTIONS.filter(o => o !== '\u2014').map(o =>
+                ${HEAT_DIR_OPTIONS.map(o =>
                   `<option value="${o}" ${heatDir === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
               </select>
             </td>
             <td class="editable-cell">
-              <input class="cell-input" type="number" step="0.1"
+              <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="icToHSK"
-                value="${escapeAttr(icToHSK)}"
-                placeholder="mm" onchange="onCellChange(this)">
+                onchange="onCellChange(this)">
+                <option value="">—</option>
+                ${IC_TO_HSK_OPTIONS.map(o =>
+                  `<option value="${o}" ${icToHSK === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
             </td>
             <td class="editable-cell">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="note"
                 value="${escapeAttr(note)}"
-                placeholder="\u2014" onchange="onCellChange(this)">
+                placeholder="—" onchange="onCellChange(this)">
             </td>
           </tr>`;
   });
@@ -911,6 +957,48 @@ function onCellChange(el) {
   }
 
   el.classList.toggle('changed', !!value);
+}
+
+/* ---- TIM 種類變更 → 連動預設 TIM厚度 / IC距離HSK / TIM Size 啟用 ---- */
+function onTimTypeChange(el) {
+  const compKey = el.dataset.comp;
+  const timType = el.value;
+  const row = el.closest('tr');
+
+  // 先儲存 TIM 種類
+  onCellChange(el);
+
+  const preset = TIM_PRESETS[timType];
+
+  // TIM 厚度預設
+  const thicknessSelect = row.querySelector('[data-field="timThickness"]');
+  if (preset && thicknessSelect) {
+    thicknessSelect.value = preset.timThickness;
+    onCellChange(thicknessSelect);
+  }
+
+  // IC 距離 HSK 預設
+  const hskSelect = row.querySelector('[data-field="icToHSK"]');
+  if (preset && hskSelect) {
+    hskSelect.value = preset.icToHSK;
+    onCellChange(hskSelect);
+  }
+
+  // TIM Size 欄位：僅 Pad 時啟用
+  const timSizeInput = row.querySelector('[data-field="timSize"]');
+  if (timSizeInput) {
+    const isPad = (timType === 'Pad');
+    timSizeInput.disabled = !isPad;
+    timSizeInput.style.background = isPad ? '#fff' : '#f0f0f0';
+    timSizeInput.style.color = isPad ? '#333' : '#ccc';
+    if (!isPad) {
+      timSizeInput.value = '';
+      // 清除 thermal_specs 中的 timSize
+      if (thermalSpecs[compKey]) {
+        delete thermalSpecs[compKey].timSize;
+      }
+    }
+  }
 }
 
 /* ---- 儲存至 Firebase ---- */
