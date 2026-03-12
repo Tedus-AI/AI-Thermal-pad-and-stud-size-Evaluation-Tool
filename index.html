@@ -247,8 +247,9 @@
   .comp-table th.editable-col { background: #fff3e0; color: #e65100; }
   .comp-table .heat-source-col { width: 180px; max-width: 180px; }
   .comp-table .boss-size-col { width: 180px; max-width: 180px; }
-  .comp-table .boss-surface-col { min-width: 110px; }
-  .comp-table .tim-thickness-col { min-width: 110px; }
+  .comp-table .boss-surface-col { min-width: 120px; }
+  .comp-table .tim-type-col { min-width: 100px; }
+  .comp-table .tim-thickness-col { min-width: 140px; }
   .comp-table .note-col { min-width: 150px; }
 
   .comp-table td {
@@ -906,7 +907,7 @@ function renderCategoryTable(catKey, catInfo, items) {
           <th class="editable-col heat-source-col">熱源大小<br>(mm)</th>
           <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
           <th class="editable-col boss-surface-col">凸台表面處理</th>
-          <th class="editable-col">TIM 種類</th>
+          <th class="editable-col tim-type-col">TIM 種類</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
           <th class="editable-col">散熱方向</th>
@@ -985,7 +986,7 @@ function renderCategoryTable(catKey, catInfo, items) {
                 ).join('')}
               </select>
             </td>
-            <td class="editable-cell">
+            <td class="editable-cell tim-type-col">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="timType"
                 onchange="onTimTypeChange(this)">
