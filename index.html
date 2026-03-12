@@ -513,6 +513,7 @@
         <div class="rule-row">• <strong>Thermal Pad 分級</strong>：Level A ≤ 6mm ／ Level B ≤ 10mm ／ Level C ≤ 14mm ／ 超出為特殊規格。</div>
         <div class="rule-row">• <strong>低功率 Pad 厚度</strong>：標準 2.5mm，壓縮後 1.7mm（壓縮率 32%）。</div>
         <div class="rule-row">• <strong>長寬差 &gt; 1.5mm</strong> 時，依 IC 外型保持矩形，不做正方形化。</div>
+        <div class="rule-row">• <strong>Thermal Putty</strong>：若 TIM 選用 Thermal Putty，散熱器與熱源間距建議為 0.5mm；凸台尺寸應與 IC 一致，且其用量規範不適用 Thermal Pad。</div>
       </div>
     </div>
   </div>
@@ -619,6 +620,12 @@ const TIM_THICKNESS_OPTIONS = ['0.05mm以下', '0.5', '1.0', '1.5', '1.7', '2.0'
 
 /* IC 距離 HSK 選項 */
 const IC_TO_HSK_OPTIONS = ['0.5', '1', '1.7', '直觸'];
+
+/* 凸台大小選項 */
+const BOSS_SIZE_OPTIONS = ['無凸台，刻花定位', '自訂'];
+
+/* 凸台表面處理選項 */
+const BOSS_SURFACE_OPTIONS = ['表面光滑', '表面刻花'];
 
 /* TIM 種類 → 預設對應 */
 const TIM_PRESETS = {
@@ -893,6 +900,7 @@ function renderCategoryTable(catKey, catInfo, items) {
           <th class="readonly-col">發熱瓦數<br>(W)</th>
           <th class="editable-col">熱源大小<br>(mm)</th>
           <th class="editable-col">凸台大小<br>(mm)</th>
+          <th class="editable-col">凸台表面處理</th>
           <th class="editable-col">TIM 種類</th>
           <th class="editable-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
@@ -914,6 +922,8 @@ function renderCategoryTable(catKey, catInfo, items) {
     // 可編輯欄位（thermal_specs）
     const heatSrcSize  = spec.heatSourceSize || '';
     const bossSize     = spec.bossSize       || '';
+    const bossSizeType = spec.bossSizeType   || '';
+    const bossSurface  = spec.bossSurface    || '';
     const timType      = spec.timType        || '';
     const timThickness = spec.timThickness   || '';
     const timSize      = spec.timSize        || '';
@@ -921,6 +931,7 @@ function renderCategoryTable(catKey, catInfo, items) {
     const icToHSK      = spec.icToHSK        || '';
     const note         = spec.note           || '';
     const showTimSize  = (timType === 'Pad');
+    const showBossCustom = (bossSizeType === '自訂');
 
     const isHidden = !!hiddenComponents[specKey];
     html += `
@@ -943,10 +954,31 @@ function renderCategoryTable(catKey, catInfo, items) {
                 placeholder="L×W" onchange="onCellChange(this)">
             </td>
             <td class="editable-cell">
+              <select class="cell-select"
+                data-comp="${escapeAttr(specKey)}" data-field="bossSizeType"
+                onchange="onBossSizeChange(this)">
+                <option value="">—</option>
+                ${BOSS_SIZE_OPTIONS.map(o =>
+                  `<option value="${o}" ${bossSizeType === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSize"
                 value="${escapeAttr(bossSize)}"
-                placeholder="L×W" onchange="onCellChange(this)">
+                placeholder="L×W"
+                ${showBossCustom ? '' : 'disabled style="background:#f0f0f0;color:#ccc;margin-top:2px;"'}
+                ${showBossCustom ? 'style="margin-top:2px;"' : ''}
+                onchange="onCellChange(this)">
+            </td>
+            <td class="editable-cell">
+              <select class="cell-select"
+                data-comp="${escapeAttr(specKey)}" data-field="bossSurface"
+                onchange="onCellChange(this)">
+                <option value="">—</option>
+                ${BOSS_SURFACE_OPTIONS.map(o =>
+                  `<option value="${o}" ${bossSurface === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
             </td>
             <td class="editable-cell">
               <select class="cell-select"
@@ -1071,6 +1103,31 @@ function onTimTypeChange(el) {
   }
 }
 
+/* ---- 凸台大小變更 → 連動自訂輸入框 ---- */
+function onBossSizeChange(el) {
+  const compKey = el.dataset.comp;
+  const bossSizeType = el.value;
+  const row = el.closest('tr');
+
+  // 儲存凸台大小類型
+  onCellChange(el);
+
+  // 自訂輸入框：僅「自訂」時啟用
+  const bossSizeInput = row.querySelector('[data-field="bossSize"]');
+  if (bossSizeInput) {
+    const isCustom = (bossSizeType === '自訂');
+    bossSizeInput.disabled = !isCustom;
+    bossSizeInput.style.background = isCustom ? '#fff' : '#f0f0f0';
+    bossSizeInput.style.color = isCustom ? '#333' : '#ccc';
+    if (!isCustom) {
+      bossSizeInput.value = '';
+      if (thermalSpecs[compKey]) {
+        delete thermalSpecs[compKey].bossSize;
+      }
+    }
+  }
+}
+
 /* ---- 儲存至 Firebase ---- */
 async function saveThermalSpecs() {
   if (!currentProjectId || !firebaseReady) return;
@@ -1121,19 +1178,27 @@ function collectExportDataByCategory() {
       if (hiddenComponents[specKey]) return;
 
       const spec = thermalSpecs[specKey] || {};
+      const bossSizeType = spec.bossSizeType || '';
+      let bossSizeDisplay = '-';
+      if (bossSizeType === '無凸台，刻花定位') {
+        bossSizeDisplay = '無凸台，刻花定位';
+      } else if (bossSizeType === '自訂' && spec.bossSize) {
+        bossSizeDisplay = spec.bossSize;
+      }
       catRows.push({
         index: idx + 1,
         component: compName,
         qty: comp.Qty || '—',
         power: comp['Power(W)'] || '—',
-        heatSourceSize: spec.heatSourceSize || '',
-        bossSize: spec.bossSize || '',
-        timType: spec.timType || '',
-        timThickness: spec.timThickness || '',
-        timSize: spec.timSize || '',
-        heatDirection: spec.heatDirection || '',
-        icToHSK: spec.icToHSK || '',
-        note: spec.note || ''
+        heatSourceSize: spec.heatSourceSize || '-',
+        bossSize: bossSizeDisplay,
+        bossSurface: spec.bossSurface || '-',
+        timType: spec.timType || '-',
+        timThickness: spec.timThickness || '-',
+        timSize: spec.timSize || '-',
+        heatDirection: spec.heatDirection || '-',
+        icToHSK: spec.icToHSK || '-',
+        note: spec.note || '-'
       });
     });
 
@@ -1162,12 +1227,12 @@ function exportExcel() {
   const categories = collectExportDataByCategory();
   if (categories.length === 0) { alert('沒有可匯出的元件（全部被隱藏或無資料）'); return; }
 
-  const headers = ['#', '元件名稱', '數量', '發熱瓦數(W)', '熱源大小(mm)', '凸台大小(mm)',
+  const headers = ['#', '元件名稱', '數量', '發熱瓦數(W)', '熱源大小(mm)', '凸台大小(mm)', '凸台表面處理',
     'TIM 種類', 'TIM 厚度(mm)', 'TIM Size(mm)', '散熱方向', 'IC距離HSK', '備註'];
 
   const wsData = [
     [getExportTitle()],
-    ['案名：' + getProjectName(), '', '', '', '', '', '', '', '', '', '', '日期：' + getDateString()],
+    ['案名：' + getProjectName(), '', '', '', '', '', '', '', '', '', '', '', '日期：' + getDateString()],
     []
   ];
 
@@ -1176,7 +1241,7 @@ function exportExcel() {
     wsData.push(headers);
     cat.rows.forEach(r => {
       wsData.push([r.index, r.component, r.qty, r.power,
-        r.heatSourceSize, r.bossSize, r.timType, r.timThickness, r.timSize,
+        r.heatSourceSize, r.bossSize, r.bossSurface, r.timType, r.timThickness, r.timSize,
         r.heatDirection, r.icToHSK, r.note]);
     });
     wsData.push([]);
@@ -1186,12 +1251,12 @@ function exportExcel() {
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } }
   ];
 
   ws['!cols'] = [
     { wch: 4 }, { wch: 22 }, { wch: 6 }, { wch: 10 },
-    { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
     { wch: 10 }, { wch: 10 }, { wch: 16 }
   ];
 
@@ -1231,6 +1296,7 @@ function buildPdfHtml(categories) {
               <th style="border:1px solid #c5d9ee;padding:6px 4px;color:#1a3a6b;font-size:10px;">發熱瓦數(W)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">熱源大小(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">凸台大小(mm)</th>
+              <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">凸台表面處理</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM 種類</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM 厚度(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM Size(mm)</th>
@@ -1250,6 +1316,7 @@ function buildPdfHtml(categories) {
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${r.power}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatSourceSize)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.bossSize)}</td>
+              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.bossSurface)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.timType)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.timThickness)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.timSize)}</td>
