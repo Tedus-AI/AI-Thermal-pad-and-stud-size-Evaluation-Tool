@@ -889,6 +889,9 @@ function renderAllCategories() {
     <div class="summary-chip">\u5143\u4ef6\u7e3d\u6578\uff1a<span>${totalQuantity}</span></div>
     <div class="summary-chip">\u7e3d\u529f\u8017\uff1a<span>${fmt(totalPower)} W</span></div>
   `;
+  html += `<div style="margin-top:16px;padding:10px 16px;font-size:0.95rem;font-weight:700;color:#c0392b;">
+    Note：以上凸台高度公差皆為 +/-0.1mm
+  </div>`;
   container.innerHTML = html;
   exportToolbar.style.display = 'flex';
 }
@@ -1255,6 +1258,8 @@ function exportExcel() {
     wsData.push([]);
   });
 
+  wsData.push(['Note：以上凸台高度公差皆為 +/-0.1mm']);
+
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
@@ -1337,6 +1342,9 @@ function buildPdfHtml(categories) {
     html += '</tbody></table></div>';
   });
 
+  html += `<div style="margin-top:14px;font-size:13px;font-weight:700;color:#c0392b;">
+    Note：以上凸台高度公差皆為 +/-0.1mm
+  </div>`;
   html += '</div>';
   return html;
 }
