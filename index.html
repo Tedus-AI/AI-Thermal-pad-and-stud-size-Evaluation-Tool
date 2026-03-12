@@ -245,7 +245,8 @@
   }
   .comp-table th.readonly-col { background: #e8f0f8; }
   .comp-table th.editable-col { background: #fff3e0; color: #e65100; }
-  .comp-table .boss-size-col { width: 80px; max-width: 80px; }
+  .comp-table .boss-size-col { width: 180px; max-width: 180px; }
+  .comp-table .heat-source-col { width: 180px; max-width: 180px; }
 
   .comp-table td {
     padding: 8px 6px;
@@ -899,7 +900,7 @@ function renderCategoryTable(catKey, catInfo, items) {
           <th class="readonly-col">元件名稱</th>
           <th class="readonly-col">數量</th>
           <th class="readonly-col">發熱瓦數<br>(W)</th>
-          <th class="editable-col">熱源大小<br>(mm)</th>
+          <th class="editable-col heat-source-col">熱源大小<br>(mm)</th>
           <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
           <th class="editable-col">凸台表面處理</th>
           <th class="editable-col">TIM 種類</th>
@@ -948,7 +949,7 @@ function renderCategoryTable(catKey, catInfo, items) {
             <td class="name-cell readonly-cell">${escapeHtml(compName)}</td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell">${power}</td>
-            <td class="editable-cell">
+            <td class="editable-cell heat-source-col">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="heatSourceSize"
                 value="${escapeAttr(heatSrcSize)}"
