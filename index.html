@@ -47,6 +47,120 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
+  /* === Add Component Modal === */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px 32px;
+    width: 400px;
+    max-width: 92vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .modal-box h3 {
+    font-size: 1.15rem;
+    color: #1a3a6b;
+    margin-bottom: 18px;
+  }
+  .modal-field {
+    margin-bottom: 14px;
+  }
+  .modal-field label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .modal-field input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1.5px solid #d0d8e0;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .modal-field input:focus {
+    border-color: #2e6bb5;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .modal-actions button {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+  }
+  .modal-cancel-btn {
+    background: #e0e0e0;
+    color: #555;
+  }
+  .modal-cancel-btn:hover { background: #d0d0d0; }
+  .modal-confirm-btn {
+    background: #2e6bb5;
+    color: #fff;
+  }
+  .modal-confirm-btn:hover { background: #245a9a; }
+
+  .add-comp-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    padding: 6px 16px;
+    background: #eaf2fb;
+    color: #2e6bb5;
+    border: 1.5px dashed #2e6bb5;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .add-comp-btn:hover { background: #d4e6f9; }
+
+  .delete-comp-btn {
+    background: #fee;
+    color: #c0392b;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .delete-comp-btn:hover { background: #fdd; }
+
+  .custom-badge {
+    display: inline-block;
+    background: #fff3e0;
+    color: #e65100;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
   /* === Original Tool Styles === */
   .main-grid {
     display: grid;
@@ -587,6 +701,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+<!-- Add Component Modal -->
+<div id="add-comp-modal" class="modal-overlay" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal-box">
+    <h3 id="modal-title">新增元件</h3>
+    <div class="modal-field">
+      <label>元件名稱 *</label>
+      <input type="text" id="modal-comp-name" placeholder="例：IC-1234">
+    </div>
+    <div class="modal-field">
+      <label>數量</label>
+      <input type="number" id="modal-comp-qty" value="1" min="1">
+    </div>
+    <div class="modal-field">
+      <label>發熱瓦數 (W)</label>
+      <input type="number" id="modal-comp-power" value="0" min="0" step="0.1">
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel-btn" onclick="closeAddModal()">取消</button>
+      <button class="modal-confirm-btn" onclick="confirmAddComponent()">新增</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================
    Firebase Configuration
@@ -850,6 +987,13 @@ async function onProjectChange() {
 /* 記錄隱藏的元件 */
 let hiddenComponents = {};
 
+/* 取得某分類的自訂元件 */
+function getCustomComponents(catKey) {
+  const cc = thermalSpecs._custom_components;
+  if (!cc) return [];
+  return cc[catKey.toLowerCase()] || [];
+}
+
 function renderAllCategories() {
   const container = document.getElementById('comp-container');
   const summaryEl = document.getElementById('comp-summary');
@@ -862,15 +1006,16 @@ function renderAllCategories() {
 
   for (const [catKey, catInfo] of Object.entries(CATEGORIES)) {
     const items = currentProjectData[catInfo.field] || [];
-    if (items.length === 0) continue;
+    const customItems = getCustomComponents(catKey);
+    const allItems = items.concat(customItems);
 
-    totalComponents += items.length;
-    items.forEach(item => {
+    totalComponents += allItems.length;
+    allItems.forEach(item => {
       totalQuantity += parseInt(item.Qty) || 0;
       totalPower += (parseFloat(item['Power(W)']) || 0) * (parseInt(item.Qty) || 1);
     });
 
-    html += renderCategoryTable(catKey, catInfo, items);
+    html += renderCategoryTable(catKey, catInfo, items, customItems);
   }
 
   if (!html) {
@@ -897,10 +1042,12 @@ function renderAllCategories() {
 }
 
 /* ---- 渲染單一分類表格 ---- */
-function renderCategoryTable(catKey, catInfo, items) {
+function renderCategoryTable(catKey, catInfo, items, customItems) {
+  customItems = customItems || [];
+  const totalCount = items.length + customItems.length;
   let html = `
     <div class="category-section">
-      <div class="category-title ${catInfo.css}">${catInfo.icon} ${catInfo.label}\uff08${items.length} \u9805\uff09</div>
+      <div class="category-title ${catInfo.css}">${catInfo.icon} ${catInfo.label}\uff08${totalCount} \u9805\uff09</div>
       <div class="comp-table-wrap">
       <table class="comp-table">
         <thead><tr>
@@ -921,16 +1068,31 @@ function renderCategoryTable(catKey, catInfo, items) {
         </tr></thead>
         <tbody>`;
 
+  /* 渲染共用資料庫的元件 */
   items.forEach((comp, idx) => {
+    html += renderComponentRow(comp, idx, false, catKey);
+  });
+
+  /* 渲染自訂元件 */
+  customItems.forEach((comp, idx) => {
+    html += renderComponentRow(comp, items.length + idx, true, catKey, idx);
+  });
+
+  html += `</tbody></table></div>
+      <button class="add-comp-btn" onclick="openAddModal('${catKey}')">+ \u65b0\u589e\u5143\u4ef6</button>
+    </div>`;
+  return html;
+}
+
+/* ---- 渲染單一元件列 ---- */
+function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const compName = comp.Component || '';
     const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
     const spec = thermalSpecs[specKey] || {};
 
-    // 唯讀欄位（從資料庫讀取）
-    const qty = comp.Qty || '—';
-    const power = comp['Power(W)'] || '—';
+    const qty = comp.Qty || '\u2014';
+    const power = comp['Power(W)'] || '\u2014';
 
-    // 可編輯欄位（thermal_specs）
     const heatSrcSize  = spec.heatSourceSize || '';
     const bossSize     = spec.bossSize       || '';
     const bossSizeType = spec.bossSizeType   || '';
@@ -942,33 +1104,38 @@ function renderCategoryTable(catKey, catInfo, items) {
     const icToHSK      = spec.icToHSK        || '';
     const note         = spec.note           || '';
     const showTimSize  = (timType === 'Pad');
-    const showBossCustom = (bossSizeType === '自訂');
+    const showBossCustom = (bossSizeType === '\u81ea\u8a02');
 
     const isHidden = !!hiddenComponents[specKey];
-    html += `
+    const customBadge = isCustom ? '<span class="custom-badge">\u81ea\u8a02</span>' : '';
+    const deleteBtn = isCustom
+      ? `<button class="delete-comp-btn" onclick="deleteCustomComponent('${catKey}', ${customIdx})" title="\u522a\u9664\u6b64\u81ea\u8a02\u5143\u4ef6">\u2716</button>`
+      : '';
+
+    let rowHtml = `
           <tr data-speckey="${escapeAttr(specKey)}" class="${isHidden ? 'row-hidden' : ''}">
             <td class="readonly-cell hide-col">
-              <input type="checkbox" class="hide-checkbox"
+              ${isCustom ? deleteBtn : `<input type="checkbox" class="hide-checkbox"
                 data-comp="${escapeAttr(specKey)}"
                 ${isHidden ? 'checked' : ''}
                 onchange="onToggleHide(this)"
-                title="勾選以隱藏此元件（匯出時不包含）">
+                title="\u52fe\u9078\u4ee5\u96b1\u85cf\u6b64\u5143\u4ef6\uff08\u532f\u51fa\u6642\u4e0d\u5305\u542b\uff09">`}
             </td>
             <td class="readonly-cell">${idx + 1}</td>
-            <td class="name-cell readonly-cell">${escapeHtml(compName)}</td>
+            <td class="name-cell readonly-cell">${escapeHtml(compName)}${customBadge}</td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell">${power}</td>
             <td class="editable-cell heat-source-col">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="heatSourceSize"
                 value="${escapeAttr(heatSrcSize)}"
-                placeholder="L×W" onchange="onCellChange(this)">
+                placeholder="L\u00d7W" onchange="onCellChange(this)">
             </td>
             <td class="editable-cell boss-size-col">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSizeType"
                 onchange="onBossSizeChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${BOSS_SIZE_OPTIONS.map(o =>
                   `<option value="${o}" ${bossSizeType === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -976,7 +1143,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSize"
                 value="${escapeAttr(bossSize)}"
-                placeholder="L×W"
+                placeholder="L\u00d7W"
                 ${showBossCustom ? '' : 'disabled style="background:#f0f0f0;color:#ccc;margin-top:2px;"'}
                 ${showBossCustom ? 'style="margin-top:2px;"' : ''}
                 onchange="onCellChange(this)">
@@ -985,7 +1152,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSurface"
                 onchange="onCellChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${BOSS_SURFACE_OPTIONS.map(o =>
                   `<option value="${o}" ${bossSurface === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -995,7 +1162,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="timType"
                 onchange="onTimTypeChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${TIM_TYPE_OPTIONS.map(o =>
                   `<option value="${o}" ${timType === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -1005,7 +1172,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="timThickness"
                 onchange="onCellChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${TIM_THICKNESS_OPTIONS.map(o =>
                   `<option value="${o}" ${timThickness === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -1015,7 +1182,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <input class="cell-input tim-size-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="timSize"
                 value="${escapeAttr(timSize)}"
-                placeholder="L×W"
+                placeholder="L\u00d7W"
                 ${showTimSize ? '' : 'disabled style="background:#f0f0f0;color:#ccc;"'}
                 onchange="onCellChange(this)">
             </td>
@@ -1023,7 +1190,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
                 onchange="onCellChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${HEAT_DIR_OPTIONS.map(o =>
                   `<option value="${o}" ${heatDir === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -1033,7 +1200,7 @@ function renderCategoryTable(catKey, catInfo, items) {
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="icToHSK"
                 onchange="onCellChange(this)">
-                <option value="">—</option>
+                <option value="">\u2014</option>
                 ${IC_TO_HSK_OPTIONS.map(o =>
                   `<option value="${o}" ${icToHSK === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
@@ -1043,13 +1210,10 @@ function renderCategoryTable(catKey, catInfo, items) {
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="note"
                 value="${escapeAttr(note)}"
-                placeholder="—" onchange="onCellChange(this)">
+                placeholder="\u2014" onchange="onCellChange(this)">
             </td>
           </tr>`;
-  });
-
-  html += '</tbody></table></div></div>';
-  return html;
+    return rowHtml;
 }
 
 /* ---- 欄位變更處理 ---- */
@@ -1139,6 +1303,75 @@ function onBossSizeChange(el) {
   }
 }
 
+/* ---- 新增元件 Modal ---- */
+let addModalCategory = null;
+
+function openAddModal(catKey) {
+  addModalCategory = catKey;
+  const catInfo = CATEGORIES[catKey];
+  document.getElementById('modal-title').textContent = '\u65b0\u589e\u5143\u4ef6 \u2014 ' + catInfo.label;
+  document.getElementById('modal-comp-name').value = '';
+  document.getElementById('modal-comp-qty').value = '1';
+  document.getElementById('modal-comp-power').value = '0';
+  document.getElementById('add-comp-modal').classList.add('active');
+  document.getElementById('modal-comp-name').focus();
+}
+
+function closeAddModal() {
+  document.getElementById('add-comp-modal').classList.remove('active');
+  addModalCategory = null;
+}
+
+function confirmAddComponent() {
+  const name = document.getElementById('modal-comp-name').value.trim();
+  if (!name) {
+    alert('\u8acb\u8f38\u5165\u5143\u4ef6\u540d\u7a31');
+    return;
+  }
+
+  const qty = parseInt(document.getElementById('modal-comp-qty').value) || 1;
+  const power = parseFloat(document.getElementById('modal-comp-power').value) || 0;
+
+  if (!thermalSpecs._custom_components) {
+    thermalSpecs._custom_components = {};
+  }
+  const catLower = addModalCategory.toLowerCase();
+  if (!thermalSpecs._custom_components[catLower]) {
+    thermalSpecs._custom_components[catLower] = [];
+  }
+
+  thermalSpecs._custom_components[catLower].push({
+    Component: name,
+    Qty: qty,
+    'Power(W)': power
+  });
+
+  closeAddModal();
+  renderAllCategories();
+}
+
+/* ---- 刪除自訂元件 ---- */
+function deleteCustomComponent(catKey, customIdx) {
+  if (!confirm('\u78ba\u5b9a\u8981\u522a\u9664\u6b64\u81ea\u8a02\u5143\u4ef6\uff1f')) return;
+
+  const catLower = catKey.toLowerCase();
+  const cc = thermalSpecs._custom_components;
+  if (!cc || !cc[catLower]) return;
+
+  // 移除對應的 thermal spec
+  const comp = cc[catLower][customIdx];
+  if (comp) {
+    const specKey = (comp.Component || '').replace(/ /g, '_').replace(/\//g, '-');
+    delete thermalSpecs[specKey];
+  }
+
+  cc[catLower].splice(customIdx, 1);
+  if (cc[catLower].length === 0) delete cc[catLower];
+  if (Object.keys(cc).length === 0) delete thermalSpecs._custom_components;
+
+  renderAllCategories();
+}
+
 /* ---- 儲存至 Firebase ---- */
 async function saveThermalSpecs() {
   if (!currentProjectId || !firebaseReady) return;
@@ -1180,10 +1413,12 @@ function collectExportDataByCategory() {
   const result = [];
   for (const [catKey, catInfo] of Object.entries(CATEGORIES)) {
     const items = currentProjectData[catInfo.field] || [];
-    if (items.length === 0) continue;
+    const customItems = getCustomComponents(catKey);
+    const allItems = items.concat(customItems);
+    if (allItems.length === 0) continue;
 
     const catRows = [];
-    items.forEach((comp, idx) => {
+    allItems.forEach((comp, idx) => {
       const compName = comp.Component || '';
       const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
       if (hiddenComponents[specKey]) return;
