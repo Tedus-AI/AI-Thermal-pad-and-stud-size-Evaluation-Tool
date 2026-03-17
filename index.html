@@ -1093,6 +1093,7 @@ async function onProjectChange() {
     currentProjectId = projectId;
     currentProjectData = doc.data();
     thermalSpecs = currentProjectData.thermal_specs || {};
+    hiddenComponents = currentProjectData.hidden_components || {};
 
     renderAllCategories();
     legendEl.style.display = 'flex';
@@ -1591,7 +1592,8 @@ async function saveThermalSpecs() {
 
   try {
     await db.collection('projects').doc(currentProjectId).update({
-      thermal_specs: thermalSpecs
+      thermal_specs: thermalSpecs,
+      hidden_components: hiddenComponents
     });
     showSaveStatus('\u5132\u5b58\u6210\u529f\uff01', 'saved');
   } catch (e) {
