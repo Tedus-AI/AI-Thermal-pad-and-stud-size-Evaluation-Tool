@@ -1213,6 +1213,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const compName = comp.Component || '';
     const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
     const spec = thermalSpecs[specKey] || {};
+    const displayName = (!isCustom && spec.displayName) ? spec.displayName : compName;
 
     const qty = comp.Qty || '\u2014';
     const power = comp['Power(W)'] || '\u2014';
@@ -1248,10 +1249,10 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
             </td>
             <td class="readonly-cell">${idx + 1}</td>
             <td class="name-cell readonly-cell">
-              <input class="name-input" type="text"
+              <input class="name-input${!isCustom && spec.displayName ? ' changed' : ''}" type="text"
                 data-cat="${escapeAttr(catKey)}" data-custom="${isCustom}" data-custom-idx="${isCustom ? customIdx : ''}"
                 data-original="${escapeAttr(compName)}" data-speckey="${escapeAttr(specKey)}"
-                value="${escapeAttr(compName)}"
+                value="${escapeAttr(displayName)}"
                 onchange="onCompNameChange(this)" onblur="onCompNameChange(this)">${customBadge}
             </td>
             <td class="readonly-cell">${qty}</td>
@@ -1419,56 +1420,58 @@ function onTimTypeChange(el) {
 function onCompNameChange(el) {
   const newName = el.value.trim();
   const originalName = el.dataset.original;
+  const specKey = el.dataset.speckey;
+  const isCustom = el.dataset.custom === 'true';
+  const customIdx = parseInt(el.dataset.customIdx);
+  const catKey = el.dataset.cat;
+
+  // 若清空或與原始名稱相同，移除 displayName
   if (!newName || newName === originalName) {
     el.value = originalName;
+    if (thermalSpecs[specKey]) {
+      delete thermalSpecs[specKey].displayName;
+      if (Object.keys(thermalSpecs[specKey]).length === 0) {
+        delete thermalSpecs[specKey];
+      }
+    }
+    el.classList.remove('changed');
     return;
   }
 
-  const oldSpecKey = el.dataset.speckey;
-  const newSpecKey = newName.replace(/ /g, '_').replace(/\//g, '-');
-  const catKey = el.dataset.cat;
-  const isCustom = el.dataset.custom === 'true';
-  const customIdx = parseInt(el.dataset.customIdx);
-
-  // 更新資料來源的元件名稱
+  // 自訂元件：直接改名稱（因為自訂元件本來就在 thermalSpecs 裡管理）
   if (isCustom && !isNaN(customIdx)) {
     const catLower = catKey.toLowerCase();
     if (thermalSpecs._custom_components && thermalSpecs._custom_components[catLower]) {
       thermalSpecs._custom_components[catLower][customIdx].Component = newName;
     }
-  } else if (currentProjectData) {
-    const catInfo = CATEGORIES[catKey];
-    const items = currentProjectData[catInfo.field] || [];
-    const found = items.find(c => c.Component === originalName);
-    if (found) found.Component = newName;
+    // 自訂元件也需遷移 specKey
+    const newSpecKey = newName.replace(/ /g, '_').replace(/\//g, '-');
+    if (specKey !== newSpecKey && thermalSpecs[specKey]) {
+      thermalSpecs[newSpecKey] = thermalSpecs[specKey];
+      delete thermalSpecs[specKey];
+    }
+    if (hiddenComponents[specKey]) {
+      hiddenComponents[newSpecKey] = true;
+      delete hiddenComponents[specKey];
+    }
+    el.dataset.original = newName;
+    el.dataset.speckey = newSpecKey;
+    const row = el.closest('tr');
+    if (row) {
+      row.dataset.speckey = newSpecKey;
+      row.querySelectorAll('[data-comp]').forEach(input => {
+        if (input.dataset.comp === specKey) {
+          input.dataset.comp = newSpecKey;
+        }
+      });
+    }
+    return;
   }
 
-  // 遷移 thermalSpecs 資料到新 key
-  if (oldSpecKey !== newSpecKey && thermalSpecs[oldSpecKey]) {
-    thermalSpecs[newSpecKey] = thermalSpecs[oldSpecKey];
-    delete thermalSpecs[oldSpecKey];
-  }
-
-  // 遷移 hiddenComponents
-  if (hiddenComponents[oldSpecKey]) {
-    hiddenComponents[newSpecKey] = true;
-    delete hiddenComponents[oldSpecKey];
-  }
-
-  // 更新 data attributes
-  el.dataset.original = newName;
-  el.dataset.speckey = newSpecKey;
-
-  // 更新整列所有 data-comp 屬性
-  const row = el.closest('tr');
-  if (row) {
-    row.dataset.speckey = newSpecKey;
-    row.querySelectorAll('[data-comp]').forEach(input => {
-      if (input.dataset.comp === oldSpecKey) {
-        input.dataset.comp = newSpecKey;
-      }
-    });
-  }
+  // 資料庫既有元件：只存 displayName，不改 specKey
+  if (!thermalSpecs[specKey]) thermalSpecs[specKey] = {};
+  thermalSpecs[specKey].displayName = newName;
+  el.classList.add('changed');
 }
 
 /* ---- 凸台大小變更 → 連動自訂輸入框 ---- */
@@ -1629,6 +1632,7 @@ function collectExportDataByCategory() {
       if (hiddenComponents[specKey]) return;
 
       const spec = thermalSpecs[specKey] || {};
+      const displayName = spec.displayName || compName;
       const bossSizeType = spec.bossSizeType || '';
       let bossSizeDisplay = '-';
       if (bossSizeType === '無凸台，刻花定位') {
@@ -1638,7 +1642,7 @@ function collectExportDataByCategory() {
       }
       catRows.push({
         index: idx + 1,
-        component: compName,
+        component: displayName,
         qty: comp.Qty || '—',
         power: comp['Power(W)'] || '—',
         heatSourceSize: spec.heatSourceSize || '-',
