@@ -437,6 +437,28 @@
     color: #1a3a6b;
     white-space: nowrap;
   }
+  .comp-table td.name-cell .name-input {
+    border: 1px solid transparent;
+    background: transparent;
+    font-weight: 600;
+    color: #1a3a6b;
+    font-size: inherit;
+    padding: 2px 4px;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 80px;
+    outline: none;
+    cursor: pointer;
+  }
+  .comp-table td.name-cell .name-input:hover {
+    border-color: #c5d9ee;
+    background: #f0f6ff;
+  }
+  .comp-table td.name-cell .name-input:focus {
+    border-color: #2e6bb5;
+    background: #fff;
+    cursor: text;
+  }
   .comp-table td.readonly-cell {
     background: #fafbfc;
     color: #555;
@@ -1225,7 +1247,13 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 title="\u52fe\u9078\u4ee5\u96b1\u85cf\u6b64\u5143\u4ef6\uff08\u532f\u51fa\u6642\u4e0d\u5305\u542b\uff09">`}
             </td>
             <td class="readonly-cell">${idx + 1}</td>
-            <td class="name-cell readonly-cell">${escapeHtml(compName)}${customBadge}</td>
+            <td class="name-cell readonly-cell">
+              <input class="name-input" type="text"
+                data-cat="${escapeAttr(catKey)}" data-custom="${isCustom}" data-custom-idx="${isCustom ? customIdx : ''}"
+                data-original="${escapeAttr(compName)}" data-speckey="${escapeAttr(specKey)}"
+                value="${escapeAttr(compName)}"
+                onchange="onCompNameChange(this)" onblur="onCompNameChange(this)">${customBadge}
+            </td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell">${power}</td>
             <td class="editable-cell heat-source-col">
@@ -1384,6 +1412,62 @@ function onTimTypeChange(el) {
         delete thermalSpecs[compKey].timSize;
       }
     }
+  }
+}
+
+/* ---- 元件名稱變更 ---- */
+function onCompNameChange(el) {
+  const newName = el.value.trim();
+  const originalName = el.dataset.original;
+  if (!newName || newName === originalName) {
+    el.value = originalName;
+    return;
+  }
+
+  const oldSpecKey = el.dataset.speckey;
+  const newSpecKey = newName.replace(/ /g, '_').replace(/\//g, '-');
+  const catKey = el.dataset.cat;
+  const isCustom = el.dataset.custom === 'true';
+  const customIdx = parseInt(el.dataset.customIdx);
+
+  // 更新資料來源的元件名稱
+  if (isCustom && !isNaN(customIdx)) {
+    const catLower = catKey.toLowerCase();
+    if (thermalSpecs._custom_components && thermalSpecs._custom_components[catLower]) {
+      thermalSpecs._custom_components[catLower][customIdx].Component = newName;
+    }
+  } else if (currentProjectData) {
+    const catInfo = CATEGORIES[catKey];
+    const items = currentProjectData[catInfo.field] || [];
+    const found = items.find(c => c.Component === originalName);
+    if (found) found.Component = newName;
+  }
+
+  // 遷移 thermalSpecs 資料到新 key
+  if (oldSpecKey !== newSpecKey && thermalSpecs[oldSpecKey]) {
+    thermalSpecs[newSpecKey] = thermalSpecs[oldSpecKey];
+    delete thermalSpecs[oldSpecKey];
+  }
+
+  // 遷移 hiddenComponents
+  if (hiddenComponents[oldSpecKey]) {
+    hiddenComponents[newSpecKey] = true;
+    delete hiddenComponents[oldSpecKey];
+  }
+
+  // 更新 data attributes
+  el.dataset.original = newName;
+  el.dataset.speckey = newSpecKey;
+
+  // 更新整列所有 data-comp 屬性
+  const row = el.closest('tr');
+  if (row) {
+    row.dataset.speckey = newSpecKey;
+    row.querySelectorAll('[data-comp]').forEach(input => {
+      if (input.dataset.comp === oldSpecKey) {
+        input.dataset.comp = newSpecKey;
+      }
+    });
   }
 }
 
