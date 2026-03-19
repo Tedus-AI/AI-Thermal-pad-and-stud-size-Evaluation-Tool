@@ -636,7 +636,9 @@
   .btn-export.pdf:hover { background: #a93226; }
   .btn-export.excel { background: #217346; }
   .btn-export.excel:hover { background: #196035; }
-  .btn-export:disabled { background: #b0c4de; cursor: not-allowed; }
+  .btn-export.excel.import { background: #2e6bb5; }
+  .btn-export.excel.import:hover { background: #245a9a; }
+  .btn-export:disabled { background: #b0c4de; cursor: not-allowed; opacity: 0.7; }
 
   @media (max-width: 900px) {
     .comp-table { font-size: 0.78rem; }
@@ -757,6 +759,8 @@
     <div id="export-toolbar" class="export-toolbar" style="display:none;">
       <button class="btn-export pdf" onclick="exportPDF()">&#128196; 匯出 PDF</button>
       <button class="btn-export excel" onclick="exportExcel()">&#128202; 匯出 Excel</button>
+      <button class="btn-export excel import" id="import-excel-btn" onclick="document.getElementById('import-excel-file').click()" disabled title="需先解鎖密碼保護才能使用">&#128229; 匯入 Excel</button>
+      <input type="file" id="import-excel-file" accept=".xlsx,.xls" style="display:none;" onchange="importExcel(this)">
       <span style="font-size:0.82rem;color:#888;">（被勾選「隱藏」的元件不會出現在匯出表格中）</span>
     </div>
 
@@ -857,6 +861,8 @@ function toggleProtection() {
     pwdInput.value = '';
     pwdInput.style.display = 'none';
     if (saveBtn) saveBtn.disabled = false;
+    const importBtn = document.getElementById('import-excel-btn');
+    if (importBtn) { importBtn.disabled = false; importBtn.title = '匯入 Excel 檔案覆寫熱設計欄位'; }
   } else {
     // 重新鎖定
     isProtected = true;
@@ -866,6 +872,8 @@ function toggleProtection() {
     btn.className = 'protect-unlock-btn';
     pwdInput.style.display = '';
     if (saveBtn) saveBtn.disabled = true;
+    const importBtn = document.getElementById('import-excel-btn');
+    if (importBtn) { importBtn.disabled = true; importBtn.title = '需先解鎖密碼保護才能使用'; }
   }
 }
 
@@ -1770,6 +1778,124 @@ function exportExcel() {
 
   XLSX.utils.book_append_sheet(wb, ws, '總表');
   XLSX.writeFile(wb, getProjectName() + '_熱設計TIM凸台標準尺寸表.xlsx');
+}
+
+/* ---- 匯入 Excel ---- */
+function importExcel(fileInput) {
+  if (isProtected) {
+    alert('請先解鎖密碼保護才能匯入');
+    fileInput.value = '';
+    return;
+  }
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      // 解析 Excel：找出每個分類區塊的 header 行和資料行
+      // 欄位對應：#(0), 元件名稱(1), 數量(2), 發熱瓦數(3),
+      //   元件大小(4), 元件高度(5), 凸台大小(6), 凸台表面處理(7),
+      //   TIM Type(8), TIM厚度(9), TIM Size(10), 散熱方向(11), IC距離HSK(12), 備註(13)
+      const HEADER_MARKER = '#';
+      let imported = 0;
+
+      // 建立 specKey → 原始元件名稱 的反查表（含 displayName）
+      const nameToSpecKey = {};
+      for (const [catKey, catInfo] of Object.entries(CATEGORIES)) {
+        const items = currentProjectData[catInfo.field] || [];
+        const customItems = getCustomComponents(catKey);
+        items.concat(customItems).forEach(comp => {
+          const compName = comp.Component || '';
+          const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
+          nameToSpecKey[compName] = specKey;
+          // 也用 displayName 作為查找鍵
+          const spec = thermalSpecs[specKey];
+          if (spec && spec.displayName) {
+            nameToSpecKey[spec.displayName] = specKey;
+          }
+        });
+      }
+
+      let inDataBlock = false;
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) { inDataBlock = false; continue; }
+
+        // 偵測 header 行
+        const firstCell = String(row[0] || '').trim();
+        if (firstCell === HEADER_MARKER || firstCell === '#') {
+          inDataBlock = true;
+          continue;
+        }
+
+        // 偵測分類標題行（如「RF 射頻元件（5 項）」）
+        if (!inDataBlock && row.length <= 2 && typeof row[0] === 'string' && /（\d+\s*項）/.test(row[0])) {
+          continue;
+        }
+
+        if (!inDataBlock) continue;
+
+        // 資料行
+        const compName = String(row[1] || '').trim();
+        if (!compName) continue;
+
+        const specKey = nameToSpecKey[compName];
+        if (!specKey) continue; // 找不到對應元件，跳過
+
+        if (!thermalSpecs[specKey]) thermalSpecs[specKey] = {};
+        const spec = thermalSpecs[specKey];
+
+        const setField = (field, val) => {
+          const v = String(val || '').trim();
+          if (v && v !== '-' && v !== '—') {
+            spec[field] = v;
+          }
+        };
+
+        setField('heatSourceSize', row[4]);
+        setField('heatSourceHeight', row[5]);
+
+        // 凸台大小：判斷特殊值
+        const bossVal = String(row[6] || '').trim();
+        if (bossVal === '無凸台，刻花定位') {
+          spec.bossSizeType = '無凸台，刻花定位';
+          delete spec.bossSize;
+        } else if (bossVal && bossVal !== '-' && bossVal !== '—') {
+          spec.bossSizeType = '自訂';
+          spec.bossSize = bossVal;
+        }
+
+        setField('bossSurface', row[7]);
+        setField('timType', row[8]);
+        setField('timThickness', row[9]);
+        setField('timSize', row[10]);
+        setField('heatDirection', row[11]);
+        setField('icToHSK', row[12]);
+        setField('note', row[13]);
+
+        imported++;
+      }
+
+      if (imported > 0) {
+        renderAllCategories();
+        alert('匯入成功！共匯入 ' + imported + ' 個元件的熱設計資料。\n\n請檢查後按「儲存」寫入資料庫。');
+      } else {
+        alert('未能匹配到任何元件。請確認 Excel 檔案的元件名稱與目前專案一致。');
+      }
+
+    } catch (err) {
+      console.error('Import error:', err);
+      alert('匯入失敗：' + err.message);
+    }
+
+    fileInput.value = '';
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ---- 建立 PDF 用的 HTML 內容（分三大區塊，與工具畫面一致） ---- */
