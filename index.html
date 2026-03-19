@@ -1781,7 +1781,7 @@ function exportExcel() {
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, '總表');
-  XLSX.writeFile(wb, getProjectName() + '_熱設計TIM凸台標準尺寸表.xlsx');
+  XLSX.writeFile(wb, getProjectName() + '_熱設計TIM凸台標準尺寸表_' + getDateString().replace(/\//g, '') + '.xlsx');
 }
 
 /* ---- EE 匯出 Excel（僅 Digital 數位元件：元件名稱/元件大小/元件高度） ---- */
@@ -1819,7 +1819,7 @@ function eeExportExcel() {
   ws['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 16 }, { wch: 18 }];
 
   XLSX.utils.book_append_sheet(wb, ws, 'EE Digital');
-  XLSX.writeFile(wb, getProjectName() + '_EE_Digital元件清單.xlsx');
+  XLSX.writeFile(wb, getProjectName() + '_EE_Digital元件清單_' + getDateString().replace(/\//g, '') + '.xlsx');
 }
 
 /* ---- EE 匯入 Excel（僅 Digital 數位元件：元件名稱 → 元件大小/元件高度） ---- */
@@ -2037,7 +2037,7 @@ async function exportPDF() {
       page++;
     }
 
-    doc.save(getProjectName() + '_熱設計TIM凸台標準尺寸表.pdf');
+    doc.save(getProjectName() + '_熱設計TIM凸台標準尺寸表_' + getDateString().replace(/\//g, '') + '.pdf');
   } finally {
     document.body.removeChild(wrapper);
   }
