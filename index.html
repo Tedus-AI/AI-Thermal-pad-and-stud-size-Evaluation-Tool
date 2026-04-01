@@ -1058,37 +1058,36 @@ function showSaveStatus(msg, type) {
 
 /* ---- 載入專案列表 ---- */
 async function loadProjects() {
-  if (!firebaseReady) {
-    showStatus('Firebase 尚未初始化，請檢查設定。', 'error');
+  if (!dbAdapter.isReady()) {
+    showStatus('資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
     return;
   }
 
   const btn = document.getElementById('load-projects-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="loading-spinner"></span>\u8f09\u5165\u4e2d...';
-  showStatus('\u6b63\u5728\u5f9e Firebase \u8b80\u53d6\u5c08\u6848\u5217\u8868...', '');
+  showStatus('\u6b63\u5728\u8b80\u53d6\u5c08\u6848\u5217\u8868...', '');
 
   try {
-    const snapshot = await db.collection('projects').get();
+    const projectList = await dbAdapter.getProjectsSorted();
     const select = document.getElementById('project-select');
     select.innerHTML = '<option value="">-- \u8acb\u9078\u64c7\u5c08\u6848 --</option>';
 
-    if (snapshot.empty) {
+    if (projectList.length === 0) {
       showStatus('\u8cc7\u6599\u5eab\u4e2d\u5c1a\u7121\u5c08\u6848\u8cc7\u6599\u3002', 'error');
       btn.disabled = false;
       btn.textContent = '\u8f09\u5165\u5c08\u6848';
       return;
     }
 
-    snapshot.forEach(doc => {
-      const data = doc.data();
+    projectList.forEach(item => {
       const opt = document.createElement('option');
-      opt.value = doc.id;
-      opt.textContent = data.project_name || doc.id;
+      opt.value = item.id;
+      opt.textContent = item.project_name || item.id;
       select.appendChild(opt);
     });
 
-    showStatus(`\u6210\u529f\u8f09\u5165 ${snapshot.size} \u500b\u5c08\u6848\u3002`, 'success');
+    showStatus(`\u6210\u529f\u8f09\u5165 ${projectList.length} \u500b\u5c08\u6848\u3002`, 'success');
   } catch (e) {
     console.error('Load projects error:', e);
     showStatus('\u8f09\u5165\u5c08\u6848\u5931\u6557\uff1a' + e.message, 'error');
@@ -1120,15 +1119,15 @@ async function onProjectChange() {
   showStatus('\u6b63\u5728\u8f09\u5165\u5c08\u6848\u5143\u4ef6\u8cc7\u6599...', '');
 
   try {
-    const doc = await db.collection('projects').doc(projectId).get();
+    const data = await dbAdapter.getDoc('projects', projectId);
 
-    if (!doc.exists) {
+    if (!data) {
       showStatus('\u5c08\u6848\u4e0d\u5b58\u5728\u3002', 'error');
       return;
     }
 
     currentProjectId = projectId;
-    currentProjectData = doc.data();
+    currentProjectData = data;
     thermalSpecs = currentProjectData.thermal_specs || {};
     hiddenComponents = currentProjectData.hidden_components || {};
 
@@ -1668,7 +1667,7 @@ async function saveThermalSpecs() {
     alert('\u5bc6\u78bc\u4fdd\u8b77\u555f\u7528\u4e2d\uff0c\u8acb\u5148\u89e3\u9396\u5f8c\u624d\u80fd\u5132\u5b58\u3002');
     return;
   }
-  if (!currentProjectId || !firebaseReady) return;
+  if (!currentProjectId || !dbAdapter.isReady()) return;
 
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
@@ -1676,7 +1675,7 @@ async function saveThermalSpecs() {
   showSaveStatus('\u6b63\u5728\u5132\u5b58...', 'saving');
 
   try {
-    await db.collection('projects').doc(currentProjectId).update({
+    await dbAdapter.updateDoc('projects', currentProjectId, {
       thermal_specs: thermalSpecs,
       hidden_components: hiddenComponents
     });
@@ -2079,6 +2078,23 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+</script>
+
+<script>
+function updateDbStatusText(message, type) {
+  const el = document.getElementById('db-status-text');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = type === 'success' ? '#1a6e2e' : '#856404';
+}
+
+async function handlePickDb() {
+  const result = await dbAdapter.pickFile();
+  if (result && result.success) {
+    updateDbStatusText(`✅ ${result.filename}`, 'success');
+    await loadProjects();
+  }
 }
 </script>
 </body>
