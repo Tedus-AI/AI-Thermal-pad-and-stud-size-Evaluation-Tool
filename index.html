@@ -723,6 +723,23 @@
   <!-- ==================== Tab 2: Component List ==================== -->
   <div id="tab-complist" class="tab-content">
 
+    <div style="display:flex; align-items:center; gap:8px; float:right; margin-bottom:8px;">
+      <span id="db-status-text" style="font-size:12px; color:#888;">未選擇資料庫</span>
+      <button onclick="handlePickDb()"
+        style="font-size:12px; padding:3px 12px; border-radius:4px;
+               border:1px solid #2357A7; background:transparent;
+               color:#2357A7; cursor:pointer;">
+        📂 資料庫目錄
+      </button>
+      <button onclick="dbAdapter.exportBackup()"
+        style="font-size:12px; padding:3px 12px; border-radius:4px;
+               border:1px solid #2357A7; background:transparent;
+               color:#2357A7; cursor:pointer;">
+        💾 備份資料庫
+      </button>
+    </div>
+    <div style="clear:both;"></div>
+
     <!-- Password Protection Bar -->
     <div id="protect-bar" class="protect-bar">
       <span class="protect-status" id="protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
@@ -784,6 +801,8 @@
 <!-- Firebase SDK (v9 compat mode) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="fileDb.js"></script>
+<script src="dbAdapter.js"></script>
 
 <!-- SheetJS for Excel export -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
@@ -913,18 +932,24 @@ const TIM_PRESETS = {
   Pad:    { timThickness: '2.5',        icToHSK: '1.7' }
 };
 
-function initFirebase() {
-  try {
-    if (firebase.apps.length === 0) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    db = firebase.firestore();
-    firebaseReady = true;
-    console.log('Firebase connected: g-quick-volume-evaluation');
-  } catch (e) {
-    console.error('Firebase init error:', e);
-    showStatus('Firebase 初始化失敗：' + e.message, 'error');
-  }
+async function initFirebase() {
+  // ── 原 Firebase 程式碼（已註解保留）──
+  // try {
+  //   if (firebase.apps.length === 0) {
+  //     firebase.initializeApp(firebaseConfig);
+  //   }
+  //   db = firebase.firestore();
+  //   firebaseReady = true;
+  //   console.log('Firebase connected: g-quick-volume-evaluation');
+  // } catch (e) {
+  //   console.error('Firebase init error:', e);
+  //   showStatus('Firebase 初始化失敗：' + e.message, 'error');
+  // }
+
+  // ── 本機資料庫初始化 ──
+  // 注意：Tab 1 不需要資料庫，這裡不自動初始化
+  // 使用者切換到 Tab 2 時，若點「資料庫目錄」才開始初始化
+  console.log('[initFirebase] 本機模式，等待使用者選擇資料庫');
 }
 
 initFirebase();
@@ -1033,37 +1058,36 @@ function showSaveStatus(msg, type) {
 
 /* ---- 載入專案列表 ---- */
 async function loadProjects() {
-  if (!firebaseReady) {
-    showStatus('Firebase 尚未初始化，請檢查設定。', 'error');
+  if (!dbAdapter.isReady()) {
+    showStatus('資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
     return;
   }
 
   const btn = document.getElementById('load-projects-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="loading-spinner"></span>\u8f09\u5165\u4e2d...';
-  showStatus('\u6b63\u5728\u5f9e Firebase \u8b80\u53d6\u5c08\u6848\u5217\u8868...', '');
+  showStatus('\u6b63\u5728\u8b80\u53d6\u5c08\u6848\u5217\u8868...', '');
 
   try {
-    const snapshot = await db.collection('projects').get();
+    const projectList = await dbAdapter.getProjectsSorted();
     const select = document.getElementById('project-select');
     select.innerHTML = '<option value="">-- \u8acb\u9078\u64c7\u5c08\u6848 --</option>';
 
-    if (snapshot.empty) {
+    if (projectList.length === 0) {
       showStatus('\u8cc7\u6599\u5eab\u4e2d\u5c1a\u7121\u5c08\u6848\u8cc7\u6599\u3002', 'error');
       btn.disabled = false;
       btn.textContent = '\u8f09\u5165\u5c08\u6848';
       return;
     }
 
-    snapshot.forEach(doc => {
-      const data = doc.data();
+    projectList.forEach(item => {
       const opt = document.createElement('option');
-      opt.value = doc.id;
-      opt.textContent = data.project_name || doc.id;
+      opt.value = item.id;
+      opt.textContent = item.project_name || item.id;
       select.appendChild(opt);
     });
 
-    showStatus(`\u6210\u529f\u8f09\u5165 ${snapshot.size} \u500b\u5c08\u6848\u3002`, 'success');
+    showStatus(`\u6210\u529f\u8f09\u5165 ${projectList.length} \u500b\u5c08\u6848\u3002`, 'success');
   } catch (e) {
     console.error('Load projects error:', e);
     showStatus('\u8f09\u5165\u5c08\u6848\u5931\u6557\uff1a' + e.message, 'error');
@@ -1095,15 +1119,15 @@ async function onProjectChange() {
   showStatus('\u6b63\u5728\u8f09\u5165\u5c08\u6848\u5143\u4ef6\u8cc7\u6599...', '');
 
   try {
-    const doc = await db.collection('projects').doc(projectId).get();
+    const data = await dbAdapter.getDoc('projects', projectId);
 
-    if (!doc.exists) {
+    if (!data) {
       showStatus('\u5c08\u6848\u4e0d\u5b58\u5728\u3002', 'error');
       return;
     }
 
     currentProjectId = projectId;
-    currentProjectData = doc.data();
+    currentProjectData = data;
     thermalSpecs = currentProjectData.thermal_specs || {};
     hiddenComponents = currentProjectData.hidden_components || {};
 
@@ -1643,7 +1667,7 @@ async function saveThermalSpecs() {
     alert('\u5bc6\u78bc\u4fdd\u8b77\u555f\u7528\u4e2d\uff0c\u8acb\u5148\u89e3\u9396\u5f8c\u624d\u80fd\u5132\u5b58\u3002');
     return;
   }
-  if (!currentProjectId || !firebaseReady) return;
+  if (!currentProjectId || !dbAdapter.isReady()) return;
 
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
@@ -1651,7 +1675,7 @@ async function saveThermalSpecs() {
   showSaveStatus('\u6b63\u5728\u5132\u5b58...', 'saving');
 
   try {
-    await db.collection('projects').doc(currentProjectId).update({
+    await dbAdapter.updateDoc('projects', currentProjectId, {
       thermal_specs: thermalSpecs,
       hidden_components: hiddenComponents
     });
@@ -2054,6 +2078,23 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+</script>
+
+<script>
+function updateDbStatusText(message, type) {
+  const el = document.getElementById('db-status-text');
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = type === 'success' ? '#1a6e2e' : '#856404';
+}
+
+async function handlePickDb() {
+  const result = await dbAdapter.pickFile();
+  if (result && result.success) {
+    updateDbStatusText(`✅ ${result.filename}`, 'success');
+    await loadProjects();
+  }
 }
 </script>
 </body>
