@@ -646,6 +646,247 @@
     .comp-table { font-size: 0.78rem; }
     .comp-table th, .comp-table td { padding: 8px 3px; }
   }
+
+  /* === Tab 3: Spec Generator Styles === */
+  .sg-panel {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .sg-panel-header {
+    padding: 14px 20px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ddeaf8;
+    color: #2e6bb5;
+    cursor: pointer;
+    user-select: none;
+  }
+  .sg-panel-header .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #2e6bb5;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .sg-panel-body {
+    padding: 20px;
+  }
+
+  /* Component Type Selector */
+  .sg-type-selector {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sg-type-btn {
+    padding: 10px 24px;
+    border: 2px solid #d0d8e0;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #fff;
+    color: #555;
+    transition: all 0.2s;
+  }
+  .sg-type-btn:hover { border-color: #999; }
+  .sg-type-btn.active-rf {
+    border-color: #c0392b;
+    background: #fdf0ef;
+    color: #c0392b;
+  }
+  .sg-type-btn.active-digital {
+    border-color: #2e6bb5;
+    background: #eaf2fb;
+    color: #2e6bb5;
+  }
+  .sg-type-btn.active-pwr {
+    border-color: #e67e22;
+    background: #fef5ec;
+    color: #e67e22;
+  }
+
+  /* Spec Form */
+  .sg-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .sg-form-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 620px) { .sg-form-grid { grid-template-columns: 1fr; } }
+  .sg-form-grid .field label {
+    display: block;
+    font-size: 0.82rem;
+    color: #666;
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .sg-form-grid .field input,
+  .sg-form-grid .field select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid #c5d9ee;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a3a6b;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #fff;
+  }
+  .sg-form-grid .field input:focus,
+  .sg-form-grid .field select:focus {
+    border-color: #5b9bd5;
+    box-shadow: 0 0 0 3px rgba(91,155,213,0.18);
+  }
+  .sg-form-grid .field.required label::after {
+    content: ' *';
+    color: #c00000;
+  }
+  .sg-form-grid .field .field-hint {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-top: 2px;
+  }
+
+  /* Staging Table */
+  .sg-staging-summary {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .sg-staging-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .sg-staging-badge.rf { background: #c0392b; }
+  .sg-staging-badge.digital { background: #2e6bb5; }
+  .sg-staging-badge.pwr { background: #e67e22; }
+  .sg-staging-badge .count { font-size: 1rem; }
+
+  .sg-staging-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .sg-staging-table th {
+    background: #e8f0f8;
+    color: #1a3a6b;
+    font-weight: 700;
+    padding: 10px 8px;
+    text-align: center;
+    border-bottom: 2px solid #c5d9ee;
+    white-space: nowrap;
+    font-size: 0.78rem;
+  }
+  .sg-staging-table td {
+    padding: 8px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+    color: #444;
+  }
+  .sg-staging-table tr:hover td { background: #f7fafd; }
+  .sg-staging-table .type-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .sg-staging-table .type-badge.rf { background: #c0392b; }
+  .sg-staging-table .type-badge.digital { background: #2e6bb5; }
+  .sg-staging-table .type-badge.pwr { background: #e67e22; }
+
+  .sg-action-btn {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .sg-action-btn.edit {
+    background: #eaf2fb;
+    color: #2e6bb5;
+  }
+  .sg-action-btn.edit:hover { background: #d4e6f9; }
+  .sg-action-btn.remove {
+    background: #fee;
+    color: #c0392b;
+  }
+  .sg-action-btn.remove:hover { background: #fdd; }
+
+  /* Write Log */
+  .sg-write-log {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    display: none;
+  }
+  .sg-write-log.active { display: block; }
+  .sg-write-log .log-success { color: #217346; }
+  .sg-write-log .log-error { color: #c00000; }
+  .sg-write-log .log-info { color: #1a3a6b; }
+
+  /* Write checkboxes */
+  .sg-write-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .sg-write-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #444;
+    cursor: pointer;
+  }
+  .sg-write-options input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #2e6bb5;
+  }
+
+  /* New project form */
+  .sg-new-project-form {
+    display: none;
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: #f7fafd;
+    border: 1px solid #d6e4f0;
+    border-radius: 8px;
+  }
+  .sg-new-project-form.active { display: block; }
+  .sg-new-project-form .field { margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -660,6 +901,7 @@
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('calc')">尺寸評估計算</button>
     <button class="tab-btn" onclick="switchTab('complist')">ME-專案元件清單</button>
+    <button class="tab-btn" onclick="switchTab('specgen')">元件規格產生器</button>
   </div>
 
   <!-- ==================== Tab 1: Original Calculator ==================== -->
@@ -791,6 +1033,185 @@
         <div class="icon">&#128230;</div>
         <p>請先載入專案列表並選擇專案，即可載入元件清單。</p>
         <p style="margin-top:8px; font-size:0.85rem; color:#ccc;">資料庫與 RRU-Component-Spec-List-Auto-Generator 共用</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== Tab 3: Spec Generator ==================== -->
+  <div id="tab-specgen" class="tab-content">
+
+    <!-- DB status bar (shared connection) -->
+    <div style="display:flex; align-items:center; gap:8px; float:right; margin-bottom:8px;">
+      <span id="sg-db-status" style="font-size:12px; color:#888;">未選擇資料庫</span>
+      <button onclick="handlePickDb().then(()=>sgLoadProjects())"
+        style="font-size:12px; padding:3px 12px; border-radius:4px;
+               border:1px solid #2357A7; background:transparent;
+               color:#2357A7; cursor:pointer;">
+        &#128194; 資料庫目錄
+      </button>
+    </div>
+    <div style="clear:both;"></div>
+
+    <!-- Panel 1: Select Project -->
+    <div class="sg-panel">
+      <div class="sg-panel-header">
+        <span class="step-badge">1</span> 選擇專案
+      </div>
+      <div class="sg-panel-body">
+        <div class="comp-toolbar">
+          <div class="field">
+            <label>選擇專案</label>
+            <select id="sg-project-select" onchange="sgOnProjectChange()">
+              <option value="">-- 請先載入專案列表 --</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
+          <button class="btn" style="background:#217346;color:#fff;" onclick="sgToggleNewProject()">+ 新增專案</button>
+        </div>
+        <div id="sg-new-project-form" class="sg-new-project-form">
+          <div class="field">
+            <label>專案 ID（英文/數字，不可有空格）</label>
+            <input type="text" id="sg-new-project-id" placeholder="例：RRU_5G_2026">
+          </div>
+          <div class="field">
+            <label>專案名稱</label>
+            <input type="text" id="sg-new-project-name" placeholder="例：5G RRU 新案">
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" onclick="sgCreateProject()">建立專案</button>
+            <button class="btn" style="background:#e0e0e0;color:#555;" onclick="sgToggleNewProject()">取消</button>
+          </div>
+        </div>
+        <div id="sg-project-status" class="comp-status" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Component Type -->
+    <div class="sg-panel">
+      <div class="sg-panel-header">
+        <span class="step-badge">2</span> 元件類型
+      </div>
+      <div class="sg-panel-body">
+        <div class="sg-type-selector">
+          <button class="sg-type-btn active-rf" data-type="RF" onclick="sgSwitchType('RF')">&#128225; RF Component</button>
+          <button class="sg-type-btn" data-type="Digital" onclick="sgSwitchType('Digital')">&#128178; Digital Component</button>
+          <button class="sg-type-btn" data-type="PWR" onclick="sgSwitchType('PWR')">&#9889; PWR Component</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Manual Input Form -->
+    <div class="sg-panel">
+      <div class="sg-panel-header">
+        <span class="step-badge">3</span> 輸入元件規格
+      </div>
+      <div class="sg-panel-body">
+        <div class="sg-form-grid">
+          <div class="field required">
+            <label>Component（元件型號）</label>
+            <input type="text" id="sg-component" placeholder="例：PA_GaN_28">
+          </div>
+          <div class="field">
+            <label>Qty（數量）</label>
+            <input type="number" id="sg-qty" value="1" min="1">
+          </div>
+          <div class="field">
+            <label>Power (W)（功耗）</label>
+            <input type="number" id="sg-power" value="" step="0.01" placeholder="最大工作模式功耗">
+          </div>
+          <div class="field">
+            <label>Height (mm)（元件高度）</label>
+            <input type="number" id="sg-height" value="250" step="0.1">
+            <div class="field-hint">距 PCB 底面高度</div>
+          </div>
+          <div class="field">
+            <label>Pad_L (mm)（封裝底部長度）</label>
+            <input type="number" id="sg-pad-l" value="10" step="0.1">
+          </div>
+          <div class="field">
+            <label>Pad_W (mm)（封裝底部寬度）</label>
+            <input type="number" id="sg-pad-w" value="10" step="0.1">
+          </div>
+          <div class="field">
+            <label>Thick (mm)（PCB/Copper Coin 厚度）</label>
+            <input type="number" id="sg-thick" value="2.5" step="0.1">
+          </div>
+          <div class="field">
+            <label>Board_Type（導熱方式）</label>
+            <select id="sg-board-type">
+              <option value="Thermal Via">Thermal Via</option>
+              <option value="Copper Coin" selected>Copper Coin</option>
+              <option value="None">None</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Limit (&#176;C)（最高允許溫度）</label>
+            <input type="number" id="sg-limit" value="200" step="1">
+          </div>
+          <div class="field">
+            <label>R_jc (&#176;C/W)（熱阻）</label>
+            <input type="number" id="sg-rjc" value="1.5" step="0.01">
+            <div class="field-hint">Junction-to-Case</div>
+          </div>
+          <div class="field">
+            <label>TIM_Type（導熱介面材料）</label>
+            <select id="sg-tim-type">
+              <option value="Grease" selected>Grease</option>
+              <option value="Pad">Pad</option>
+              <option value="Pad2">Pad2</option>
+              <option value="Putty">Putty</option>
+              <option value="None">None</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:18px; display:flex; gap:10px; align-items:center;">
+          <button class="btn btn-primary" onclick="sgAddToStaging()" id="sg-add-btn">&#10133; 加入暫存清單</button>
+          <button class="btn" style="background:#e0e0e0;color:#555;" onclick="sgResetForm()">清除表單</button>
+          <span id="sg-form-msg" style="font-size:0.85rem; color:#217346; display:none;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 4: Staging List -->
+    <div class="sg-panel">
+      <div class="sg-panel-header">
+        <span class="step-badge">4</span> 暫存清單
+      </div>
+      <div class="sg-panel-body">
+        <div id="sg-staging-summary" class="sg-staging-summary">
+          <span style="font-size:0.9rem;color:#888;">尚未加入元件</span>
+        </div>
+        <div id="sg-staging-container" style="overflow-x:auto;">
+          <div class="empty-state" style="padding:30px 20px;">
+            <div class="icon">&#128230;</div>
+            <p>請在上方填入元件規格後，按「加入暫存清單」。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel 5: Write to Database -->
+    <div class="sg-panel">
+      <div class="sg-panel-header">
+        <span class="step-badge">5</span> 寫入資料庫
+      </div>
+      <div class="sg-panel-body">
+        <div class="sg-write-options">
+          <label>
+            <input type="checkbox" id="sg-write-library" checked>
+            寫入元件資料庫（rf_library / digital_library / pwr_library）
+          </label>
+          <label>
+            <input type="checkbox" id="sg-write-project" checked>
+            寫入專案清單（projects/{id}/rf_data | digital_data | pwr_data）
+          </label>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px;">
+          <button class="btn" id="sg-write-btn" style="background:#217346; color:#fff;" onclick="sgBatchWrite()" disabled>&#9989; 確認全部寫入</button>
+          <span id="sg-write-status" style="font-size:0.85rem; color:#888;"></span>
+        </div>
+        <div id="sg-write-log" class="sg-write-log"></div>
       </div>
     </div>
 
@@ -969,12 +1390,16 @@ initFirebase();
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-  if (tab === 'calc') {
-    document.querySelectorAll('.tab-btn')[0].classList.add('active');
-    document.getElementById('tab-calc').classList.add('active');
-  } else {
-    document.querySelectorAll('.tab-btn')[1].classList.add('active');
-    document.getElementById('tab-complist').classList.add('active');
+  const tabMap = { calc: 0, complist: 1, specgen: 2 };
+  const tabIndex = tabMap[tab] ?? 0;
+  document.querySelectorAll('.tab-btn')[tabIndex].classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  // Sync DB status and load projects when switching to specgen tab
+  if (tab === 'specgen' && dbAdapter.isReady()) {
+    const sgDbEl = document.getElementById('sg-db-status');
+    const mainDbEl = document.getElementById('db-status-text');
+    if (sgDbEl && mainDbEl) sgDbEl.textContent = mainDbEl.textContent;
   }
 }
 
@@ -2076,6 +2501,428 @@ async function exportPDF() {
   }
 }
 
+/* ============================
+   Tab 3: Spec Generator Logic
+   ============================ */
+
+/* ---- State ---- */
+let sgCurrentType = 'RF';
+let sgProjectId = null;
+let sgProjectData = null;
+let sgStagingList = [];         // [{type, record}, ...]
+let sgEditIndex = -1;           // -1 = add mode, >= 0 = editing
+
+/* ---- Default values by component type ---- */
+const SG_DEFAULTS = {
+  RF:      { height: 250, padL: 10, padW: 10, thick: 2.5, boardType: 'Copper Coin', limit: 200, rjc: 1.5, timType: 'Grease' },
+  Digital: { height: 50,  padL: 10, padW: 10, thick: 0,   boardType: 'Thermal Via', limit: 100, rjc: 0.5, timType: 'Putty' },
+  PWR:     { height: 30,  padL: 20, padW: 20, thick: 0,   boardType: 'None',        limit: 95,  rjc: 0,   timType: 'Grease' }
+};
+
+/* ---- doc_id generator (same rule as RRU tool) ---- */
+function toDocId(name) {
+  return name.replace(/ /g, '_').replace(/\//g, '-').replace(/[^a-zA-Z0-9_\-\u4e00-\u9fff]/g, '');
+}
+
+/* ---- Switch component type ---- */
+function sgSwitchType(type) {
+  sgCurrentType = type;
+  const cssMap = { RF: 'active-rf', Digital: 'active-digital', PWR: 'active-pwr' };
+  document.querySelectorAll('.sg-type-btn').forEach(btn => {
+    btn.className = 'sg-type-btn' + (btn.dataset.type === type ? ' ' + cssMap[type] : '');
+  });
+  sgApplyDefaults(type);
+}
+
+/* ---- Apply default values to form ---- */
+function sgApplyDefaults(type) {
+  const d = SG_DEFAULTS[type];
+  document.getElementById('sg-height').value = d.height;
+  document.getElementById('sg-pad-l').value = d.padL;
+  document.getElementById('sg-pad-w').value = d.padW;
+  document.getElementById('sg-thick').value = d.thick;
+  document.getElementById('sg-board-type').value = d.boardType;
+  document.getElementById('sg-limit').value = d.limit;
+  document.getElementById('sg-rjc').value = d.rjc;
+  document.getElementById('sg-tim-type').value = d.timType;
+}
+
+/* ---- Reset form ---- */
+function sgResetForm() {
+  document.getElementById('sg-component').value = '';
+  document.getElementById('sg-qty').value = '1';
+  document.getElementById('sg-power').value = '';
+  sgApplyDefaults(sgCurrentType);
+  sgEditIndex = -1;
+  document.getElementById('sg-add-btn').innerHTML = '&#10133; 加入暫存清單';
+}
+
+/* ---- Load projects ---- */
+async function sgLoadProjects() {
+  if (!dbAdapter.isReady()) {
+    sgShowStatus('資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('sg-load-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
+
+  try {
+    const projectList = await dbAdapter.getProjectsSorted();
+    const select = document.getElementById('sg-project-select');
+    select.innerHTML = '<option value="">-- 請選擇專案 --</option>';
+
+    projectList.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.project_name || item.id;
+      select.appendChild(opt);
+    });
+
+    if (projectList.length === 0) {
+      sgShowStatus('資料庫中尚無專案，請新增專案。', '');
+    } else {
+      sgShowStatus('成功載入 ' + projectList.length + ' 個專案。', 'success');
+    }
+
+    // Sync DB status
+    const sgDbEl = document.getElementById('sg-db-status');
+    const mainDbEl = document.getElementById('db-status-text');
+    if (sgDbEl && mainDbEl) sgDbEl.textContent = mainDbEl.textContent;
+  } catch (e) {
+    sgShowStatus('載入專案失敗：' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '載入專案';
+}
+
+/* ---- Project selection change ---- */
+async function sgOnProjectChange() {
+  const select = document.getElementById('sg-project-select');
+  sgProjectId = select.value || null;
+  sgProjectData = null;
+
+  if (!sgProjectId) {
+    sgUpdateWriteBtn();
+    return;
+  }
+
+  try {
+    sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
+    sgShowStatus('已選擇專案：' + (sgProjectData?.project_name || sgProjectId), 'success');
+  } catch (e) {
+    sgShowStatus('載入專案資料失敗：' + e.message, 'error');
+  }
+  sgUpdateWriteBtn();
+}
+
+/* ---- Toggle new project form ---- */
+function sgToggleNewProject() {
+  const form = document.getElementById('sg-new-project-form');
+  form.classList.toggle('active');
+  if (form.classList.contains('active')) {
+    document.getElementById('sg-new-project-id').focus();
+  }
+}
+
+/* ---- Create new project ---- */
+async function sgCreateProject() {
+  const id = document.getElementById('sg-new-project-id').value.trim();
+  const name = document.getElementById('sg-new-project-name').value.trim();
+  if (!id) { alert('請輸入專案 ID'); return; }
+  if (!name) { alert('請輸入專案名稱'); return; }
+
+  try {
+    const existing = await dbAdapter.getDoc('projects', id);
+    if (existing) {
+      alert('專案 ID「' + id + '」已存在，請使用其他 ID。');
+      return;
+    }
+
+    await dbAdapter.setDoc('projects', id, {
+      project_name: name,
+      meta: { version: 'v1.0', timestamp: new Date().toISOString() },
+      rf_data: [],
+      digital_data: [],
+      pwr_data: [],
+      thermal_specs: {},
+      hidden_components: {}
+    });
+
+    sgShowStatus('專案「' + name + '」建立成功！', 'success');
+    document.getElementById('sg-new-project-id').value = '';
+    document.getElementById('sg-new-project-name').value = '';
+    sgToggleNewProject();
+
+    // Reload and auto-select
+    await sgLoadProjects();
+    document.getElementById('sg-project-select').value = id;
+    await sgOnProjectChange();
+  } catch (e) {
+    sgShowStatus('建立專案失敗：' + e.message, 'error');
+  }
+}
+
+/* ---- Add to staging ---- */
+function sgAddToStaging() {
+  const component = document.getElementById('sg-component').value.trim();
+  if (!component) { alert('請輸入元件型號（Component）'); return; }
+
+  const record = {
+    Component: component,
+    Qty: parseInt(document.getElementById('sg-qty').value) || 1,
+    'Power(W)': parseFloat(document.getElementById('sg-power').value) || 0,
+    'Height(mm)': parseFloat(document.getElementById('sg-height').value) || 0,
+    Pad_L: parseFloat(document.getElementById('sg-pad-l').value) || 0,
+    Pad_W: parseFloat(document.getElementById('sg-pad-w').value) || 0,
+    'Thick(mm)': parseFloat(document.getElementById('sg-thick').value) || 0,
+    Board_Type: document.getElementById('sg-board-type').value,
+    'Limit(C)': parseFloat(document.getElementById('sg-limit').value) || 0,
+    R_jc: parseFloat(document.getElementById('sg-rjc').value) || 0,
+    TIM_Type: document.getElementById('sg-tim-type').value
+  };
+
+  if (sgEditIndex >= 0) {
+    // Update existing
+    sgStagingList[sgEditIndex] = { type: sgCurrentType, record };
+    sgEditIndex = -1;
+    document.getElementById('sg-add-btn').innerHTML = '&#10133; 加入暫存清單';
+    sgShowFormMsg('元件已更新');
+  } else {
+    // Add new
+    sgStagingList.push({ type: sgCurrentType, record });
+    sgShowFormMsg('已加入暫存清單');
+  }
+
+  sgRenderStagingTable();
+  sgResetForm();
+  sgUpdateWriteBtn();
+}
+
+/* ---- Remove from staging ---- */
+function sgRemoveFromStaging(index) {
+  sgStagingList.splice(index, 1);
+  sgRenderStagingTable();
+  sgUpdateWriteBtn();
+}
+
+/* ---- Edit staging item ---- */
+function sgEditStagingItem(index) {
+  const item = sgStagingList[index];
+  if (!item) return;
+
+  sgSwitchType(item.type);
+  const r = item.record;
+  document.getElementById('sg-component').value = r.Component || '';
+  document.getElementById('sg-qty').value = r.Qty || 1;
+  document.getElementById('sg-power').value = r['Power(W)'] || '';
+  document.getElementById('sg-height').value = r['Height(mm)'] || '';
+  document.getElementById('sg-pad-l').value = r.Pad_L || '';
+  document.getElementById('sg-pad-w').value = r.Pad_W || '';
+  document.getElementById('sg-thick').value = r['Thick(mm)'] || '';
+  document.getElementById('sg-board-type').value = r.Board_Type || 'None';
+  document.getElementById('sg-limit').value = r['Limit(C)'] || '';
+  document.getElementById('sg-rjc').value = r.R_jc || '';
+  document.getElementById('sg-tim-type').value = r.TIM_Type || 'None';
+
+  sgEditIndex = index;
+  document.getElementById('sg-add-btn').innerHTML = '&#10003; 更新此元件';
+  document.getElementById('sg-component').focus();
+}
+
+/* ---- Render staging table ---- */
+function sgRenderStagingTable() {
+  const container = document.getElementById('sg-staging-container');
+  const summaryEl = document.getElementById('sg-staging-summary');
+
+  if (sgStagingList.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:30px 20px;"><div class="icon">&#128230;</div><p>請在上方填入元件規格後，按「加入暫存清單」。</p></div>';
+    summaryEl.innerHTML = '<span style="font-size:0.9rem;color:#888;">尚未加入元件</span>';
+    return;
+  }
+
+  // Count by type
+  const counts = { RF: 0, Digital: 0, PWR: 0 };
+  sgStagingList.forEach(item => { counts[item.type] = (counts[item.type] || 0) + 1; });
+
+  let summaryHtml = '';
+  if (counts.RF > 0) summaryHtml += `<span class="sg-staging-badge rf">RF <span class="count">${counts.RF}</span></span>`;
+  if (counts.Digital > 0) summaryHtml += `<span class="sg-staging-badge digital">Digital <span class="count">${counts.Digital}</span></span>`;
+  if (counts.PWR > 0) summaryHtml += `<span class="sg-staging-badge pwr">PWR <span class="count">${counts.PWR}</span></span>`;
+  summaryHtml += `<span style="font-size:0.85rem; color:#666;">共 ${sgStagingList.length} 筆</span>`;
+  summaryEl.innerHTML = summaryHtml;
+
+  let html = `<table class="sg-staging-table">
+    <thead><tr>
+      <th>#</th><th>類型</th><th>Component</th><th>Qty</th><th>Power(W)</th>
+      <th>Height(mm)</th><th>Pad_L</th><th>Pad_W</th><th>Thick(mm)</th>
+      <th>Board_Type</th><th>Limit(&#176;C)</th><th>R_jc</th><th>TIM_Type</th><th>操作</th>
+    </tr></thead><tbody>`;
+
+  sgStagingList.forEach((item, idx) => {
+    const r = item.record;
+    const typeCss = item.type.toLowerCase();
+    html += `<tr>
+      <td>${idx + 1}</td>
+      <td><span class="type-badge ${typeCss}">${item.type}</span></td>
+      <td style="text-align:left;font-weight:600;color:#1a3a6b;">${escapeHtml(r.Component)}</td>
+      <td>${r.Qty}</td>
+      <td>${r['Power(W)']}</td>
+      <td>${r['Height(mm)']}</td>
+      <td>${r.Pad_L}</td>
+      <td>${r.Pad_W}</td>
+      <td>${r['Thick(mm)']}</td>
+      <td>${r.Board_Type}</td>
+      <td>${r['Limit(C)']}</td>
+      <td>${r.R_jc}</td>
+      <td>${r.TIM_Type}</td>
+      <td style="white-space:nowrap;">
+        <button class="sg-action-btn edit" onclick="sgEditStagingItem(${idx})">&#9998; 編輯</button>
+        <button class="sg-action-btn remove" onclick="sgRemoveFromStaging(${idx})">&#10006; 移除</button>
+      </td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+/* ---- Update write button state ---- */
+function sgUpdateWriteBtn() {
+  const btn = document.getElementById('sg-write-btn');
+  const writeLib = document.getElementById('sg-write-library').checked;
+  const writeProj = document.getElementById('sg-write-project').checked;
+  const hasItems = sgStagingList.length > 0;
+  const hasProject = !!sgProjectId;
+  const needsProject = writeProj;
+
+  btn.disabled = !hasItems || (!writeLib && !writeProj) || (needsProject && !hasProject);
+
+  if (!hasItems) {
+    document.getElementById('sg-write-status').textContent = '暫存清單為空';
+  } else if (needsProject && !hasProject) {
+    document.getElementById('sg-write-status').textContent = '請先選擇專案';
+  } else if (!writeLib && !writeProj) {
+    document.getElementById('sg-write-status').textContent = '請至少勾選一個寫入目標';
+  } else {
+    document.getElementById('sg-write-status').textContent = `準備寫入 ${sgStagingList.length} 筆`;
+  }
+}
+
+/* ---- Batch write to DB ---- */
+async function sgBatchWrite() {
+  const writeLib = document.getElementById('sg-write-library').checked;
+  const writeProj = document.getElementById('sg-write-project').checked;
+
+  if (!writeLib && !writeProj) { alert('請至少勾選一個寫入目標'); return; }
+  if (sgStagingList.length === 0) { alert('暫存清單為空'); return; }
+  if (writeProj && !sgProjectId) { alert('請先選擇專案'); return; }
+
+  const btn = document.getElementById('sg-write-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span>寫入中...';
+
+  const logEl = document.getElementById('sg-write-log');
+  logEl.innerHTML = '';
+  logEl.classList.add('active');
+
+  const collectionMap = { RF: 'rf_library', Digital: 'digital_library', PWR: 'pwr_library' };
+  const fieldMap = { RF: 'rf_data', Digital: 'digital_data', PWR: 'pwr_data' };
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  // Group by type for project writes
+  const projectAppends = { RF: [], Digital: [], PWR: [] };
+
+  for (let i = 0; i < sgStagingList.length; i++) {
+    const item = sgStagingList[i];
+    const docId = toDocId(item.record.Component);
+
+    try {
+      // Write to library
+      if (writeLib) {
+        await dbAdapter.setDoc(collectionMap[item.type], docId, item.record);
+        sgAppendLog(logEl, 'success', `✓ [${item.type}] ${item.record.Component} → ${collectionMap[item.type]}/${docId}`);
+      }
+
+      // Collect for project write
+      if (writeProj) {
+        projectAppends[item.type].push(item.record);
+      }
+
+      successCount++;
+    } catch (e) {
+      sgAppendLog(logEl, 'error', `✗ [${item.type}] ${item.record.Component}: ${e.message}`);
+      errorCount++;
+    }
+  }
+
+  // Batch append to project
+  if (writeProj && sgProjectId) {
+    for (const [type, records] of Object.entries(projectAppends)) {
+      if (records.length === 0) continue;
+      try {
+        const project = await dbAdapter.getDoc('projects', sgProjectId);
+        const field = fieldMap[type];
+        const existing = (project && project[field]) ? project[field] : [];
+        const updated = existing.concat(records);
+        await dbAdapter.updateDoc('projects', sgProjectId, { [field]: updated });
+        sgAppendLog(logEl, 'success', `✓ 已將 ${records.length} 筆 ${type} 元件寫入 projects/${sgProjectId}/${field}`);
+      } catch (e) {
+        sgAppendLog(logEl, 'error', `✗ 寫入 projects/${sgProjectId} 失敗: ${e.message}`);
+        errorCount++;
+      }
+    }
+  }
+
+  // Summary
+  sgAppendLog(logEl, 'info', `--- 完成：成功 ${successCount} 筆，失敗 ${errorCount} 筆 ---`);
+
+  if (errorCount === 0 && successCount > 0) {
+    sgStagingList = [];
+    sgRenderStagingTable();
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '&#9989; 確認全部寫入';
+  sgUpdateWriteBtn();
+}
+
+/* ---- Helper: append log line ---- */
+function sgAppendLog(el, type, msg) {
+  const line = document.createElement('div');
+  line.className = 'log-' + type;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ---- Helper: show status ---- */
+function sgShowStatus(msg, type) {
+  const el = document.getElementById('sg-project-status');
+  el.style.display = 'block';
+  el.textContent = msg;
+  el.className = 'comp-status' + (type ? ' ' + type : '');
+  if (type === 'success') {
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+  }
+}
+
+/* ---- Helper: show form message ---- */
+function sgShowFormMsg(msg) {
+  const el = document.getElementById('sg-form-msg');
+  el.textContent = msg;
+  el.style.display = 'inline';
+  setTimeout(() => { el.style.display = 'none'; }, 2000);
+}
+
+/* ---- Listen to write checkbox changes ---- */
+document.getElementById('sg-write-library').addEventListener('change', sgUpdateWriteBtn);
+document.getElementById('sg-write-project').addEventListener('change', sgUpdateWriteBtn);
+
 /* ---- Utilities ---- */
 function escapeHtml(str) {
   if (!str) return '';
@@ -2093,9 +2940,16 @@ function escapeAttr(str) {
 <script>
 function updateDbStatusText(message, type) {
   const el = document.getElementById('db-status-text');
-  if (!el) return;
-  el.textContent = message;
-  el.style.color = type === 'success' ? '#1a6e2e' : '#856404';
+  if (el) {
+    el.textContent = message;
+    el.style.color = type === 'success' ? '#1a6e2e' : '#856404';
+  }
+  // Sync to Tab 3 DB status
+  const sgEl = document.getElementById('sg-db-status');
+  if (sgEl) {
+    sgEl.textContent = message;
+    sgEl.style.color = type === 'success' ? '#1a6e2e' : '#856404';
+  }
 }
 
 async function handlePickDb() {
