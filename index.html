@@ -812,6 +812,45 @@
     border-color: #e67e22;
     box-shadow: 0 0 0 2px rgba(230,126,34,0.15);
   }
+  .sg-tv-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sg-tv-cell select {
+    width: 100%;
+    padding: 5px 4px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    outline: none;
+    cursor: pointer;
+  }
+  .sg-tv-cell select:focus {
+    border-color: #2e6bb5;
+    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
+  .sg-tv-cell .sg-tv-input {
+    display: block;
+    width: 100%;
+    padding: 5px 6px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    outline: none;
+    text-align: center;
+  }
+  .sg-tv-cell .sg-tv-input.hidden {
+    display: none;
+  }
+  .sg-tv-cell .sg-tv-input:focus {
+    border-color: #2e6bb5;
+    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
   .sg-comp-del-btn {
     padding: 3px 8px;
     border: none;
@@ -2462,7 +2501,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Power(W)</th><th>TV 內徑(mil)</th><th>TV 數量</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Power(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -2477,8 +2516,8 @@ function sgRenderProjectComponents() {
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" min="0" value="${comp.TV_ID_mil ?? ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.TV_Qty ?? ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
+        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
@@ -2509,6 +2548,26 @@ function sgOnTypeChange(sel) {
     customInput.value = '';
     // Store select value directly
     sgOnCompEdit(sel);
+  }
+}
+
+/* ---- TV field dropdown change handler ---- */
+function sgOnTvChange(sel) {
+  const numInput = sel.parentElement.querySelector('.sg-tv-input');
+  if (sel.value === 'N/A') {
+    numInput.classList.add('hidden');
+    numInput.value = '';
+    // Store "N/A" in data
+    const cat = sel.dataset.cat;
+    const idx = parseInt(sel.dataset.idx, 10);
+    const field = sel.dataset.field;
+    const fieldKey = SG_CAT_MAP[cat].field;
+    if (sgProjectData?.[fieldKey]?.[idx]) sgProjectData[fieldKey][idx][field] = 'N/A';
+  } else {
+    numInput.classList.remove('hidden');
+    numInput.focus();
+    // Store current input value (or empty)
+    sgOnCompEdit(numInput);
   }
 }
 
