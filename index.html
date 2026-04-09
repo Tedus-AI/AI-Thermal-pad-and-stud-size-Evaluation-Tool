@@ -774,6 +774,44 @@
     font-weight: 600;
     color: #1a3a6b;
   }
+  .sg-type-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sg-type-cell select {
+    width: 100%;
+    padding: 5px 4px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    outline: none;
+    cursor: pointer;
+  }
+  .sg-type-cell select:focus {
+    border-color: #2e6bb5;
+    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
+  .sg-type-cell .sg-type-custom {
+    display: none;
+    width: 100%;
+    padding: 5px 6px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fffbe6;
+    outline: none;
+  }
+  .sg-type-cell .sg-type-custom.visible {
+    display: block;
+  }
+  .sg-type-cell .sg-type-custom:focus {
+    border-color: #e67e22;
+    box-shadow: 0 0 0 2px rgba(230,126,34,0.15);
+  }
   .sg-comp-del-btn {
     padding: 3px 8px;
     border: none;
@@ -2392,6 +2430,8 @@ async function sgOnProjectChange() {
 }
 
 /* ---- Render existing project components (editable) ---- */
+const SG_TYPE_OPTIONS = ['Final PA','Driver','Pre-driver','CR','filter','FPGA','DC-DC','LDO','Power Modules','HOTSWAP','Power MOSFET','CLK IC','eMMC','DDR','其他'];
+
 const SG_CAT_MAP = {
   RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;', collection: 'rf_library' },
   Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: '&#128178;', collection: 'digital_library' },
@@ -2422,13 +2462,19 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Qty</th><th>Power(W)</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Power(W)</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
       const c = catKey, i = idx;
+      const typeVal = comp.Type || '';
+      const isPredefined = SG_TYPE_OPTIONS.includes(typeVal);
+      const selectVal = isPredefined ? typeVal : (typeVal ? '其他' : '');
+      const customVal = (!isPredefined && typeVal) ? typeVal : '';
+      const customVisible = selectVal === '其他' ? ' visible' : '';
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
@@ -2446,6 +2492,22 @@ function sgRenderProjectComponents() {
 
   body.innerHTML = html;
   container.style.display = 'block';
+}
+
+/* ---- Type dropdown change handler ---- */
+function sgOnTypeChange(sel) {
+  const customInput = sel.parentElement.querySelector('.sg-type-custom');
+  if (sel.value === '其他') {
+    customInput.classList.add('visible');
+    customInput.focus();
+    // Store custom input value (or empty until user types)
+    sgOnCompEdit(customInput);
+  } else {
+    customInput.classList.remove('visible');
+    customInput.value = '';
+    // Store select value directly
+    sgOnCompEdit(sel);
+  }
 }
 
 /* ---- Inline edit handler ---- */
@@ -2485,6 +2547,7 @@ function sgAddCompRow(cat) {
   const d = SG_DEFAULTS[cat];
   sgProjectData[fieldKey].push({
     Component: '',
+    Type: '',
     Qty: 1,
     'Power(W)': 0,
     'Height(mm)': d.height,
