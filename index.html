@@ -774,22 +774,6 @@
     font-weight: 600;
     color: #1a3a6b;
   }
-  .sg-comp-list-table .sg-cell-select {
-    width: 100%;
-    padding: 5px 4px;
-    border: 1.5px solid #e0e0e0;
-    border-radius: 5px;
-    font-size: 0.8rem;
-    color: #333;
-    background: #fff;
-    text-align: center;
-    outline: none;
-    cursor: pointer;
-  }
-  .sg-comp-list-table .sg-cell-select:focus {
-    border-color: #2e6bb5;
-    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
-  }
   .sg-comp-del-btn {
     padding: 3px 8px;
     border: none;
@@ -2414,8 +2398,6 @@ const SG_CAT_MAP = {
   PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: '&#9889;',   collection: 'pwr_library' }
 };
 
-const SG_BOARD_TYPES = ['Thermal Via', 'Copper Coin', 'None'];
-const SG_TIM_TYPES = ['Grease', 'Pad', 'Pad2', 'Putty', 'None'];
 
 function sgRenderProjectComponents() {
   const container = document.getElementById('sg-project-components');
@@ -2440,9 +2422,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Qty</th><th>Power(W)</th><th>Height(mm)</th>
-          <th>Pad_L</th><th>Pad_W</th><th>Thick(mm)</th><th>Board_Type</th>
-          <th>Limit(&#176;C)</th><th>R_jc</th><th>TIM_Type</th><th></th>
+          <th>Component</th><th>Qty</th><th>Power(W)</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -2451,14 +2431,6 @@ function sgRenderProjectComponents() {
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Height(mm)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Height(mm)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.Pad_L ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Pad_L" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.Pad_W ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Pad_W" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Thick(mm)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Thick(mm)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><select class="sg-cell-select" data-cat="${c}" data-idx="${i}" data-field="Board_Type" onchange="sgOnCompEdit(this)">${SG_BOARD_TYPES.map(o => `<option value="${o}"${comp.Board_Type === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Limit(C)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Limit(C)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.R_jc ?? ''}" data-cat="${c}" data-idx="${i}" data-field="R_jc" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><select class="sg-cell-select" data-cat="${c}" data-idx="${i}" data-field="TIM_Type" onchange="sgOnCompEdit(this)">${SG_TIM_TYPES.map(o => `<option value="${o}"${comp.TIM_Type === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
         <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
