@@ -2001,6 +2001,7 @@ function confirmAddComponent() {
 
 /* ---- 刪除自訂元件 ---- */
 function deleteCustomComponent(catKey, customIdx) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
   if (!confirm('\u78ba\u5b9a\u8981\u522a\u9664\u6b64\u81ea\u8a02\u5143\u4ef6\uff1f')) return;
 
   const catLower = catKey.toLowerCase();
@@ -2665,6 +2666,7 @@ function sgOnCompEdit(el) {
 
 /* ---- Delete component from list ---- */
 function sgDeleteComp(cat, idx) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
   const fieldKey = SG_CAT_MAP[cat].field;
   if (!sgProjectData || !sgProjectData[fieldKey]) return;
 
