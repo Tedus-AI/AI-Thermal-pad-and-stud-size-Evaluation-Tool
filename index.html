@@ -954,13 +954,13 @@
 
   <!-- Tab Navigation -->
   <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('calc')">尺寸評估計算</button>
-    <button class="tab-btn" onclick="switchTab('complist')">ME-專案元件清單</button>
-    <button class="tab-btn" onclick="switchTab('specgen')">元件規格產生器</button>
+    <button class="tab-btn active" onclick="switchTab('specgen')">TH/EE/RF/PWR-專案元件清單</button>
+    <button class="tab-btn" onclick="switchTab('complist')">TH/ME-專案元件清單</button>
+    <button class="tab-btn" onclick="switchTab('calc')">凸台&amp;TIM尺寸速算</button>
   </div>
 
   <!-- ==================== Tab 1: Original Calculator ==================== -->
-  <div id="tab-calc" class="tab-content active">
+  <div id="tab-calc" class="tab-content">
     <div class="main-grid">
       <div class="card">
         <div class="card-header blue">&#9999;&#65039; 輸入參數</div>
@@ -1094,7 +1094,7 @@
   </div>
 
   <!-- ==================== Tab 3: Spec Generator ==================== -->
-  <div id="tab-specgen" class="tab-content">
+  <div id="tab-specgen" class="tab-content active">
 
     <!-- DB status bar (shared connection) -->
     <div style="display:flex; align-items:center; gap:8px; float:right; margin-bottom:8px;">
@@ -1453,7 +1453,7 @@ initFirebase();
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-  const tabMap = { calc: 0, complist: 1, specgen: 2 };
+  const tabMap = { specgen: 0, complist: 1, calc: 2 };
   const tabIndex = tabMap[tab] ?? 0;
   document.querySelectorAll('.tab-btn')[tabIndex].classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
