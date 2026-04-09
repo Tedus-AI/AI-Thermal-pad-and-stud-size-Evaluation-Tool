@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Thermal pad and stud size list generator</title>
+<title>Thermal & Component Spec Management Tool</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -15,9 +15,34 @@
   }
   .container { max-width: 1400px; margin: 0 auto; }
 
-  .header { text-align: center; margin-bottom: 28px; }
+  .header { text-align: center; margin-bottom: 28px; position: relative; }
   .header h1 { font-size: 2rem; color: #1a3a6b; font-weight: 700; margin-bottom: 6px; }
   .header p  { font-size: 0.95rem; color: #666; }
+  .header-db-bar {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header-db-bar span {
+    font-size: 12px;
+    color: #888;
+  }
+  .header-db-bar button {
+    font-size: 12px;
+    padding: 3px 12px;
+    border-radius: 4px;
+    border: 1px solid #2357A7;
+    background: transparent;
+    color: #2357A7;
+    cursor: pointer;
+  }
+  .header-db-bar button:hover {
+    background: #eaf2fb;
+  }
 
   /* === Tab Navigation === */
   .tab-nav {
@@ -892,13 +917,18 @@
 <div class="container">
 
   <div class="header">
-    <h1>Thermal pad and stud size list generator</h1>
-    <p>快速計算凸台 (Pedestal) 與導熱墊片 (Thermal Pad) 標準尺寸</p>
+    <h1>Thermal & Component Spec Management Tool</h1>
+    <p>散熱與元件規格管理工具</p>
+    <div class="header-db-bar">
+      <span id="db-status-text">未選擇資料庫</span>
+      <button onclick="handlePickDb()">&#128194; 資料庫目錄</button>
+      <button onclick="dbAdapter.exportBackup()">&#128190; 備份資料庫</button>
+    </div>
   </div>
 
   <!-- Tab Navigation -->
   <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('specgen')">TH/EE/RF/PWR-專案元件清單</button>
+    <button class="tab-btn active" onclick="switchTab('specgen')">EE/RF/PWR-專案元件清單</button>
     <button class="tab-btn" onclick="switchTab('complist')">TH/ME-專案元件清單</button>
     <button class="tab-btn" onclick="switchTab('calc')">凸台&amp;TIM尺寸速算</button>
   </div>
@@ -964,23 +994,6 @@
   <!-- ==================== Tab 2: Component List ==================== -->
   <div id="tab-complist" class="tab-content">
 
-    <div style="display:flex; align-items:center; gap:8px; float:right; margin-bottom:8px;">
-      <span id="db-status-text" style="font-size:12px; color:#888;">未選擇資料庫</span>
-      <button onclick="handlePickDb()"
-        style="font-size:12px; padding:3px 12px; border-radius:4px;
-               border:1px solid #2357A7; background:transparent;
-               color:#2357A7; cursor:pointer;">
-        📂 資料庫目錄
-      </button>
-      <button onclick="dbAdapter.exportBackup()"
-        style="font-size:12px; padding:3px 12px; border-radius:4px;
-               border:1px solid #2357A7; background:transparent;
-               color:#2357A7; cursor:pointer;">
-        💾 備份資料庫
-      </button>
-    </div>
-    <div style="clear:both;"></div>
-
     <!-- Password Protection Bar -->
     <div id="protect-bar" class="protect-bar">
       <span class="protect-status" id="protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
@@ -1040,17 +1053,12 @@
   <!-- ==================== Tab 3: Spec Generator ==================== -->
   <div id="tab-specgen" class="tab-content active">
 
-    <!-- DB status bar (shared connection) -->
-    <div style="display:flex; align-items:center; gap:8px; float:right; margin-bottom:8px;">
-      <span id="sg-db-status" style="font-size:12px; color:#888;">未選擇資料庫</span>
-      <button onclick="handlePickDb().then(()=>sgLoadProjects())"
-        style="font-size:12px; padding:3px 12px; border-radius:4px;
-               border:1px solid #2357A7; background:transparent;
-               color:#2357A7; cursor:pointer;">
-        &#128194; 資料庫目錄
-      </button>
+    <!-- Password Protection Bar (Tab 1) -->
+    <div id="sg-protect-bar" class="protect-bar">
+      <span class="protect-status" id="sg-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
+      <input type="password" id="sg-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
+      <button class="protect-unlock-btn" id="sg-protect-btn" onclick="toggleProtection()">解鎖</button>
     </div>
-    <div style="clear:both;"></div>
 
     <!-- Panel 1: Select Project -->
     <div class="sg-panel">
@@ -1091,7 +1099,7 @@
               目前專案元件清單
             </div>
             <div class="sg-comp-save-bar" style="margin:0; padding:0;">
-              <button class="btn btn-save" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" style="padding:7px 18px; font-size:0.85rem;">儲存元件變更</button>
+              <button class="btn btn-save" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" style="padding:7px 18px; font-size:0.85rem;" disabled>儲存元件變更</button>
               <span id="sg-comp-save-status" class="save-status"></span>
             </div>
           </div>
@@ -1169,39 +1177,47 @@ const PROTECT_PASSWORD = '0420';
 let isProtected = true;          // 預設啟用保護
 
 function toggleProtection() {
-  const pwdInput = document.getElementById('protect-pwd');
-  const bar = document.getElementById('protect-bar');
-  const statusEl = document.getElementById('protect-status');
-  const btn = document.getElementById('protect-btn');
-  const saveBtn = document.getElementById('save-btn');
+  // Collect elements from both tabs
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn')].filter(Boolean);
+
+  // Find whichever password input has a value
+  const typedPwd = pwdInputs.find(el => el.value) || pwdInputs[0];
 
   if (isProtected) {
     // 嘗試解鎖
-    if (pwdInput.value !== PROTECT_PASSWORD) {
+    if (!typedPwd || typedPwd.value !== PROTECT_PASSWORD) {
       alert('密碼錯誤，請重新輸入');
-      pwdInput.value = '';
-      pwdInput.focus();
+      pwdInputs.forEach(el => { el.value = ''; });
+      if (typedPwd) typedPwd.focus();
       return;
     }
     isProtected = false;
-    bar.classList.add('unlocked');
-    statusEl.innerHTML = '&#128275; 密碼保護：已關閉（可儲存）';
-    btn.textContent = '鎖定';
-    btn.className = 'protect-lock-btn';
-    pwdInput.value = '';
-    pwdInput.style.display = 'none';
+    bars.forEach(bar => bar.classList.add('unlocked'));
+    statusEls.forEach(el => { el.innerHTML = '&#128275; 密碼保護：已關閉（可儲存）'; });
+    btns.forEach(btn => { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; });
+    pwdInputs.forEach(el => { el.value = ''; el.style.display = 'none'; });
+    // Enable save buttons
+    const saveBtn = document.getElementById('save-btn');
     if (saveBtn) saveBtn.disabled = false;
+    const sgSaveBtn = document.getElementById('sg-comp-save-btn');
+    if (sgSaveBtn) sgSaveBtn.disabled = false;
     const eeImportBtn = document.getElementById('ee-import-btn');
     if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
   } else {
     // 重新鎖定
     isProtected = true;
-    bar.classList.remove('unlocked');
-    statusEl.innerHTML = '&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）';
-    btn.textContent = '解鎖';
-    btn.className = 'protect-unlock-btn';
-    pwdInput.style.display = '';
+    bars.forEach(bar => bar.classList.remove('unlocked'));
+    statusEls.forEach(el => { el.innerHTML = '&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）'; });
+    btns.forEach(btn => { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; });
+    pwdInputs.forEach(el => { el.style.display = ''; });
+    // Disable save buttons
+    const saveBtn = document.getElementById('save-btn');
     if (saveBtn) saveBtn.disabled = true;
+    const sgSaveBtn = document.getElementById('sg-comp-save-btn');
+    if (sgSaveBtn) sgSaveBtn.disabled = true;
     const eeImportBtn = document.getElementById('ee-import-btn');
     if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
   }
@@ -1281,12 +1297,6 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn')[tabIndex].classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
 
-  // Sync DB status and load projects when switching to specgen tab
-  if (tab === 'specgen' && dbAdapter.isReady()) {
-    const sgDbEl = document.getElementById('sg-db-status');
-    const mainDbEl = document.getElementById('db-status-text');
-    if (sgDbEl && mainDbEl) sgDbEl.textContent = mainDbEl.textContent;
-  }
 }
 
 /* ============================
@@ -2436,10 +2446,6 @@ async function sgLoadProjects() {
       sgShowStatus('成功載入 ' + projectList.length + ' 個專案。', 'success');
     }
 
-    // Sync DB status
-    const sgDbEl = document.getElementById('sg-db-status');
-    const mainDbEl = document.getElementById('db-status-text');
-    if (sgDbEl && mainDbEl) sgDbEl.textContent = mainDbEl.textContent;
   } catch (e) {
     sgShowStatus('載入專案失敗：' + e.message, 'error');
   }
@@ -2634,6 +2640,10 @@ function sgAddCompRow(cat) {
 
 /* ---- Save project components to DB ---- */
 async function sgSaveProjectComponents() {
+  if (isProtected) {
+    alert('請先解鎖密碼保護');
+    return;
+  }
   if (!sgProjectId || !sgProjectData) {
     alert('尚未選擇專案');
     return;
@@ -2755,12 +2765,6 @@ function updateDbStatusText(message, type) {
     el.textContent = message;
     el.style.color = type === 'success' ? '#1a6e2e' : '#856404';
   }
-  // Sync to Tab 3 DB status
-  const sgEl = document.getElementById('sg-db-status');
-  if (sgEl) {
-    sgEl.textContent = message;
-    sgEl.style.color = type === 'success' ? '#1a6e2e' : '#856404';
-  }
 }
 
 async function handlePickDb() {
@@ -2768,6 +2772,7 @@ async function handlePickDb() {
   if (result && result.success) {
     updateDbStatusText(`✅ ${result.filename}`, 'success');
     await loadProjects();
+    await sgLoadProjects();
   }
 }
 </script>
