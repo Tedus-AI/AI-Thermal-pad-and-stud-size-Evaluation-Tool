@@ -942,6 +942,81 @@
     color: #aaa;
     font-size: 0.85rem;
   }
+
+  /* Editable cells in project component list */
+  .sg-comp-list-table td.sg-edit-cell { padding: 3px 4px; }
+  .sg-comp-list-table .sg-cell-input {
+    width: 100%;
+    padding: 5px 6px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    text-align: center;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .sg-comp-list-table .sg-cell-input:focus {
+    border-color: #2e6bb5;
+    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
+  .sg-comp-list-table .sg-cell-input.comp-name {
+    text-align: left;
+    font-weight: 600;
+    color: #1a3a6b;
+  }
+  .sg-comp-list-table .sg-cell-select {
+    width: 100%;
+    padding: 5px 4px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    text-align: center;
+    outline: none;
+    cursor: pointer;
+  }
+  .sg-comp-list-table .sg-cell-select:focus {
+    border-color: #2e6bb5;
+    box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
+  .sg-comp-del-btn {
+    padding: 3px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #fee;
+    color: #c0392b;
+    transition: background 0.2s;
+  }
+  .sg-comp-del-btn:hover { background: #fdd; }
+  .sg-comp-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 5px 14px;
+    background: #eaf2fb;
+    color: #2e6bb5;
+    border: 1.5px dashed #2e6bb5;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .sg-comp-add-btn:hover { background: #d4e6f9; }
+  .sg-comp-save-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 0;
+  }
 </style>
 </head>
 <body>
@@ -1142,8 +1217,14 @@
 
         <!-- Existing Project Components -->
         <div id="sg-project-components" style="display:none; margin-top:16px;">
-          <div style="font-size:0.9rem; font-weight:700; color:#1a3a6b; margin-bottom:10px;">
-            目前專案元件清單
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+            <div style="font-size:0.9rem; font-weight:700; color:#1a3a6b;">
+              目前專案元件清單
+            </div>
+            <div class="sg-comp-save-bar" style="margin:0; padding:0;">
+              <button class="btn btn-save" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" style="padding:7px 18px; font-size:0.85rem;">儲存元件變更</button>
+              <span id="sg-comp-save-status" class="save-status"></span>
+            </div>
           </div>
           <div id="sg-project-components-body"></div>
         </div>
@@ -2683,7 +2764,16 @@ async function sgOnProjectChange() {
   sgUpdateWriteBtn();
 }
 
-/* ---- Render existing project components ---- */
+/* ---- Render existing project components (editable) ---- */
+const SG_CAT_MAP = {
+  RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;', collection: 'rf_library' },
+  Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: '&#128178;', collection: 'digital_library' },
+  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: '&#9889;',   collection: 'pwr_library' }
+};
+
+const SG_BOARD_TYPES = ['Thermal Via', 'Copper Coin', 'None'];
+const SG_TIM_TYPES = ['Grease', 'Pad', 'Pad2', 'Putty', 'None'];
+
 function sgRenderProjectComponents() {
   const container = document.getElementById('sg-project-components');
   const body = document.getElementById('sg-project-components-body');
@@ -2694,18 +2784,11 @@ function sgRenderProjectComponents() {
     return;
   }
 
-  const catMap = {
-    RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;' },
-    Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: '&#128178;' },
-    PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: '&#9889;'   }
-  };
-
   let totalCount = 0;
   let html = '';
 
-  for (const [catKey, catInfo] of Object.entries(catMap)) {
+  for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
     const items = sgProjectData[catInfo.field] || [];
-    if (items.length === 0) continue;
     totalCount += items.length;
 
     html += `<div class="sg-comp-category">
@@ -2716,34 +2799,140 @@ function sgRenderProjectComponents() {
         <thead><tr>
           <th>Component</th><th>Qty</th><th>Power(W)</th><th>Height(mm)</th>
           <th>Pad_L</th><th>Pad_W</th><th>Thick(mm)</th><th>Board_Type</th>
-          <th>Limit(&#176;C)</th><th>R_jc</th><th>TIM_Type</th>
+          <th>Limit(&#176;C)</th><th>R_jc</th><th>TIM_Type</th><th></th>
         </tr></thead><tbody>`;
 
-    items.forEach(comp => {
+    items.forEach((comp, idx) => {
+      const c = catKey, i = idx;
       html += `<tr>
-        <td>${escapeHtml(comp.Component || '')}</td>
-        <td>${comp.Qty ?? '—'}</td>
-        <td>${comp['Power(W)'] ?? '—'}</td>
-        <td>${comp['Height(mm)'] ?? '—'}</td>
-        <td>${comp.Pad_L ?? '—'}</td>
-        <td>${comp.Pad_W ?? '—'}</td>
-        <td>${comp['Thick(mm)'] ?? '—'}</td>
-        <td>${comp.Board_Type ?? '—'}</td>
-        <td>${comp['Limit(C)'] ?? '—'}</td>
-        <td>${comp.R_jc ?? '—'}</td>
-        <td>${comp.TIM_Type ?? '—'}</td>
+        <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Height(mm)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Height(mm)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.Pad_L ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Pad_L" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.Pad_W ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Pad_W" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Thick(mm)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Thick(mm)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><select class="sg-cell-select" data-cat="${c}" data-idx="${i}" data-field="Board_Type" onchange="sgOnCompEdit(this)">${SG_BOARD_TYPES.map(o => `<option value="${o}"${comp.Board_Type === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Limit(C)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Limit(C)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp.R_jc ?? ''}" data-cat="${c}" data-idx="${i}" data-field="R_jc" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><select class="sg-cell-select" data-cat="${c}" data-idx="${i}" data-field="TIM_Type" onchange="sgOnCompEdit(this)">${SG_TIM_TYPES.map(o => `<option value="${o}"${comp.TIM_Type === o ? ' selected' : ''}>${o}</option>`).join('')}</select></td>
+        <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
 
-    html += '</tbody></table></div>';
+    html += `</tbody></table>
+      <button class="sg-comp-add-btn" onclick="sgAddCompRow('${catKey}')">&#10133; 新增 ${catInfo.label}</button>
+    </div>`;
   }
 
   if (totalCount === 0) {
-    html = '<div class="sg-comp-list-empty">此專案尚無元件資料。</div>';
+    html = '<div class="sg-comp-list-empty">此專案尚無元件資料，可點選下方按鈕新增。</div>' + html;
   }
 
   body.innerHTML = html;
   container.style.display = 'block';
+}
+
+/* ---- Inline edit handler ---- */
+function sgOnCompEdit(el) {
+  const cat = el.dataset.cat;
+  const idx = parseInt(el.dataset.idx, 10);
+  const field = el.dataset.field;
+  const fieldKey = SG_CAT_MAP[cat].field;
+
+  if (!sgProjectData || !sgProjectData[fieldKey] || !sgProjectData[fieldKey][idx]) return;
+
+  let val = el.value;
+  if (el.type === 'number' && val !== '') val = parseFloat(val);
+
+  sgProjectData[fieldKey][idx][field] = val;
+}
+
+/* ---- Delete component from list ---- */
+function sgDeleteComp(cat, idx) {
+  const fieldKey = SG_CAT_MAP[cat].field;
+  if (!sgProjectData || !sgProjectData[fieldKey]) return;
+
+  const comp = sgProjectData[fieldKey][idx];
+  const name = comp?.Component || '(unnamed)';
+  if (!confirm(`確定要刪除元件「${name}」嗎？`)) return;
+
+  sgProjectData[fieldKey].splice(idx, 1);
+  sgRenderProjectComponents();
+}
+
+/* ---- Add new empty component row ---- */
+function sgAddCompRow(cat) {
+  const fieldKey = SG_CAT_MAP[cat].field;
+  if (!sgProjectData) return;
+  if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
+
+  const d = SG_DEFAULTS[cat];
+  sgProjectData[fieldKey].push({
+    Component: '',
+    Qty: 1,
+    'Power(W)': 0,
+    'Height(mm)': d.height,
+    Pad_L: d.padL,
+    Pad_W: d.padW,
+    'Thick(mm)': d.thick,
+    Board_Type: d.boardType,
+    'Limit(C)': d.limit,
+    R_jc: d.rjc,
+    TIM_Type: d.timType
+  });
+
+  sgRenderProjectComponents();
+
+  // Focus the new Component name input
+  setTimeout(() => {
+    const inputs = document.querySelectorAll(`input[data-cat="${cat}"][data-field="Component"]`);
+    if (inputs.length > 0) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+/* ---- Save project components to DB ---- */
+async function sgSaveProjectComponents() {
+  if (!sgProjectId || !sgProjectData) {
+    alert('尚未選擇專案');
+    return;
+  }
+
+  const btn = document.getElementById('sg-comp-save-btn');
+  const status = document.getElementById('sg-comp-save-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span>儲存中...';
+  status.textContent = '';
+  status.className = 'save-status';
+
+  try {
+    // Update project document
+    await dbAdapter.updateDoc('projects', sgProjectId, {
+      rf_data: sgProjectData.rf_data || [],
+      digital_data: sgProjectData.digital_data || [],
+      pwr_data: sgProjectData.pwr_data || []
+    });
+
+    // Update library entries for each component
+    for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
+      const items = sgProjectData[catInfo.field] || [];
+      for (const comp of items) {
+        if (!comp.Component || comp.Component.trim() === '') continue;
+        const docId = toDocId(comp.Component);
+        await dbAdapter.setDoc(catInfo.collection, docId, { ...comp });
+      }
+    }
+
+    status.textContent = '已儲存';
+    status.className = 'save-status saved';
+    setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 3000);
+  } catch (e) {
+    status.textContent = '儲存失敗：' + e.message;
+    status.className = 'save-status err';
+  }
+
+  btn.disabled = false;
+  btn.textContent = '儲存元件變更';
 }
 
 /* ---- Toggle new project form ---- */
