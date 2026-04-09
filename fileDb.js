@@ -133,7 +133,8 @@ const fileDb = {
     // Step 2: Compare version
     const diskVersion = latestDb.version ?? 0;
     if (diskVersion !== currentVersion) {
-      // Conflict detected — update currentVersion so next save can succeed
+      // Conflict detected — update dbCache with latest disk data
+      dbCache = latestDb;
       currentVersion = diskVersion;
       throw new ConflictError('版本衝突：資料已被他人更新');
     }

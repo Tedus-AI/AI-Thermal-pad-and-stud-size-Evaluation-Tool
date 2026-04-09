@@ -950,7 +950,7 @@
 <div id="conflict-toast" class="conflict-toast">
   <button class="conflict-close" onclick="this.parentElement.classList.remove('visible')">&times;</button>
   <div class="conflict-title">&#9888;&#65039; 儲存失敗：版本衝突</div>
-  <div>資料已被他人更新。系統已載入最新版本，您填寫的內容仍保留在畫面上。<br>請確認欄位內容後，再次點擊「儲存」。</div>
+  <div>資料已被他人更新。系統已載入最新版本並重新整理畫面。<br>請確認內容後，重新進行修改並儲存。</div>
 </div>
 <div class="container">
 
@@ -2034,7 +2034,12 @@ async function saveThermalSpecs() {
     console.error('Save error:', e);
     if (e instanceof ConflictError) {
       showConflictWarning();
-      showSaveStatus('版本衝突，請重新儲存', 'err');
+      showSaveStatus('版本衝突，已載入最新資料，請重新儲存', 'err');
+      // Reload project data from refreshed dbCache
+      currentProjectData = await dbAdapter.getDoc('projects', currentProjectId);
+      thermalSpecs = currentProjectData?.thermal_specs ?? {};
+      hiddenComponents = currentProjectData?.hidden_components ?? {};
+      renderComponentList();
     } else {
       showSaveStatus('\u5132\u5b58\u5931\u6557\uff1a' + e.message, 'err');
     }
@@ -2722,8 +2727,11 @@ async function sgSaveProjectComponents() {
   } catch (e) {
     if (e instanceof ConflictError) {
       showConflictWarning();
-      status.textContent = '版本衝突，請重新儲存';
+      status.textContent = '版本衝突，已載入最新資料，請重新操作';
       status.className = 'save-status err';
+      // Reload project data from refreshed dbCache and re-render
+      sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
+      sgRenderProjectComponents();
     } else {
       status.textContent = '儲存失敗：' + e.message;
       status.className = 'save-status err';
