@@ -911,6 +911,21 @@
     margin-top: 14px;
     padding: 10px 0;
   }
+  .sg-power-chip {
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .sg-power-chip span {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .sg-power-chip.rf      { background: #c0392b; }
+  .sg-power-chip.digital { background: #2e6bb5; }
+  .sg-power-chip.pwr     { background: #e67e22; }
+  .sg-power-chip.total   { background: #1a3a6b; }
 </style>
 </head>
 <body>
@@ -1104,6 +1119,7 @@
             </div>
           </div>
           <div id="sg-project-components-body"></div>
+          <div id="sg-power-summary" style="display:none; margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;"></div>
         </div>
       </div>
     </div>
@@ -2488,18 +2504,23 @@ function sgRenderProjectComponents() {
   const container = document.getElementById('sg-project-components');
   const body = document.getElementById('sg-project-components-body');
 
+  const summaryEl = document.getElementById('sg-power-summary');
+
   if (!sgProjectData) {
     container.style.display = 'none';
     body.innerHTML = '';
+    if (summaryEl) summaryEl.style.display = 'none';
     return;
   }
 
   let totalCount = 0;
   let html = '';
+  const catPower = {};
 
   for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
     const items = sgProjectData[catInfo.field] || [];
     totalCount += items.length;
+    catPower[catKey] = items.reduce((sum, c) => sum + (parseFloat(c['Power(W)']) || 0) * (parseInt(c.Qty) || 1), 0);
 
     html += `<div class="sg-comp-category">
       <div class="sg-comp-category-header ${catInfo.css}">
@@ -2539,6 +2560,18 @@ function sgRenderProjectComponents() {
 
   body.innerHTML = html;
   container.style.display = 'block';
+
+  // Render power summary
+  if (summaryEl) {
+    const fmt = v => Number.isInteger(v) ? v : v.toFixed(2);
+    const totalPwr = (catPower.RF || 0) + (catPower.Digital || 0) + (catPower.PWR || 0);
+    summaryEl.innerHTML =
+      `<div class="sg-power-chip rf">RF 熱耗：<span>${fmt(catPower.RF || 0)} W</span></div>` +
+      `<div class="sg-power-chip digital">Digital 熱耗：<span>${fmt(catPower.Digital || 0)} W</span></div>` +
+      `<div class="sg-power-chip pwr">PWR 熱耗：<span>${fmt(catPower.PWR || 0)} W</span></div>` +
+      `<div class="sg-power-chip total">總熱耗：<span>${fmt(totalPwr)} W</span></div>`;
+    summaryEl.style.display = 'flex';
+  }
 }
 
 /* ---- Type dropdown change handler ---- */
