@@ -3082,9 +3082,7 @@ function escapeAttr(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
-</script>
 
-<script>
 function showConflictWarning() {
   const toast = document.getElementById('conflict-toast');
   if (toast) {
