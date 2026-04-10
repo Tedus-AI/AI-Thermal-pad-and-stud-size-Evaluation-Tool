@@ -1,0 +1,630 @@
+{
+  "rf_library": {
+    "B11G3338N81D-Driver": {
+      "Power(W)": 9.751,
+      "Qty": 4,
+      "Board_Type": "Thermal Via",
+      "TIM_Type": "None",
+      "Height(mm)": 177,
+      "Limit(C)": 200,
+      "Thick(mm)": 2,
+      "Component": "B11G3338N81D-Driver",
+      "Pad_W": 4.8,
+      "R_jc": 1.7,
+      "Pad_L": 9.8,
+      "Type": "Driver"
+    },
+    "BTS6201U-PreDriver": {
+      "Power(W)": 0.368,
+      "TIM_Type": "None",
+      "Board_Type": "Thermal Via",
+      "Qty": 4,
+      "Height(mm)": 172,
+      "Component": "BTS6201U-PreDriver",
+      "Pad_W": 1.6,
+      "Thick(mm)": 2,
+      "Limit(C)": 175,
+      "Pad_L": 1.6,
+      "R_jc": 50,
+      "Type": "Pre-driver"
+    },
+    "Cavity_FilterSC12L": {
+      "Height(mm)": 0,
+      "Qty": 1,
+      "Board_Type": "None",
+      "TIM_Type": "None",
+      "Power(W)": 24.85,
+      "R_jc": 0,
+      "Pad_L": 0,
+      "Limit(C)": 200,
+      "Thick(mm)": 0,
+      "Pad_W": 0,
+      "Component": "Cavity Filter(SC12L)",
+      "Type": "filter"
+    },
+    "CirculatorsSC12L": {
+      "Power(W)": 2.21,
+      "TIM_Type": "None",
+      "Qty": 4,
+      "Board_Type": "Thermal Via",
+      "Height(mm)": 289,
+      "Pad_W": 10,
+      "Component": "Circulators(SC12L)",
+      "Limit(C)": 125,
+      "Thick(mm)": 2,
+      "Pad_L": 10,
+      "R_jc": 0,
+      "Type": "CR"
+    },
+    "GTRB384608FC-Final": {
+      "Thick(mm)": 2.5,
+      "Limit(C)": 225,
+      "Pad_W": 9.78,
+      "Component": "GTRB384608FC-Final",
+      "R_jc": 1.5,
+      "Pad_L": 20.57,
+      "Power(W)": 52.99,
+      "Board_Type": "Copper Coin",
+      "Qty": 4,
+      "TIM_Type": "Grease",
+      "Height(mm)": 225,
+      "Type": "Final PA",
+      "TV_ID_mil": "N/A",
+      "TV_Qty": "N/A"
+    },
+    "iiii": {
+      "Component": "iiii",
+      "Type": "Final PA",
+      "Qty": 1,
+      "Power(W)": 5,
+      "TV_ID_mil": "",
+      "TV_Qty": "",
+      "Height(mm)": 250,
+      "Pad_L": 10,
+      "Pad_W": 10,
+      "Thick(mm)": 2.5,
+      "Board_Type": "Copper Coin",
+      "Limit(C)": 200,
+      "R_jc": 1.5,
+      "TIM_Type": "Grease"
+    }
+  },
+  "digital_library": {
+    "2543": {
+      "Component": "2543",
+      "Type": "",
+      "Qty": 1,
+      "Power(W)": 30,
+      "TV_ID_mil": "",
+      "TV_Qty": "",
+      "Height(mm)": 50,
+      "Pad_L": 10,
+      "Pad_W": 10,
+      "Thick(mm)": 0,
+      "Board_Type": "Thermal Via",
+      "Limit(C)": 100,
+      "R_jc": 0.5,
+      "TIM_Type": "Putty"
+    },
+    "2GB_DDR": {
+      "Thick(mm)": 0,
+      "Limit(C)": 95,
+      "Component": "2GB_DDR",
+      "Pad_W": 7.5,
+      "R_jc": 0,
+      "Pad_L": 13,
+      "Power(W)": 0.545,
+      "Height(mm)": 80,
+      "Qty": 2,
+      "Board_Type": "None",
+      "TIM_Type": "Putty",
+      "Type": "DDR"
+    },
+    "SFP": {
+      "Power(W)": 0.5,
+      "Height(mm)": 0,
+      "Qty": 1,
+      "Board_Type": "None",
+      "TIM_Type": "Putty",
+      "Thick(mm)": 0,
+      "Limit(C)": 200,
+      "Pad_W": 14,
+      "Component": "SFP",
+      "R_jc": 0,
+      "Pad_L": 50
+    },
+    "Si5518": {
+      "Limit(C)": 125,
+      "Thick(mm)": 2,
+      "Pad_W": 8.6,
+      "Component": "Si5518",
+      "R_jc": 3,
+      "Pad_L": 8.6,
+      "Power(W)": 2,
+      "Qty": 1,
+      "Board_Type": "Thermal Via",
+      "TIM_Type": "Pad",
+      "Height(mm)": 31,
+      "Type": "CLK IC"
+    },
+    "XCZU67DR-FFVE1156": {
+      "Power(W)": 35,
+      "TIM_Type": "Putty",
+      "Qty": 1,
+      "Board_Type": "None",
+      "Height(mm)": 84,
+      "Component": "XCZU67DR-FFVE1156",
+      "Pad_W": 35,
+      "Limit(C)": 100,
+      "Thick(mm)": 0,
+      "Pad_L": 35,
+      "R_jc": 0.16,
+      "Type": "FPGA"
+    },
+    "ppp": {
+      "Component": "ppp",
+      "Type": "Driver",
+      "Qty": 1,
+      "Power(W)": 35,
+      "TV_ID_mil": "",
+      "TV_Qty": "",
+      "Height(mm)": 50,
+      "Pad_L": 10,
+      "Pad_W": 10,
+      "Thick(mm)": 0,
+      "Board_Type": "Thermal Via",
+      "Limit(C)": 100,
+      "R_jc": 0.5,
+      "TIM_Type": "Putty"
+    }
+  },
+  "pwr_library": {
+    "Power_ModuleH48SA50030NRDH": {
+      "Power(W)": 29,
+      "Height(mm)": 30,
+      "Qty": 1,
+      "Board_Type": "None",
+      "TIM_Type": "Putty",
+      "Thick(mm)": 0,
+      "Limit(C)": 95,
+      "Pad_W": 61,
+      "Component": "Power Module(H48SA50030NRDH)",
+      "R_jc": 0,
+      "Pad_L": 57.9
+    }
+  },
+  "projects": {
+    "StarKcore-12L": {
+      "digital_data": [
+        {
+          "Power(W)": 35,
+          "TIM_Type": "Putty",
+          "Qty": 1,
+          "Board_Type": "None",
+          "Height(mm)": 84,
+          "Component": "XCZU67DR-FFVE1156",
+          "Pad_W": 35,
+          "Limit(C)": 100,
+          "Thick(mm)": 0,
+          "Pad_L": 35,
+          "R_jc": 0.16,
+          "Type": "FPGA"
+        },
+        {
+          "Limit(C)": 125,
+          "Thick(mm)": 2,
+          "Pad_W": 8.6,
+          "Component": "Si5518",
+          "R_jc": 3,
+          "Pad_L": 8.6,
+          "Power(W)": 2,
+          "Qty": 1,
+          "Board_Type": "Thermal Via",
+          "TIM_Type": "Pad",
+          "Height(mm)": 31,
+          "Type": "CLK IC"
+        },
+        {
+          "Thick(mm)": 0,
+          "Limit(C)": 95,
+          "Component": "2GB_DDR",
+          "Pad_W": 7.5,
+          "R_jc": 0,
+          "Pad_L": 13,
+          "Power(W)": 0.545,
+          "Height(mm)": 80,
+          "Qty": 2,
+          "Board_Type": "None",
+          "TIM_Type": "Putty",
+          "Type": "DDR"
+        },
+        {
+          "Power(W)": 0.5,
+          "Height(mm)": 0,
+          "Qty": 1,
+          "Board_Type": "None",
+          "TIM_Type": "Putty",
+          "Thick(mm)": 0,
+          "Limit(C)": 200,
+          "Pad_W": 14,
+          "Component": "SFP",
+          "R_jc": 0,
+          "Pad_L": 50
+        },
+        {
+          "Component": "ppp",
+          "Type": "Driver",
+          "Qty": 1,
+          "Power(W)": 35,
+          "TV_ID_mil": "",
+          "TV_Qty": "",
+          "Height(mm)": 50,
+          "Pad_L": 10,
+          "Pad_W": 10,
+          "Thick(mm)": 0,
+          "Board_Type": "Thermal Via",
+          "Limit(C)": 100,
+          "R_jc": 0.5,
+          "TIM_Type": "Putty"
+        }
+      ],
+      "pwr_data": [
+        {
+          "Power(W)": 29,
+          "Height(mm)": 30,
+          "Qty": 1,
+          "Board_Type": "None",
+          "TIM_Type": "Putty",
+          "Thick(mm)": 0,
+          "Limit(C)": 95,
+          "Pad_W": 61,
+          "Component": "Power Module(H48SA50030NRDH)",
+          "R_jc": 0,
+          "Pad_L": 57.9
+        }
+      ],
+      "rf_data": [
+        {
+          "Thick(mm)": 2.5,
+          "Limit(C)": 225,
+          "Pad_W": 9.78,
+          "Component": "GTRB384608FC-Final",
+          "R_jc": 1.5,
+          "Pad_L": 20.57,
+          "Power(W)": 52.99,
+          "Board_Type": "Copper Coin",
+          "Qty": 4,
+          "TIM_Type": "Grease",
+          "Height(mm)": 225,
+          "Type": "Final PA",
+          "TV_ID_mil": "N/A",
+          "TV_Qty": "N/A"
+        },
+        {
+          "Power(W)": 9.751,
+          "Qty": 4,
+          "Board_Type": "Thermal Via",
+          "TIM_Type": "None",
+          "Height(mm)": 177,
+          "Limit(C)": 200,
+          "Thick(mm)": 2,
+          "Component": "B11G3338N81D-Driver",
+          "Pad_W": 4.8,
+          "R_jc": 1.7,
+          "Pad_L": 9.8,
+          "Type": "Driver"
+        },
+        {
+          "Power(W)": 0.368,
+          "TIM_Type": "None",
+          "Board_Type": "Thermal Via",
+          "Qty": 4,
+          "Height(mm)": 172,
+          "Component": "BTS6201U-PreDriver",
+          "Pad_W": 1.6,
+          "Thick(mm)": 2,
+          "Limit(C)": 175,
+          "Pad_L": 1.6,
+          "R_jc": 50,
+          "Type": "Pre-driver"
+        },
+        {
+          "Power(W)": 2.21,
+          "TIM_Type": "None",
+          "Qty": 4,
+          "Board_Type": "Thermal Via",
+          "Height(mm)": 289,
+          "Pad_W": 10,
+          "Component": "Circulators(SC12L)",
+          "Limit(C)": 125,
+          "Thick(mm)": 2,
+          "Pad_L": 10,
+          "R_jc": 0,
+          "Type": "CR"
+        },
+        {
+          "Height(mm)": 0,
+          "Qty": 1,
+          "Board_Type": "None",
+          "TIM_Type": "None",
+          "Power(W)": 24.85,
+          "R_jc": 0,
+          "Pad_L": 0,
+          "Limit(C)": 200,
+          "Thick(mm)": 0,
+          "Pad_W": 0,
+          "Component": "Cavity Filter(SC12L)",
+          "Type": "filter"
+        }
+      ],
+      "thermal_specs": {
+        "L1452-TMPA1004S": {
+          "heatSourceSize": "13*10.4",
+          "bossSizeType": "自訂",
+          "timSize": "14*14",
+          "icToHSK": "1.7",
+          "bossSurface": "表面光滑",
+          "heatSourceHeight": "4",
+          "timThickness": "2.5",
+          "timType": "Pad",
+          "bossSize": "13*10.4",
+          "heatDirection": "IC top"
+        },
+        "U1451-LM706A0": {
+          "heatSourceHeight": "1",
+          "timThickness": "2.5",
+          "bossSize": "6.8*6.8",
+          "heatDirection": "IC top",
+          "timType": "Pad",
+          "timSize": "10*10",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "6.8*6.8",
+          "icToHSK": "1.7",
+          "bossSurface": "表面光滑"
+        },
+        "Q6505-PSMQC094N10NS2": {
+          "bossSizeType": "自訂",
+          "timSize": "6*6",
+          "heatSourceSize": "7.2*5.3",
+          "icToHSK": "1.7",
+          "bossSurface": "表面光滑",
+          "heatSourceHeight": "1.1",
+          "timThickness": "2.5",
+          "bossSize": "4*4",
+          "heatDirection": "IC top",
+          "note": "EE要求凸台在引腳內",
+          "timType": "Pad"
+        },
+        "_custom_components": {
+          "digital": [
+            {
+              "Qty": 1,
+              "Component": "Q6505-PSMQC094N10NS2",
+              "Power(W)": 0.82
+            },
+            {
+              "Qty": 1,
+              "Component": "U1451-LM706A0",
+              "Power(W)": 1.4
+            },
+            {
+              "Power(W)": 1.05,
+              "Qty": 1,
+              "Component": "U6300-LM706A0"
+            },
+            {
+              "Component": "L1452-TMPA1004S",
+              "Qty": 1,
+              "Power(W)": 0
+            },
+            {
+              "Component": "L1451-PCMB104T",
+              "Qty": 1,
+              "Power(W)": 0
+            },
+            {
+              "Power(W)": 2.52,
+              "Qty": 1,
+              "Component": "U1452-LM706A0RRXR"
+            },
+            {
+              "Power(W)": 0,
+              "Qty": 1,
+              "Component": "L1203-SIUC1007T"
+            },
+            {
+              "Qty": 1,
+              "Component": "U1205-MPQ8785GMJT",
+              "Power(W)": 0.47
+            }
+          ]
+        },
+        "XCZU67DR-FFVE1156": {
+          "heatDirection": "IC top",
+          "timType": "Putty",
+          "bossSurface": "表面刻花",
+          "icToHSK": "0.5",
+          "bossSizeType": "無凸台，刻花定位",
+          "timThickness": "0.5",
+          "heatSourceSize": "35*35",
+          "heatSourceHeight": "3.86"
+        },
+        "Si5518": {
+          "icToHSK": "0.5",
+          "bossSurface": "表面刻花",
+          "displayName": "U850-Si5518",
+          "heatSourceSize": "10*10",
+          "bossSizeType": "自訂",
+          "timType": "Putty",
+          "bossSize": "10*10",
+          "heatDirection": "IC top",
+          "heatSourceHeight": "0.9",
+          "timThickness": "0.5"
+        },
+        "U6300-LM706A0": {
+          "timThickness": "2.5",
+          "heatSourceHeight": "1",
+          "heatDirection": "IC top",
+          "bossSize": "6.8*6.8",
+          "timType": "Pad",
+          "timSize": "10*10",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "6.8*6.8",
+          "bossSurface": "表面光滑",
+          "icToHSK": "1.7"
+        },
+        "U680-DDR(1G)": {
+          "bossSize": "13*7.5",
+          "heatDirection": "IC top",
+          "timType": "Putty",
+          "timThickness": "0.5",
+          "heatSourceHeight": "1.2",
+          "bossSurface": "表面刻花",
+          "icToHSK": "0.5",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "13*7.5"
+        },
+        "Power_Module(H48SA50030NRDH)": {
+          "icToHSK": "0.5",
+          "bossSurface": "表面刻花",
+          "heatSourceSize": "61*57.9",
+          "bossSizeType": "自訂",
+          "timType": "Putty",
+          "bossSize": "61*57.9",
+          "heatDirection": "IC top",
+          "heatSourceHeight": "12.9",
+          "timThickness": "0.5"
+        },
+        "L1451-PCMB104T": {
+          "bossSurface": "表面光滑",
+          "icToHSK": "1.7",
+          "timSize": "14*14",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "13.56*10.3",
+          "bossSize": "13.56*10.3",
+          "heatDirection": "IC top",
+          "timType": "Pad",
+          "timThickness": "2.5",
+          "heatSourceHeight": "4"
+        },
+        "U1205-MPQ8785GMJT": {
+          "timType": "Pad",
+          "bossSize": "6.3*6.3",
+          "heatDirection": "IC top",
+          "heatSourceHeight": "0.85",
+          "timThickness": "2.5",
+          "icToHSK": "1.7",
+          "bossSurface": "表面光滑",
+          "heatSourceSize": "6.3*5.3",
+          "timSize": "10*10",
+          "bossSizeType": "自訂"
+        },
+        "U850-Si5518": {
+          "bossSize": "10*10",
+          "heatDirection": "IC top",
+          "timType": "Putty",
+          "timThickness": "0.5",
+          "heatSourceHeight": "0.9",
+          "bossSurface": "表面刻花",
+          "icToHSK": "0.5",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "10*10"
+        },
+        "2GB_DDR": {
+          "icToHSK": "0.5",
+          "bossSurface": "表面刻花",
+          "heatSourceSize": "13*7.5",
+          "bossSizeType": "自訂",
+          "timType": "Putty",
+          "heatDirection": "IC top",
+          "bossSize": "13*7.5",
+          "heatSourceHeight": "1.2",
+          "timThickness": "0.5"
+        },
+        "L1203-SIUC1007T": {
+          "heatDirection": "IC top",
+          "bossSize": "13.5*7.4",
+          "timType": "Pad",
+          "heatSourceHeight": "10",
+          "timThickness": "2.5",
+          "icToHSK": "1.7",
+          "bossSurface": "表面光滑",
+          "timSize": "14*14",
+          "bossSizeType": "自訂",
+          "heatSourceSize": "13.5*7.4"
+        },
+        "U1452-LM706A0RRXR": {
+          "timType": "Pad",
+          "bossSize": "6.8*6.8",
+          "heatDirection": "IC top",
+          "timThickness": "2.5",
+          "heatSourceHeight": "1",
+          "bossSurface": "表面光滑",
+          "icToHSK": "1.7",
+          "heatSourceSize": "6.8*6.8",
+          "bossSizeType": "自訂",
+          "timSize": "10*10"
+        },
+        "GTRB384608FC-Final": {
+          "heatSourceSize": "20.57*9.78",
+          "bossSizeType": "自訂",
+          "icToHSK": "直觸",
+          "bossSurface": "表面光滑",
+          "heatSourceHeight": "-",
+          "timThickness": "0.05mm以下",
+          "timType": "Grease",
+          "heatDirection": "IC bot",
+          "bossSize": "43*39.6(銅塊)"
+        }
+      },
+      "project_name": "StarKcore-12L",
+      "meta": {
+        "timestamp": "2026-03-17T08:27:47.018Z",
+        "version": "v4.30 (GitHub Pages)"
+      },
+      "global_params": {
+        "t_Grease": 0.05,
+        "T_amb": 45,
+        "Margin": 1,
+        "Fin_t": 1.2,
+        "t_Pad2": 1,
+        "al_density": 2.7,
+        "H_filter": 42,
+        "shielding_density": 0.76,
+        "t_Solder": 0.3,
+        "L_pcb": 320,
+        "H_shield": 20,
+        "Via_Eff": 0.9,
+        "Top": 8,
+        "K_Via": 30,
+        "K_Pad2": 7.5,
+        "W_pcb": 256,
+        "Gap": 11.6,
+        "fin_tech_selector_v2": "Embedded Fin (0.95)",
+        "K_Grease": 3,
+        "Left": 8,
+        "K_Solder": 58,
+        "Btm": 11,
+        "K_Putty": 9.1,
+        "t_Putty": 0.5,
+        "Coin_W_Setting": 39.6,
+        "Voiding": 0.75,
+        "t_base": 7,
+        "Right": 8,
+        "K_Pad": 7.5,
+        "Coin_L_Setting": 43,
+        "filter_density": 0.97,
+        "t_Pad": 1.7,
+        "pcb_surface_density": 0.95
+      },
+      "hidden_components": {
+        "SFP": true,
+        "Circulators(SC12L)": true,
+        "BTS6201U-PreDriver": true,
+        "Cavity_Filter(SC12L)": true,
+        "B11G3338N81D-Driver": true
+      }
+    }
+  },
+  "version": 1775781368763
+}
