@@ -1,68 +1,112 @@
-const DB_MODE = 'local';
+// DB_MODE is defined in config.js (loaded before this file)
 
 const dbAdapter = {
+  _backend() {
+    return DB_MODE === 'sharepoint' ? graphDb : fileDb;
+  },
+
+  isSharePointMode() {
+    return DB_MODE === 'sharepoint';
+  },
+
   async init() {
-    if (DB_MODE === 'local') return await fileDb.openFile();
-    return { success: true };
+    if (DB_MODE === 'sharepoint') {
+      await graphDb.initMsal();
+      if (graphDb.isSignedIn()) {
+        try {
+          await graphDb._readFile();
+          return { success: true, filename: graphDb.getFilename() };
+        } catch (e) {
+          console.warn('[dbAdapter] auto-read failed:', e);
+          return { success: false, reason: 'read_failed', error: e };
+        }
+      }
+      return { success: false, reason: 'not_signed_in' };
+    }
+    return await fileDb.openFile();
   },
 
   isReady() {
-    if (DB_MODE === 'local') return fileDb.isReady();
-    return typeof db !== 'undefined' && db !== null;
+    return this._backend().isReady();
   },
 
   getDbInfo() {
-    if (DB_MODE === 'local') return `本機資料庫 ｜ ${fileDb.getFilename() ?? '未開啟'}`;
-    return 'Firebase 雲端模式';
+    if (DB_MODE === 'sharepoint') {
+      const acct = graphDb.getAccountInfo();
+      if (acct) return `SharePoint ｜ ${acct.name} (${acct.email})`;
+      return 'SharePoint ｜ 未登入';
+    }
+    return `本機資料庫 ｜ ${fileDb.getFilename() ?? '未開啟'}`;
   },
 
   async refresh() {
-    if (DB_MODE === 'local') return await fileDb.refresh();
+    return await this._backend().refresh();
   },
 
   async getCollection(colName) {
-    if (DB_MODE === 'local') return await fileDb.getCollection(colName);
-    const snap = await db.collection(colName).get();
-    const result = {};
-    snap.forEach(d => { result[d.id] = d.data(); });
-    return result;
+    return await this._backend().getCollection(colName);
   },
 
   async getDoc(colName, docId) {
-    if (DB_MODE === 'local') return await fileDb.getDoc(colName, docId);
-    const snap = await db.collection(colName).doc(docId).get();
-    return snap.exists ? snap.data() : null;
+    return await this._backend().getDoc(colName, docId);
   },
 
   async setDoc(colName, docId, data) {
-    if (DB_MODE === 'local') return await fileDb.setDoc(colName, docId, data);
-    return await db.collection(colName).doc(docId).set(data);
+    return await this._backend().setDoc(colName, docId, data);
   },
 
   async updateDoc(colName, docId, fields) {
-    if (DB_MODE === 'local') return await fileDb.updateDoc(colName, docId, fields);
-    return await db.collection(colName).doc(docId).update(fields);
+    return await this._backend().updateDoc(colName, docId, fields);
   },
 
   async getProjectsSorted() {
-    if (DB_MODE === 'local') return await fileDb.getProjectsSorted();
-    const snap = await db.collection('projects').get();
-    return snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => {
-        const ta = a.meta?.timestamp ?? '';
-        const tb = b.meta?.timestamp ?? '';
-        return tb.localeCompare(ta);
-      });
+    return await this._backend().getProjectsSorted();
   },
 
   async pickFile() {
-    if (DB_MODE === 'local') return await fileDb.pickFile();
+    if (DB_MODE === 'sharepoint') return await graphDb.openFile();
+    return await fileDb.pickFile();
   },
 
   exportBackup() {
-    if (DB_MODE === 'local') fileDb.exportBackup();
-    else alert('Firebase 模式請至 Firebase Console 備份');
+    this._backend().exportBackup();
+  },
+
+  /* ─── Auth methods (SharePoint mode) ─────────────────── */
+  async signIn() {
+    if (DB_MODE !== 'sharepoint') return { success: true };
+    return await graphDb.signIn();
+  },
+
+  async signOut() {
+    if (DB_MODE !== 'sharepoint') return;
+    return await graphDb.signOut();
+  },
+
+  isSignedIn() {
+    if (DB_MODE !== 'sharepoint') return true;
+    return graphDb.isSignedIn();
+  },
+
+  getAccountInfo() {
+    if (DB_MODE !== 'sharepoint') return null;
+    return graphDb.getAccountInfo();
+  },
+
+  /* ─── Pessimistic lock methods ────────────────────────── */
+  async acquireLock() {
+    if (DB_MODE !== 'sharepoint') return null;
+    return await graphDb.acquireLock();
+  },
+
+  async releaseLock() {
+    if (DB_MODE !== 'sharepoint') return;
+    return await graphDb.releaseLock();
+  },
+
+  hasLock() {
+    if (DB_MODE !== 'sharepoint') return true;
+    return graphDb.hasLock();
   }
 };
 
