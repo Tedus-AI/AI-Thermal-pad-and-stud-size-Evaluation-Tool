@@ -1,3 +1,4 @@
+(function () {
 /* ---- LockError ---- */
 class LockError extends Error {
   constructor(lockInfo) {
@@ -11,7 +12,7 @@ class LockError extends Error {
 }
 window.LockError = LockError;
 
-/* ---- Module state ---- */
+/* ---- Module state (scoped to this IIFE) ---- */
 let msalInstance = null;
 let msalAccount = null;
 let dbCache = {};
@@ -309,3 +310,4 @@ const graphDb = {
 };
 
 window.graphDb = graphDb;
+})();
