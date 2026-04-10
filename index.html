@@ -639,6 +639,71 @@
     cursor: pointer;
   }
 
+  /* ── Lock Warning Modal (SharePoint pessimistic locking) ── */
+  .lock-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .lock-modal-box {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px 28px;
+    max-width: 460px;
+    width: 90%;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  }
+  .lock-modal-title {
+    color: #c0392b;
+    margin: 0 0 12px 0;
+    font-size: 1.2rem;
+  }
+  .lock-modal-text {
+    color: #333;
+    margin: 0 0 16px 0;
+    line-height: 1.5;
+  }
+  .lock-modal-info {
+    background: #fff7e6;
+    border-left: 4px solid #f39c12;
+    padding: 12px 14px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: #5a4320;
+  }
+  .lock-modal-info strong { color: #8b5a00; margin-right: 4px; }
+  .lock-modal-hint {
+    margin: 14px 0 0 0;
+    font-size: 0.85rem;
+    color: #888;
+  }
+  .lock-modal-actions {
+    text-align: center;
+    margin-top: 18px;
+  }
+  .lock-modal-btn {
+    padding: 8px 28px;
+    border-radius: 6px;
+    border: 1px solid #bbb;
+    background: #f5f5f5;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  .lock-modal-btn:hover { background: #e8e8e8; }
+
+  /* ── SharePoint user info in header ── */
+  #sp-user-info {
+    font-size: 0.78rem;
+    color: #1a6e2e;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
   .tim-size-col { min-width: 100px; }
 
   /* Hide checkbox */
@@ -952,6 +1017,25 @@
   <div class="conflict-title">&#9888;&#65039; 儲存失敗：版本衝突</div>
   <div>資料已被他人更新。系統已載入最新版本並重新整理畫面。<br>請確認內容後，重新進行修改並儲存。</div>
 </div>
+
+<!-- Lock Warning Modal (SharePoint pessimistic locking) -->
+<div id="lock-warning-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)closeLockWarning()">
+  <div class="lock-modal-box">
+    <h3 class="lock-modal-title">&#128274; 資料庫目前鎖定中</h3>
+    <p id="lock-warning-text" class="lock-modal-text"></p>
+    <div class="lock-modal-info">
+      <div><strong>編輯者：</strong><span id="lock-warning-user"></span></div>
+      <div><strong>信箱：</strong><span id="lock-warning-email"></span></div>
+      <div><strong>鎖定時間：</strong><span id="lock-warning-time"></span></div>
+      <div><strong>自動解鎖：</strong><span id="lock-warning-expires"></span>（若對方未儲存）</div>
+    </div>
+    <p class="lock-modal-hint">請直接聯繫對方，待其完成編輯並儲存後再試。</p>
+    <div class="lock-modal-actions">
+      <button onclick="closeLockWarning()" class="lock-modal-btn">關閉</button>
+    </div>
+  </div>
+</div>
+
 <div class="container">
 
   <div class="header">
@@ -959,8 +1043,11 @@
     <p>散熱與元件規格管理工具</p>
     <div class="header-db-bar">
       <span id="db-status-text">未選擇資料庫</span>
-      <button onclick="handlePickDb()">&#128194; 資料庫目錄</button>
-      <button onclick="dbAdapter.exportBackup()">&#128190; 備份資料庫</button>
+      <button id="btn-pick-db" onclick="handlePickDb()">&#128194; 資料庫目錄</button>
+      <button id="btn-backup" onclick="dbAdapter.exportBackup()">&#128190; 備份資料庫</button>
+      <button id="btn-sp-login" onclick="handleSpLogin()" style="display:none">&#128273; 登入 SharePoint</button>
+      <button id="btn-sp-logout" onclick="handleSpLogout()" style="display:none">&#128682; 登出</button>
+      <span id="sp-user-info" style="display:none"></span>
     </div>
   </div>
 
@@ -1151,10 +1238,17 @@
 
 </div>
 
+<!-- MSAL.js for Azure AD authentication (SharePoint mode) -->
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+
 <!-- Firebase SDK (v9 compat mode) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<!-- Database layer: config → local → sharepoint → adapter -->
+<script src="config.js"></script>
 <script src="fileDb.js"></script>
+<script src="graphDb.js"></script>
 <script src="dbAdapter.js"></script>
 
 <!-- SheetJS for Excel export -->
@@ -1214,50 +1308,98 @@ let thermalSpecs = {};            // thermal_specs map (本工具專用)
 const PROTECT_PASSWORD = '0420';
 let isProtected = true;          // 預設啟用保護
 
-function toggleProtection() {
-  // Collect elements from both tabs
+/* ---- Helpers: apply unlocked/locked UI state ---- */
+function _applyUnlockedUI() {
   const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar')].filter(Boolean);
   const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd')].filter(Boolean);
   const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn')].filter(Boolean);
+
+  isProtected = false;
+  bars.forEach(bar => bar.classList.add('unlocked'));
+  statusEls.forEach(el => { el.innerHTML = '&#128275; 密碼保護：已關閉（可儲存）'; });
+  btns.forEach(btn => { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; });
+  pwdInputs.forEach(el => { el.value = ''; el.style.display = 'none'; });
+  const saveBtn = document.getElementById('save-btn');
+  if (saveBtn) saveBtn.disabled = false;
+  const sgSaveBtn = document.getElementById('sg-comp-save-btn');
+  if (sgSaveBtn) sgSaveBtn.disabled = false;
+  const eeImportBtn = document.getElementById('ee-import-btn');
+  if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
+}
+
+function relock() {
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn')].filter(Boolean);
+
+  isProtected = true;
+  bars.forEach(bar => bar.classList.remove('unlocked'));
+  statusEls.forEach(el => { el.innerHTML = '&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）'; });
+  btns.forEach(btn => { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; });
+  pwdInputs.forEach(el => { el.style.display = ''; });
+  const saveBtn = document.getElementById('save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  const sgSaveBtn = document.getElementById('sg-comp-save-btn');
+  if (sgSaveBtn) sgSaveBtn.disabled = true;
+  const eeImportBtn = document.getElementById('ee-import-btn');
+  if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
+}
+
+async function toggleProtection() {
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd')].filter(Boolean);
   const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn')].filter(Boolean);
 
   // Find whichever password input has a value
   const typedPwd = pwdInputs.find(el => el.value) || pwdInputs[0];
 
   if (isProtected) {
-    // 嘗試解鎖
+    // 嘗試解鎖：先驗證密碼
     if (!typedPwd || typedPwd.value !== PROTECT_PASSWORD) {
       alert('密碼錯誤，請重新輸入');
       pwdInputs.forEach(el => { el.value = ''; });
       if (typedPwd) typedPwd.focus();
       return;
     }
-    isProtected = false;
-    bars.forEach(bar => bar.classList.add('unlocked'));
-    statusEls.forEach(el => { el.innerHTML = '&#128275; 密碼保護：已關閉（可儲存）'; });
-    btns.forEach(btn => { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; });
-    pwdInputs.forEach(el => { el.value = ''; el.style.display = 'none'; });
-    // Enable save buttons
-    const saveBtn = document.getElementById('save-btn');
-    if (saveBtn) saveBtn.disabled = false;
-    const sgSaveBtn = document.getElementById('sg-comp-save-btn');
-    if (sgSaveBtn) sgSaveBtn.disabled = false;
-    const eeImportBtn = document.getElementById('ee-import-btn');
-    if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
+
+    // SharePoint 模式：取得 pessimistic lock
+    if (dbAdapter.isSharePointMode()) {
+      if (!dbAdapter.isSignedIn()) {
+        alert('請先登入 SharePoint');
+        pwdInputs.forEach(el => { el.value = ''; });
+        return;
+      }
+      // 顯示鎖定中狀態
+      const originalTexts = btns.map(b => b.textContent);
+      btns.forEach(btn => { btn.disabled = true; btn.textContent = '取得鎖定中...'; });
+      try {
+        await dbAdapter.acquireLock();
+        // 取得 lock 成功後，重新載入資料以顯示最新內容
+        try {
+          if (typeof loadProjects === 'function') await loadProjects();
+          if (typeof sgLoadProjects === 'function') await sgLoadProjects();
+        } catch (e) { console.warn('reload after acquireLock failed:', e); }
+      } catch (e) {
+        btns.forEach((btn, i) => { btn.disabled = false; btn.textContent = originalTexts[i] || '解鎖'; });
+        pwdInputs.forEach(el => { el.value = ''; });
+        if (e instanceof LockError) {
+          showLockWarning(e);
+        } else {
+          alert('無法取得編輯鎖定：' + (e.message || e));
+        }
+        return;
+      }
+      btns.forEach((btn, i) => { btn.disabled = false; btn.textContent = originalTexts[i] || '解鎖'; });
+    }
+
+    _applyUnlockedUI();
   } else {
-    // 重新鎖定
-    isProtected = true;
-    bars.forEach(bar => bar.classList.remove('unlocked'));
-    statusEls.forEach(el => { el.innerHTML = '&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）'; });
-    btns.forEach(btn => { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; });
-    pwdInputs.forEach(el => { el.style.display = ''; });
-    // Disable save buttons
-    const saveBtn = document.getElementById('save-btn');
-    if (saveBtn) saveBtn.disabled = true;
-    const sgSaveBtn = document.getElementById('sg-comp-save-btn');
-    if (sgSaveBtn) sgSaveBtn.disabled = true;
-    const eeImportBtn = document.getElementById('ee-import-btn');
-    if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
+    // 重新鎖定：SharePoint 模式釋放 lock
+    if (dbAdapter.isSharePointMode()) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+    }
+    relock();
   }
 }
 
@@ -1293,36 +1435,109 @@ const TIM_PRESETS = {
   Pad:    { timThickness: '2.5',        icToHSK: '1.7' }
 };
 
-async function initFirebase() {
-  // ── 原 Firebase 程式碼（已註解保留）──
-  // try {
-  //   if (firebase.apps.length === 0) {
-  //     firebase.initializeApp(firebaseConfig);
-  //   }
-  //   db = firebase.firestore();
-  //   firebaseReady = true;
-  //   console.log('Firebase connected: g-quick-volume-evaluation');
-  // } catch (e) {
-  //   console.error('Firebase init error:', e);
-  //   showStatus('Firebase 初始化失敗：' + e.message, 'error');
-  // }
+async function initDatabase() {
+  // SharePoint 模式：切換 header 按鈕顯示
+  if (DB_MODE === 'sharepoint') {
+    const btnPick = document.getElementById('btn-pick-db');
+    const btnLogin = document.getElementById('btn-sp-login');
+    if (btnPick) btnPick.style.display = 'none';
+    if (btnLogin) btnLogin.style.display = '';
+  }
 
-  // ── 本機資料庫：嘗試自動恢復上次開啟的檔案 ──
   try {
     const result = await dbAdapter.init();
     if (result && result.success) {
-      console.log('[initFirebase] 自動恢復資料庫：' + result.filename);
-      updateDbStatusText('✅ ' + result.filename, 'success');
+      console.log('[initDatabase] 資料庫已就緒：' + result.filename);
+      if (DB_MODE === 'sharepoint') {
+        _updateSpHeaderSignedIn();
+      } else {
+        updateDbStatusText('✅ ' + result.filename, 'success');
+      }
       await loadProjects();
+      if (typeof sgLoadProjects === 'function') await sgLoadProjects();
       return;
     }
+    // SharePoint：未登入 → 顯示登入按鈕
+    if (DB_MODE === 'sharepoint' && result) {
+      if (result.reason === 'not_signed_in') {
+        updateDbStatusText('SharePoint ｜ 請登入', '');
+      } else if (result.reason === 'read_failed') {
+        updateDbStatusText('SharePoint ｜ 登入已過期，請重新登入', 'err');
+        _updateSpHeaderSignedOut();
+      }
+    }
   } catch (e) {
-    console.log('[initFirebase] 自動恢復失敗，等待使用者手動選擇', e);
+    console.log('[initDatabase] 初始化失敗', e);
+    if (DB_MODE === 'sharepoint') {
+      updateDbStatusText('SharePoint ｜ 初始化失敗', 'err');
+    }
   }
-  console.log('[initFirebase] 本機模式，等待使用者選擇資料庫');
+  if (DB_MODE !== 'sharepoint') {
+    console.log('[initDatabase] 本機模式，等待使用者選擇資料庫');
+  }
 }
 
-initFirebase();
+function _updateSpHeaderSignedIn() {
+  const acct = dbAdapter.getAccountInfo();
+  if (!acct) return;
+  updateDbStatusText('✅ SharePoint ｜ ' + acct.name, 'success');
+  const btnLogin = document.getElementById('btn-sp-login');
+  const btnLogout = document.getElementById('btn-sp-logout');
+  const userInfo = document.getElementById('sp-user-info');
+  if (btnLogin) btnLogin.style.display = 'none';
+  if (btnLogout) btnLogout.style.display = '';
+  if (userInfo) { userInfo.style.display = ''; userInfo.textContent = acct.email; }
+}
+
+function _updateSpHeaderSignedOut() {
+  updateDbStatusText('SharePoint ｜ 未登入', '');
+  const btnLogin = document.getElementById('btn-sp-login');
+  const btnLogout = document.getElementById('btn-sp-logout');
+  const userInfo = document.getElementById('sp-user-info');
+  if (btnLogin) btnLogin.style.display = '';
+  if (btnLogout) btnLogout.style.display = 'none';
+  if (userInfo) { userInfo.style.display = 'none'; userInfo.textContent = ''; }
+}
+
+async function handleSpLogin() {
+  try {
+    const result = await dbAdapter.signIn();
+    if (result && result.success) {
+      await graphDb._readFile();
+      _updateSpHeaderSignedIn();
+      await loadProjects();
+      if (typeof sgLoadProjects === 'function') await sgLoadProjects();
+    } else if (result && result.reason === 'cancelled') {
+      // user cancelled, do nothing
+    }
+  } catch (e) {
+    console.error('[handleSpLogin] failed:', e);
+    alert('SharePoint 登入失敗：' + (e.message || e));
+  }
+}
+
+async function handleSpLogout() {
+  // 若處於編輯狀態，先釋放 lock 並鎖回 UI
+  if (dbAdapter.hasLock && dbAdapter.hasLock()) {
+    try { await dbAdapter.releaseLock(); } catch (e) {}
+  }
+  if (!isProtected) relock();
+  try { await dbAdapter.signOut(); } catch (e) {}
+  _updateSpHeaderSignedOut();
+}
+
+initDatabase();
+
+// Warn user before leaving if they hold an editing lock
+window.addEventListener('beforeunload', (event) => {
+  if (dbAdapter.isSharePointMode && dbAdapter.isSharePointMode() && dbAdapter.hasLock && dbAdapter.hasLock()) {
+    // Best-effort lock release (fire-and-forget; Graph API needs auth header so sendBeacon won't work)
+    try { dbAdapter.releaseLock(); } catch (e) {}
+    event.preventDefault();
+    event.returnValue = '';
+    return '';
+  }
+});
 
 /* ============================
    Tab Switching
@@ -1427,7 +1642,10 @@ function showSaveStatus(msg, type) {
 /* ---- 載入專案列表 ---- */
 async function loadProjects() {
   if (!dbAdapter.isReady()) {
-    showStatus('資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
+    const msg = dbAdapter.isSharePointMode()
+      ? '資料庫尚未連線，請先登入 SharePoint。'
+      : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。';
+    showStatus(msg, 'error');
     return;
   }
 
@@ -2040,6 +2258,11 @@ async function saveThermalSpecs() {
       thermal_specs: thermalSpecs,
       hidden_components: hiddenComponents
     });
+    // SharePoint: release lock + return to protected state
+    if (dbAdapter.isSharePointMode()) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+      relock();
+    }
     showSaveStatus('\u5132\u5b58\u6210\u529f\uff01', 'saved');
   } catch (e) {
     console.error('Save error:', e);
@@ -2461,7 +2684,10 @@ function toDocId(name) {
 /* ---- Load projects ---- */
 async function sgLoadProjects() {
   if (!dbAdapter.isReady()) {
-    sgShowStatus('資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
+    const msg = dbAdapter.isSharePointMode()
+      ? '資料庫尚未連線，請先登入 SharePoint。'
+      : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。';
+    sgShowStatus(msg, 'error');
     return;
   }
 
@@ -2747,6 +2973,12 @@ async function sgSaveProjectComponents() {
       }
     }
 
+    // SharePoint: release lock + return to protected state
+    if (dbAdapter.isSharePointMode()) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+      relock();
+    }
+
     status.textContent = '已儲存';
     status.className = 'save-status saved';
     setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 3000);
@@ -2779,6 +3011,7 @@ function sgToggleNewProject() {
 
 /* ---- Create new project ---- */
 async function sgCreateProject() {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
   const id = document.getElementById('sg-new-project-id').value.trim();
   const name = document.getElementById('sg-new-project-name').value.trim();
   if (!id) { alert('請輸入專案 ID'); return; }
@@ -2800,6 +3033,12 @@ async function sgCreateProject() {
       thermal_specs: {},
       hidden_components: {}
     });
+
+    // SharePoint: release lock + return to protected state
+    if (dbAdapter.isSharePointMode()) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+      relock();
+    }
 
     sgShowStatus('專案「' + name + '」建立成功！', 'success');
     document.getElementById('sg-new-project-id').value = '';
@@ -2852,6 +3091,26 @@ function showConflictWarning() {
     toast.classList.add('visible');
     setTimeout(() => { toast.classList.remove('visible'); }, 8000);
   }
+}
+
+/* ── Lock Warning Modal (SharePoint pessimistic lock) ── */
+function showLockWarning(lockError) {
+  const fmt = (iso) => {
+    try { return new Date(iso).toLocaleString('zh-TW', { hour12: false }); }
+    catch { return iso || '-'; }
+  };
+  document.getElementById('lock-warning-text').textContent =
+    `資料庫目前被 ${lockError.lockedBy} 編輯中，無法取得編輯權。`;
+  document.getElementById('lock-warning-user').textContent = lockError.lockedBy || '-';
+  document.getElementById('lock-warning-email').textContent = lockError.lockedByEmail || '-';
+  document.getElementById('lock-warning-time').textContent = fmt(lockError.lockedAt);
+  document.getElementById('lock-warning-expires').textContent = fmt(lockError.expiresAt);
+  document.getElementById('lock-warning-modal').style.display = 'flex';
+}
+
+function closeLockWarning() {
+  const modal = document.getElementById('lock-warning-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 function updateDbStatusText(message, type) {
