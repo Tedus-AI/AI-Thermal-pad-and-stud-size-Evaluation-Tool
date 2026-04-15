@@ -233,6 +233,14 @@
     color: #fff;
   }
   .protect-unlock-btn:hover { background: #245a9a; }
+  .protect-hint {
+    width: 100%;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #d32f2f;
+    margin-top: 2px;
+  }
+  .protect-bar.unlocked .protect-hint { display: none; }
   .protect-lock-btn {
     background: #e0e0e0;
     color: #555;
@@ -1124,6 +1132,7 @@
       <span class="protect-status" id="protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
       <input type="password" id="protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
       <button class="protect-unlock-btn" id="protect-btn" onclick="toggleProtection()">解鎖</button>
+      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
     </div>
 
     <div class="card" style="margin-bottom: 20px;">
@@ -1182,6 +1191,7 @@
       <span class="protect-status" id="sg-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
       <input type="password" id="sg-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
       <button class="protect-unlock-btn" id="sg-protect-btn" onclick="toggleProtection()">解鎖</button>
+      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
     </div>
 
     <!-- Panel 1: Select Project -->

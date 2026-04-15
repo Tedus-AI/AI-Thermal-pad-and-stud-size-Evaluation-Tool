@@ -229,8 +229,9 @@ const graphDb = {
       return;
     }
     try {
-      await this._readFile();
-      // Only clear the lock if we still own it
+      // Skip re-read: dbCache is already up-to-date (just written by save or acquireLock).
+      // Re-reading risks getting a stale cached version from SharePoint CDN
+      // that still contains the lock, causing it to persist.
       if (dbCache.lock && dbCache.lock.lockedByEmail === msalAccount.username) {
         delete dbCache.lock;
         await this._writeFile();
