@@ -707,6 +707,15 @@
     font-size: 0.95rem;
   }
   .lock-modal-btn:hover { background: #e8e8e8; }
+  .lock-modal-teams-btn {
+    background: #505ac9;
+    color: #fff;
+    border-color: #505ac9;
+    text-decoration: none;
+    display: inline-block;
+    margin-right: 10px;
+  }
+  .lock-modal-teams-btn:hover { background: #3f49a3; }
 
   /* ── SharePoint user info in header ── */
   #sp-user-info {
@@ -1043,6 +1052,7 @@
     </div>
     <p class="lock-modal-hint">請直接聯繫對方，待其完成編輯並儲存後再試。</p>
     <div class="lock-modal-actions">
+      <a id="lock-warning-teams-btn" class="lock-modal-btn lock-modal-teams-btn" href="#" target="_blank" rel="noopener">&#128233; 傳送 Teams 訊息</a>
       <button onclick="closeLockWarning()" class="lock-modal-btn">關閉</button>
     </div>
   </div>
@@ -3117,6 +3127,16 @@ function showLockWarning(lockError) {
   document.getElementById('lock-warning-email').textContent = lockError.lockedByEmail || '-';
   document.getElementById('lock-warning-time').textContent = fmt(lockError.lockedAt);
   document.getElementById('lock-warning-expires').textContent = fmt(lockError.expiresAt);
+
+  // Teams deep link
+  const teamsMsg = encodeURIComponent(
+    `Hi ${lockError.lockedBy}，我想使用 Component Spec Management Tool 編輯資料庫，請你完成後通知我，謝謝！`
+  );
+  const teamsUrl = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(lockError.lockedByEmail)}&message=${teamsMsg}`;
+  const teamsBtn = document.getElementById('lock-warning-teams-btn');
+  teamsBtn.href = teamsUrl;
+  teamsBtn.textContent = '\u{1F4E9} 傳送 Teams 訊息給 ' + (lockError.lockedBy || '對方');
+
   document.getElementById('lock-warning-modal').style.display = 'flex';
 }
 
