@@ -3003,6 +3003,9 @@ async function sgSaveProjectComponents() {
       relock();
     }
 
+    // Re-render component list + power summary with latest in-memory data
+    sgRenderProjectComponents();
+
     status.textContent = '已儲存';
     status.className = 'save-status saved';
     setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 3000);
