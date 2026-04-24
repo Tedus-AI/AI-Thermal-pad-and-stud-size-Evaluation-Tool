@@ -984,10 +984,9 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    min-width: 72px;
+    min-width: 90px;
   }
-  .sg-ts-cell select,
-  .sg-ts-cell input {
+  .sg-ts-cell select {
     width: 100%;
     padding: 5px 4px;
     border: 1.5px solid #e0e0e0;
@@ -999,10 +998,28 @@
     text-align: center;
     box-sizing: border-box;
   }
-  .sg-ts-cell .sg-ts-type,
-  .sg-ts-cell .sg-ts-qty { display: none; }
-  .sg-ts-cell .sg-ts-type.visible,
-  .sg-ts-cell .sg-ts-qty.visible { display: block; }
+  .sg-ts-qtys { display: none; flex-direction: column; gap: 3px; }
+  .sg-ts-qtys.visible { display: flex; }
+  .sg-ts-qtys label {
+    font-size: 0.72rem;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .sg-ts-qtys label input {
+    width: 52px;
+    padding: 3px 4px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    outline: none;
+    text-align: center;
+    box-sizing: border-box;
+  }
   .sg-comp-del-btn {
     padding: 3px 8px;
     border: none;
@@ -2862,12 +2879,10 @@ function sgRenderProjectComponents() {
             <option value="N"${(comp.Temp_Sensor || 'N') !== 'Y' ? ' selected' : ''}>N</option>
             <option value="Y"${comp.Temp_Sensor === 'Y' ? ' selected' : ''}>Y</option>
           </select>
-          <select class="sg-ts-type${comp.Temp_Sensor === 'Y' ? ' visible' : ''}" data-cat="${c}" data-idx="${i}" data-field="Sensor_Type" onchange="sgOnSensorTypeChange(this)">
-            <option value="">-- Type --</option>
-            <option value="Local"${comp.Sensor_Type === 'Local' ? ' selected' : ''}>Local</option>
-            <option value="Remote"${comp.Sensor_Type === 'Remote' ? ' selected' : ''}>Remote</option>
-          </select>
-          <input type="number" min="1" class="sg-ts-qty${(comp.Temp_Sensor === 'Y' && comp.Sensor_Type) ? ' visible' : ''}" value="${comp.Sensor_Qty ?? ''}" placeholder="Qty" data-cat="${c}" data-idx="${i}" data-field="Sensor_Qty" onchange="sgOnCompEdit(this)">
+          <div class="sg-ts-qtys${comp.Temp_Sensor === 'Y' ? ' visible' : ''}">
+            <label>Local<input type="number" min="0" value="${comp.Local_Qty ?? ''}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Local_Qty" onchange="sgOnCompEdit(this)"></label>
+            <label>Remote<input type="number" min="0" value="${comp.Remote_Qty ?? ''}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Remote_Qty" onchange="sgOnCompEdit(this)"></label>
+          </div>
         </div></td>
         <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
@@ -2934,45 +2949,22 @@ function sgOnTvChange(sel) {
   }
 }
 
-/* ---- Temp Sensor cascade handlers ---- */
+/* ---- Temp Sensor cascade handler ---- */
 function sgOnTempSensorChange(sel) {
-  const cell       = sel.parentElement;
-  const typeSelect = cell.querySelector('.sg-ts-type');
-  const qtyInput   = cell.querySelector('.sg-ts-qty');
-  const cat        = sel.dataset.cat;
-  const idx        = parseInt(sel.dataset.idx, 10);
-  const fieldKey   = SG_CAT_MAP[cat].field;
-
-  if (sel.value === 'Y') {
-    typeSelect.classList.add('visible');
-  } else {
-    typeSelect.classList.remove('visible');
-    typeSelect.value = '';
-    qtyInput.classList.remove('visible');
-    qtyInput.value = '';
-    if (sgProjectData?.[fieldKey]?.[idx]) {
-      sgProjectData[fieldKey][idx]['Sensor_Type'] = '';
-      sgProjectData[fieldKey][idx]['Sensor_Qty']  = '';
-    }
-  }
-  sgOnCompEdit(sel);
-}
-
-function sgOnSensorTypeChange(sel) {
   const cell     = sel.parentElement;
-  const qtyInput = cell.querySelector('.sg-ts-qty');
+  const qtysDiv  = cell.querySelector('.sg-ts-qtys');
   const cat      = sel.dataset.cat;
   const idx      = parseInt(sel.dataset.idx, 10);
   const fieldKey = SG_CAT_MAP[cat].field;
 
-  if (sel.value) {
-    qtyInput.classList.add('visible');
-    qtyInput.focus();
+  if (sel.value === 'Y') {
+    qtysDiv.classList.add('visible');
   } else {
-    qtyInput.classList.remove('visible');
-    qtyInput.value = '';
+    qtysDiv.classList.remove('visible');
+    qtysDiv.querySelectorAll('input').forEach(inp => { inp.value = ''; });
     if (sgProjectData?.[fieldKey]?.[idx]) {
-      sgProjectData[fieldKey][idx]['Sensor_Qty'] = '';
+      sgProjectData[fieldKey][idx]['Local_Qty']  = '';
+      sgProjectData[fieldKey][idx]['Remote_Qty'] = '';
     }
   }
   sgOnCompEdit(sel);
@@ -3019,8 +3011,8 @@ function sgAddCompRow(cat) {
     Type: '',
     Qty: 1,
     'Power(W)': 0,
-    TV_ID_mil: '',
-    TV_Qty: '',
+    TV_ID_mil: 'N/A',
+    TV_Qty: 'N/A',
     'Height(mm)': d.height,
     Pad_L: d.padL,
     Pad_W: d.padW,
@@ -3030,8 +3022,8 @@ function sgAddCompRow(cat) {
     R_jc: d.rjc,
     TIM_Type: d.timType,
     Temp_Sensor: 'N',
-    Sensor_Type: '',
-    Sensor_Qty:  ''
+    Local_Qty:   '',
+    Remote_Qty:  ''
   });
 
   sgRenderProjectComponents();
