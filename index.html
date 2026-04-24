@@ -1026,9 +1026,9 @@
     font-size: 0.95rem; font-weight: 700; padding: 8px 14px;
     border-radius: 8px 8px 0 0; color: #fff;
   }
-  .vd-comp-category-header.rf      { background: linear-gradient(135deg,#1a3a6b,#2e6bb5); }
-  .vd-comp-category-header.digital { background: linear-gradient(135deg,#217346,#2e9959); }
-  .vd-comp-category-header.pwr     { background: linear-gradient(135deg,#b8860b,#d4a017); }
+  .vd-comp-category-header.rf      { background: #c0392b; }
+  .vd-comp-category-header.digital { background: #2e6bb5; }
+  .vd-comp-category-header.pwr     { background: #e67e22; }
   .vd-table {
     width: 100%; border-collapse: collapse; font-size: 0.82rem;
     table-layout: auto;
@@ -1062,7 +1062,7 @@
   }
   .vd-err-green  { color: #217346; font-weight: 700; }
   .vd-err-orange { color: #d4760a; font-weight: 700; }
-  .vd-err-red    { color: #c0392b; font-weight: 700; }
+  .vd-err-red    { color: #e00000; font-weight: 700; }
   .vd-add-dropdown { position: relative; display: inline-block; }
   .vd-add-dropdown-content {
     display: none; position: absolute; left: 0; top: 100%;
@@ -3431,20 +3431,16 @@ async function vdOnProjectChange() {
     vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
     if (!vdProjectData) { vdShowStatus('專案不存在。', 'error'); return; }
 
-    // Build validation data from saved or fresh from Tab1/Tab2
+    // Build validation data: auto-load from Tab 1 only; saved manual additions are preserved
     const saved = vdProjectData.validation_data || {};
     for (const [catKey, catInfo] of Object.entries(VD_CAT_MAP)) {
       const catLower = catKey.toLowerCase();
       const tab1Items = vdProjectData[catInfo.field] || [];
-      // Tab 2 custom components
-      const ts = vdProjectData.thermal_specs || {};
-      const customComps = (ts._custom_components && ts._custom_components[catLower]) || [];
-      const allItems = tab1Items.concat(customComps);
-
       const savedCat = saved[catLower] || [];
       const result = [];
 
-      allItems.forEach(comp => {
+      // Tab 1 components are always present; sync pd_est from latest Tab 1 data
+      tab1Items.forEach(comp => {
         const name = comp.Component || '';
         if (!name) return;
         const existing = savedCat.find(s => s.component === name);
@@ -3466,8 +3462,7 @@ async function vdOnProjectChange() {
         }
       });
 
-      // Keep any saved entries that were previously added but aren't in Tab1/Tab2 anymore
-      // (they were manually re-added via dropdown — preserve them)
+      // Preserve manually added entries (e.g. Tab 2 custom) that were saved previously
       savedCat.forEach(s => {
         if (!result.find(r => r.component === s.component)) {
           result.push(s);
@@ -3550,7 +3545,7 @@ function vdRender() {
           <th>溫度(實測)</th>
           <th>溫度(模擬校正)</th>
           <th>溫度-相對誤差%</th>
-          <th>溫度-絕對溫差</th>
+          <th>絕對溫差(模擬校正-實測)</th>
           <th>備註</th>
           <th></th>
         </tr></thead><tbody>`;
@@ -3569,7 +3564,7 @@ function vdRender() {
         <td><input type="number" step="any" value="${item.temp_meas !== '' && item.temp_meas !== undefined ? item.temp_meas : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_meas" onchange="vdOnEdit(this)"></td>
         <td><input type="number" step="any" value="${item.temp_sim_cal !== '' && item.temp_sim_cal !== undefined ? item.temp_sim_cal : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim_cal" onchange="vdOnEdit(this)"></td>
         <td class="${vdErrorClass(tempErr)}">${vdFmtError(tempErr)}</td>
-        <td class="${vdTempDiffClass(tempDiff)}">${vdFmtDiff(tempDiff)}</td>
+        <td>${vdFmtDiff(tempDiff)}</td>
         <td class="note-cell"><textarea data-cat="${catLower}" data-idx="${idx}" data-field="note" onchange="vdOnEdit(this)">${escapeHtml(item.note || '')}</textarea></td>
         <td><button class="vd-del-btn" onclick="vdDeleteItem('${catLower}',${idx})" title="移除">&#10060;</button></td>
       </tr>`;
