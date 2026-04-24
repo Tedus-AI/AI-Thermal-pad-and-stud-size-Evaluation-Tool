@@ -980,6 +980,29 @@
     border-color: #2e6bb5;
     box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
   }
+  .sg-ts-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 72px;
+  }
+  .sg-ts-cell select,
+  .sg-ts-cell input {
+    width: 100%;
+    padding: 5px 4px;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #333;
+    background: #fff;
+    outline: none;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .sg-ts-cell .sg-ts-type,
+  .sg-ts-cell .sg-ts-qty { display: none; }
+  .sg-ts-cell .sg-ts-type.visible,
+  .sg-ts-cell .sg-ts-qty.visible { display: block; }
   .sg-comp-del-btn {
     padding: 3px 8px;
     border: none;
@@ -2817,7 +2840,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Power(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Power(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th>Temp Sensor</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -2834,6 +2857,18 @@ function sgRenderProjectComponents() {
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
+        <td class="sg-edit-cell"><div class="sg-ts-cell">
+          <select data-cat="${c}" data-idx="${i}" data-field="Temp_Sensor" onchange="sgOnTempSensorChange(this)">
+            <option value="N"${(comp.Temp_Sensor || 'N') !== 'Y' ? ' selected' : ''}>N</option>
+            <option value="Y"${comp.Temp_Sensor === 'Y' ? ' selected' : ''}>Y</option>
+          </select>
+          <select class="sg-ts-type${comp.Temp_Sensor === 'Y' ? ' visible' : ''}" data-cat="${c}" data-idx="${i}" data-field="Sensor_Type" onchange="sgOnSensorTypeChange(this)">
+            <option value="">-- Type --</option>
+            <option value="Local"${comp.Sensor_Type === 'Local' ? ' selected' : ''}>Local</option>
+            <option value="Remote"${comp.Sensor_Type === 'Remote' ? ' selected' : ''}>Remote</option>
+          </select>
+          <input type="number" min="1" class="sg-ts-qty${(comp.Temp_Sensor === 'Y' && comp.Sensor_Type) ? ' visible' : ''}" value="${comp.Sensor_Qty ?? ''}" placeholder="Qty" data-cat="${c}" data-idx="${i}" data-field="Sensor_Qty" onchange="sgOnCompEdit(this)">
+        </div></td>
         <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
@@ -2899,6 +2934,50 @@ function sgOnTvChange(sel) {
   }
 }
 
+/* ---- Temp Sensor cascade handlers ---- */
+function sgOnTempSensorChange(sel) {
+  const cell       = sel.parentElement;
+  const typeSelect = cell.querySelector('.sg-ts-type');
+  const qtyInput   = cell.querySelector('.sg-ts-qty');
+  const cat        = sel.dataset.cat;
+  const idx        = parseInt(sel.dataset.idx, 10);
+  const fieldKey   = SG_CAT_MAP[cat].field;
+
+  if (sel.value === 'Y') {
+    typeSelect.classList.add('visible');
+  } else {
+    typeSelect.classList.remove('visible');
+    typeSelect.value = '';
+    qtyInput.classList.remove('visible');
+    qtyInput.value = '';
+    if (sgProjectData?.[fieldKey]?.[idx]) {
+      sgProjectData[fieldKey][idx]['Sensor_Type'] = '';
+      sgProjectData[fieldKey][idx]['Sensor_Qty']  = '';
+    }
+  }
+  sgOnCompEdit(sel);
+}
+
+function sgOnSensorTypeChange(sel) {
+  const cell     = sel.parentElement;
+  const qtyInput = cell.querySelector('.sg-ts-qty');
+  const cat      = sel.dataset.cat;
+  const idx      = parseInt(sel.dataset.idx, 10);
+  const fieldKey = SG_CAT_MAP[cat].field;
+
+  if (sel.value) {
+    qtyInput.classList.add('visible');
+    qtyInput.focus();
+  } else {
+    qtyInput.classList.remove('visible');
+    qtyInput.value = '';
+    if (sgProjectData?.[fieldKey]?.[idx]) {
+      sgProjectData[fieldKey][idx]['Sensor_Qty'] = '';
+    }
+  }
+  sgOnCompEdit(sel);
+}
+
 /* ---- Inline edit handler ---- */
 function sgOnCompEdit(el) {
   const cat = el.dataset.cat;
@@ -2949,7 +3028,10 @@ function sgAddCompRow(cat) {
     Board_Type: d.boardType,
     'Limit(C)': d.limit,
     R_jc: d.rjc,
-    TIM_Type: d.timType
+    TIM_Type: d.timType,
+    Temp_Sensor: 'N',
+    Sensor_Type: '',
+    Sensor_Qty:  ''
   });
 
   sgRenderProjectComponents();
