@@ -1630,6 +1630,7 @@
   .tcp-img-toolbar button:disabled { opacity:0.4; cursor:not-allowed; }
   .tcp-img-toolbar button:disabled:hover { background:#fff; }
   .tcp-toolbar-sep { width:1px; height:18px; background:#dde3ec; margin:0 2px; }
+  .tcp-readonly-badge { color:#dc2626; font-size:0.78rem; font-weight:bold; padding:2px 7px; border:1px solid #dc2626; border-radius:3px; white-space:nowrap; }
 
   /* ── 裁切 overlay ── */
   .tcp-crop-overlay { position:absolute; inset:0; z-index:25; }
@@ -6549,18 +6550,19 @@ function tcpRenderEditor() {
         </div>
         <div class="tcp-comp-bar" id="tcp-comp-bar"></div>
         ${hasPhoto ? `<div class="tcp-img-toolbar" id="tcp-img-toolbar">
-          <button onclick="tcpRotateImg(-90)" title="逆時針旋轉 90°">↺ 左轉</button>
-          <button onclick="tcpRotateImg(90)"  title="順時針旋轉 90°">↻ 右轉</button>
+          ${isProtected ? '<span class="tcp-readonly-badge">🔒 唯讀</span><span class="tcp-toolbar-sep"></span>' : ''}
+          <button onclick="tcpRotateImg(-90)" title="逆時針旋轉 90°" ${isProtected ? 'disabled' : ''}>↺ 左轉</button>
+          <button onclick="tcpRotateImg(90)"  title="順時針旋轉 90°" ${isProtected ? 'disabled' : ''}>↻ 右轉</button>
           <span class="tcp-toolbar-sep"></span>
-          <button onclick="tcpFlipImg('h')" title="水平翻轉">↔ 翻轉</button>
-          <button onclick="tcpFlipImg('v')" title="垂直翻轉">↕ 垂直翻</button>
+          <button onclick="tcpFlipImg('h')" title="水平翻轉" ${isProtected ? 'disabled' : ''}>↔ 翻轉</button>
+          <button onclick="tcpFlipImg('v')" title="垂直翻轉" ${isProtected ? 'disabled' : ''}>↕ 垂直翻</button>
           <span class="tcp-toolbar-sep"></span>
-          <button onclick="tcpStartCrop()" title="非破壞性裁切">✂ 裁切</button>
+          <button onclick="tcpStartCrop()" title="非破壞性裁切" ${isProtected ? 'disabled' : ''}>✂ 裁切</button>
           <span class="tcp-toolbar-sep"></span>
           <button id="tcp-move-btn" onclick="tcpToggleMoveMode()" title="切換移動圖片模式">✋ 移動</button>
           <span class="tcp-toolbar-sep"></span>
-          <button id="tcp-undo-btn" onclick="tcpUndo()" title="復原 (Ctrl+Z)">↩ 復原</button>
-          <button id="tcp-redo-btn" onclick="tcpRedo()" title="取消復原 (Ctrl+Y)">↪ 取消復原</button>
+          <button id="tcp-undo-btn" onclick="tcpUndo()" title="復原 (Ctrl+Z)" ${isProtected ? 'disabled' : ''}>↩ 復原</button>
+          <button id="tcp-redo-btn" onclick="tcpRedo()" title="取消復原 (Ctrl+Y)" ${isProtected ? 'disabled' : ''}>↪ 取消復原</button>
         </div>` : ''}
         <div class="tcp-workspace-wrap" id="tcp-workspace">
           ${hasPhoto
@@ -6572,14 +6574,14 @@ function tcpRenderEditor() {
                  <div class="tcp-rh" data-dir="ne"></div>
                  <div class="tcp-rh" data-dir="sw"></div>
                  <div class="tcp-rh" data-dir="se"></div>
-                 <button class="tcp-delete-photo-btn" id="tcp-delete-photo-btn">🗑 刪除</button>
-                 <button class="tcp-replace-btn" id="tcp-replace-btn">📷 更換</button>
+                 ${isProtected ? '' : '<button class="tcp-delete-photo-btn" id="tcp-delete-photo-btn">🗑 刪除</button>'}
+                 ${isProtected ? '' : '<button class="tcp-replace-btn" id="tcp-replace-btn">📷 更換</button>'}
                </div>`
             : `<div class="tcp-photo-zone" id="tcp-photo-zone">
                  <div class="tcp-photo-placeholder">
                    <span class="icon">📷</span>
                    <span>拖拉 PCB 圖至此區域</span>
-                   <button class="tcp-browse-btn" id="tcp-browse-btn">瀏覽檔案</button>
+                   <button class="tcp-browse-btn" id="tcp-browse-btn" ${isProtected ? 'disabled' : ''}>瀏覽檔案</button>
                    <span style="font-size:0.78rem;margin-top:2px;">或 Ctrl+V 貼上圖片</span>
                  </div>
                </div>`
@@ -6845,6 +6847,7 @@ function tcpSetupImgInteraction(page) {
   /* ── B: place annotation (annotation mode) ── */
   frame.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || _tcpMoveMode) return;
+    if (isProtected) return;
     if (e.target.closest('.tcp-marker-dot, .tcp-marker-label-wrap, .tcp-replace-btn, .tcp-delete-photo-btn, .tcp-rh')) return;
     const f = page.imgFrame;
     const wsRect = ws.getBoundingClientRect();
@@ -6853,6 +6856,7 @@ function tcpSetupImgInteraction(page) {
     const ax = (cx - f.x - f.ix) / f.iw * 100;
     const ay = (cy - f.y - f.iy) / f.ih * 100;
     if (ax < 0 || ax > 100 || ay < 0 || ay > 100) return;
+    tcpPushHistory(page);
     const id = 'a_' + Date.now();
     page.annotations.push({ id, x: ax, y: ay, componentRef: '', labelX: -1, labelY: -1 });
     _tcpDragState = { annoId: id, dotAbsX: cx, dotAbsY: cy };
@@ -6911,6 +6915,7 @@ function tcpSetupImgInteraction(page) {
   outer.querySelectorAll('.tcp-rh').forEach(rh => {
     let drag = null;
     rh.addEventListener('mousedown', (e) => {
+      if (isProtected) return;
       e.preventDefault(); e.stopPropagation();
       const f = page.imgFrame;
       drag = { dir: rh.dataset.dir, sx: e.clientX, sy: e.clientY,
@@ -7280,13 +7285,16 @@ function tcpRenderMarkers(page) {
     dot.title = anno.componentRef || `標記 ${idx + 1}`;
     dot.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
+      if (isProtected) return;
       if (confirm(`刪除標記${anno.componentRef ? ' (' + anno.componentRef + ')' : ' #' + (idx + 1)}？`)) {
+        tcpPushHistory(page);
         page.annotations = page.annotations.filter(a => a.id !== anno.id);
         tcpRenderMarkers(page);
       }
     });
     dot.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
+      if (isProtected) return;
       e.preventDefault(); e.stopPropagation();
       let dragging = false;
       const startX = e.clientX, startY = e.clientY;
@@ -7294,6 +7302,7 @@ function tcpRenderMarkers(page) {
 
       const onMove = (me) => {
         if (!dragging && Math.hypot(me.clientX - startX, me.clientY - startY) < 4) return;
+        if (!dragging) tcpPushHistory(page);
         dragging = true;
         const fr = page.imgFrame;
         const wsRect2 = workspace.getBoundingClientRect();
@@ -7376,9 +7385,12 @@ function tcpRenderMarkers(page) {
       delBtn.className = 'tcp-marker-del-btn';
       delBtn.textContent = '×';
       delBtn.title = '刪除';
+      if (isProtected) delBtn.style.display = 'none';
       delBtn.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation(); });
       delBtn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
+        if (isProtected) return;
+        tcpPushHistory(page);
         page.annotations = page.annotations.filter(a => a.id !== anno.id);
         tcpRenderMarkers(page);
       });
@@ -7390,6 +7402,7 @@ function tcpRenderMarkers(page) {
 
       label.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
+        if (isProtected) return;
         e.stopPropagation();
         pendingDrag = {
           startX: e.clientX, startY: e.clientY,
