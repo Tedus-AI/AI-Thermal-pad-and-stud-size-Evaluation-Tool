@@ -121,6 +121,22 @@ const dbAdapter = {
   async peekLock() {
     if (DB_MODE !== 'sharepoint') return null;
     return await graphDb.peekLock();
+  },
+
+  /* ─── TCP Image File Storage ─────────────────────────── */
+  async uploadTcpImage(projectId, catKey, jpegBlob) {
+    if (DB_MODE !== 'sharepoint') return null;
+    return await graphDb.uploadTcpImage(projectId, catKey, jpegBlob);
+  },
+
+  async getTcpImageSrc(spPath) {
+    if (DB_MODE !== 'sharepoint') return null;
+    return await graphDb.getTcpImageSrc(spPath);
+  },
+
+  async deleteTcpImage(spPath) {
+    if (DB_MODE !== 'sharepoint') return;
+    return await graphDb.deleteTcpImage(spPath);
   }
 };
 

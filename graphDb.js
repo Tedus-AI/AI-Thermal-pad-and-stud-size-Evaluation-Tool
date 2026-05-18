@@ -339,6 +339,42 @@ const graphDb = {
       });
   },
 
+  /* ─── TCP Image File Storage ─────────────────────────── */
+  async uploadTcpImage(projectId, catKey, jpegBlob) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const folder = SHAREPOINT_CONFIG.filePath.replace(/[^/]+$/, '') + 'tcp_images';
+    const filename = `${projectId}_${catKey}_${Date.now()}.jpg`;
+    const token = await this._getAccessToken(true);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${folder}/${filename}:/content`,
+      { method: 'PUT', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }, body: jpegBlob }
+    );
+    if (!resp.ok) throw new Error('圖片上傳失敗 ' + resp.status);
+    return `${folder}/${filename}`;
+  },
+
+  async getTcpImageSrc(spPath) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const token = await this._getAccessToken(true);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${spPath}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!resp.ok) throw new Error('圖片讀取失敗 ' + resp.status);
+    const item = await resp.json();
+    return item['@microsoft.graph.downloadUrl'] || null;
+  },
+
+  async deleteTcpImage(spPath) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const token = await this._getAccessToken(false).catch(() => null);
+    if (!token) return;
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${spPath}`,
+      { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
+    );
+  },
+
   exportBackup() {
     const blob = new Blob([JSON.stringify(dbCache, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');

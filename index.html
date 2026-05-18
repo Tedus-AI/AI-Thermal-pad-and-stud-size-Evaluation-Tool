@@ -1459,17 +1459,17 @@
   }
   .tcp-marker-dot {
     position: absolute;
-    width: 3.5px; height: 3.5px;
+    width: 7px; height: 7px;
     border-radius: 50%;
     background: #dc2626;
     transform: translate(-50%, -50%);
     cursor: grab; z-index: 15;
     user-select: none;
-    box-shadow: 0 0 0 0.75px rgba(255,255,255,0.85), 0 0 2.5px rgba(220,38,38,0.65);
+    box-shadow: 0 0 0 1.5px rgba(255,255,255,0.85), 0 0 5px rgba(220,38,38,0.65);
     transition: box-shadow 0.12s;
   }
-  .tcp-marker-dot:hover { box-shadow: 0 0 0 0.75px rgba(255,255,255,0.9), 0 0 3.5px rgba(220,38,38,0.85); }
-  .tcp-marker-dot.dragging { cursor: grabbing; box-shadow: 0 0 0 1px rgba(255,255,255,0.9), 0 0 4.5px rgba(220,38,38,1); }
+  .tcp-marker-dot:hover { box-shadow: 0 0 0 1.5px rgba(255,255,255,0.9), 0 0 7px rgba(220,38,38,0.85); }
+  .tcp-marker-dot.dragging { cursor: grabbing; box-shadow: 0 0 0 2px rgba(255,255,255,0.9), 0 0 9px rgba(220,38,38,1); }
   .tcp-marker-label-wrap {
     position: absolute; z-index: 20;
     display: flex; align-items: stretch;
@@ -1490,11 +1490,11 @@
   .tcp-marker-label:focus { border-color: var(--gm-primary, #1d4ed8); }
   .tcp-marker-del-btn {
     position: absolute; top: -2px; right: -2px;
-    width: 4.5px; height: 4.5px;
+    width: 9px; height: 9px;
     border-radius: 50%;
     background: #dc2626; color: #fff;
-    border: 0.5px solid #fff;
-    font-size: 3px; line-height: 1; font-weight: 700;
+    border: 1px solid #fff;
+    font-size: 6px; line-height: 1; font-weight: 700;
     cursor: pointer;
     display: none; align-items: center; justify-content: center;
     padding: 0;
@@ -6620,22 +6620,34 @@ function tcpRenderEditor() {
 
   tcpSetupPhotoHandlers(page);
   if (hasPhoto) {
-    const launchInteraction = () => {
+    const launchInteraction = (imgSrc) => {
+      const imgEl = document.getElementById('tcp-photo-img');
+      if (imgEl && imgSrc) imgEl.src = imgSrc;
       tcpRenderImgFrame(page);
       const outer = document.getElementById('tcp-img-outer');
       if (outer) { outer.style.display = 'block'; if (_tcpMoveMode) outer.classList.add('move-mode'); }
       tcpSetupImgInteraction(page);
       if (page.annotations.length > 0) tcpRenderMarkers(page);
-      // Update undo/redo button state
       tcpUpdateHistoryBtns(page);
     };
-    if (!page.imgFrame) {
-      const tmp = new Image();
-      tmp.onload = () => { tcpInitImgFrame(page, tmp.naturalWidth, tmp.naturalHeight); launchInteraction(); };
-      tmp.src = page.imageData;
-    } else {
-      launchInteraction();
-    }
+    const resolveAndLaunch = async () => {
+      let src = page.imageData;
+      if (src?.startsWith('sp:')) {
+        const ws = document.getElementById('tcp-workspace');
+        if (ws) ws.dataset.loading = '1';
+        try { src = await dbAdapter.getTcpImageSrc(src.slice(3)) || src; }
+        catch (e) { console.warn('[tcp] image load failed', e); }
+        if (ws) delete ws.dataset.loading;
+      }
+      if (!page.imgFrame) {
+        const tmp = new Image();
+        tmp.onload = () => { tcpInitImgFrame(page, tmp.naturalWidth, tmp.naturalHeight); launchInteraction(src); };
+        tmp.src = src;
+      } else {
+        launchInteraction(src);
+      }
+    };
+    resolveAndLaunch();
   }
 
   tcpRenderCompBar();
@@ -6684,6 +6696,10 @@ function tcpDeletePage(idx) {
   const pages = sgProjectData.tcPlacement[_tcpCategory.toLowerCase()].pages;
   if (pages.length <= 1) { alert('至少保留 1 頁'); return; }
   if (!confirm('確定刪除此頁面？')) return;
+  const delPage = pages[idx];
+  if (delPage?.imageData?.startsWith('sp:') && dbAdapter.isSharePointMode?.()) {
+    dbAdapter.deleteTcpImage(delPage.imageData.slice(3)).catch(() => {});
+  }
   pages.splice(idx, 1);
   if (_tcpActivePageIdx >= pages.length) _tcpActivePageIdx = pages.length - 1;
   _tcpActivePage = pages[_tcpActivePageIdx];
@@ -6704,14 +6720,24 @@ function tcpLoadImgEl(src) {
 }
 
 /* ── Undo / Redo ── */
-function tcpPushHistory(page) {
-  if (!page) return;
-  if (!page.history) { page.history = []; page.historyIndex = -1; }
-  const snap = {
+function tcpSnapOf(page) {
+  return {
     imageData:   page.imageData,
     annotations: JSON.parse(JSON.stringify(page.annotations || [])),
     imgFrame:    page.imgFrame ? { ...page.imgFrame } : null,
   };
+}
+function tcpApplySnap(page, snap) {
+  page.imageData   = snap.imageData;
+  page.annotations = JSON.parse(JSON.stringify(snap.annotations));
+  page.imgFrame    = snap.imgFrame ? { ...snap.imgFrame } : null;
+}
+
+function tcpPushHistory(page) {
+  if (!page) return;
+  if (!page.history) { page.history = []; page.historyIndex = -1; }
+  page.redoStack = [];  // new operation clears redo future
+  const snap = tcpSnapOf(page);
   page.history = page.history.slice(0, page.historyIndex + 1);
   page.history.push(snap);
   if (page.history.length > 20) { page.history.shift(); } else { page.historyIndex++; }
@@ -6720,20 +6746,19 @@ function tcpPushHistory(page) {
 function tcpUndo() {
   const page = _tcpActivePage;
   if (!page?.history?.length || page.historyIndex < 0) return;
+  if (!page.redoStack) page.redoStack = [];
+  page.redoStack.push(tcpSnapOf(page));   // save current state for redo
   const snap = page.history[page.historyIndex--];
-  page.imageData   = snap.imageData;
-  page.annotations = JSON.parse(JSON.stringify(snap.annotations));
-  page.imgFrame    = snap.imgFrame ? { ...snap.imgFrame } : null;
+  tcpApplySnap(page, snap);
   tcpRenderEditor();
 }
 
 function tcpRedo() {
   const page = _tcpActivePage;
-  if (!page?.history || page.historyIndex >= page.history.length - 1) return;
-  const snap = page.history[++page.historyIndex];
-  page.imageData   = snap.imageData;
-  page.annotations = JSON.parse(JSON.stringify(snap.annotations));
-  page.imgFrame    = snap.imgFrame ? { ...snap.imgFrame } : null;
+  if (!page?.redoStack?.length) return;
+  page.historyIndex++;                     // keep undo pointer in sync
+  const snap = page.redoStack.pop();
+  tcpApplySnap(page, snap);
   tcpRenderEditor();
 }
 
@@ -6741,7 +6766,7 @@ function tcpUpdateHistoryBtns(page) {
   const undoBtn = document.getElementById('tcp-undo-btn');
   const redoBtn = document.getElementById('tcp-redo-btn');
   if (undoBtn) undoBtn.disabled = !page?.history?.length || page.historyIndex < 0;
-  if (redoBtn) redoBtn.disabled = !page?.history || page.historyIndex >= page.history.length - 1;
+  if (redoBtn) redoBtn.disabled = !page?.redoStack?.length;
 }
 
 /* ── imgFrame helpers ── */
@@ -6916,10 +6941,39 @@ function tcpSetupImgInteraction(page) {
   });
 }
 
+/* Bake the non-destructive crop into imageData before a destructive transform */
+async function tcpBakeCrop(page) {
+  const f = page.imgFrame;
+  if (!f) return;
+  if (f.ix === 0 && f.iy === 0 && f.fw === f.iw && f.fh === f.ih) return; // no crop applied
+  const img = await tcpLoadImgEl(page.imageData);
+  const scaleX = img.width  / f.iw;
+  const scaleY = img.height / f.ih;
+  const cropX = Math.round(-f.ix * scaleX);
+  const cropY = Math.round(-f.iy * scaleY);
+  const cropW = Math.round(f.fw  * scaleX);
+  const cropH = Math.round(f.fh  * scaleY);
+  const c = document.createElement('canvas');
+  c.width = cropW; c.height = cropH;
+  c.getContext('2d').drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+  page.imageData = c.toDataURL('image/jpeg', 0.92);
+  page.annotations = page.annotations
+    .map(a => ({
+      ...a,
+      x:      (a.x      / 100 * f.iw + f.ix) / f.fw * 100,
+      y:      (a.y      / 100 * f.ih + f.iy) / f.fh * 100,
+      labelX: a.labelX >= 0 ? (a.labelX / 100 * f.iw + f.ix) / f.fw * 100 : a.labelX,
+      labelY: a.labelY >= 0 ? (a.labelY / 100 * f.ih + f.iy) / f.fh * 100 : a.labelY,
+    }))
+    .filter(a => a.x >= 0 && a.x <= 100 && a.y >= 0 && a.y <= 100);
+  page.imgFrame = null;
+}
+
 async function tcpRotateImg(deg) {
   const page = _tcpActivePage;
   if (!page?.imageData) return;
   tcpPushHistory(page);
+  await tcpBakeCrop(page);
   const img = await tcpLoadImgEl(page.imageData);
   const sw = (deg % 180 !== 0) ? img.height : img.width;
   const sh = (deg % 180 !== 0) ? img.width  : img.height;
@@ -6948,6 +7002,7 @@ async function tcpFlipImg(axis) {
   const page = _tcpActivePage;
   if (!page?.imageData) return;
   tcpPushHistory(page);
+  await tcpBakeCrop(page);
   const img = await tcpLoadImgEl(page.imageData);
   const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
   const ctx = c.getContext('2d');
@@ -7101,9 +7156,24 @@ function tcpCompressImage(file) {
 async function tcpHandlePhoto(page, file) {
   if (!file || !file.type.startsWith('image/')) return;
   tcpPushHistory(page);
-  const data = await tcpCompressImage(file);
-  page.imageData = data;
-  page.imgFrame  = null;  // reset so it re-initializes centered
+  // Delete old SP image if present
+  if (page.imageData?.startsWith('sp:') && dbAdapter.isSharePointMode?.()) {
+    dbAdapter.deleteTcpImage(page.imageData.slice(3)).catch(() => {});
+  }
+  const dataUrl = await tcpCompressImage(file);
+  if (dbAdapter.isSharePointMode?.() && dbAdapter.isSignedIn?.()) {
+    try {
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      const spPath = await dbAdapter.uploadTcpImage(sgProjectId, _tcpCategory?.toLowerCase() || 'img', blob);
+      page.imageData = 'sp:' + spPath;
+    } catch (e) {
+      console.warn('[tcp] SP upload failed, falling back to base64', e);
+      page.imageData = dataUrl;
+    }
+  } else {
+    page.imageData = dataUrl;
+  }
+  page.imgFrame = null;
   tcpRenderEditor();
 }
 
@@ -7129,6 +7199,9 @@ function tcpSetupPhotoHandlers(page) {
       e.stopPropagation();
       if (!confirm('刪除此頁圖片？標記資料將一併清除。')) return;
       tcpPushHistory(page);
+      if (page.imageData?.startsWith('sp:') && dbAdapter.isSharePointMode?.()) {
+        dbAdapter.deleteTcpImage(page.imageData.slice(3)).catch(() => {});
+      }
       page.imageData = '';
       page.annotations = [];
       page.imgFrame = null;
@@ -7493,7 +7566,7 @@ function tcpStripTransient(tcPlacement) {
   for (const [cat, catData] of Object.entries(tcPlacement)) {
     out[cat] = {
       ...catData,
-      pages: (catData.pages || []).map(({ history, historyIndex, ...rest }) => rest)
+      pages: (catData.pages || []).map(({ history, historyIndex, redoStack, ...rest }) => rest)
     };
   }
   return out;
