@@ -7600,6 +7600,28 @@ function tcpStripTransient(tcPlacement) {
   return out;
 }
 
+/* Before saving, upload any in-memory base64 images to SP so the DB stays compact.
+   Large base64 payloads cause SharePoint CDN caching delays which fail the version
+   check in _writeFile and trigger a false ConflictError. */
+async function tcpNormalizeSPImages() {
+  if (!dbAdapter.isSharePointMode?.() || !dbAdapter.isSignedIn?.()) return;
+  const tcPlacement = sgProjectData?.tcPlacement;
+  if (!tcPlacement) return;
+  for (const [catKey, catData] of Object.entries(tcPlacement)) {
+    for (const page of catData.pages || []) {
+      if (page.imageData?.startsWith('data:image/')) {
+        try {
+          const blob = await fetch(page.imageData).then(r => r.blob());
+          const spPath = await dbAdapter.uploadTcpImage(sgProjectId, catKey, blob);
+          page.imageData = 'sp:' + spPath;
+        } catch(e) {
+          console.warn('[tcp] pre-save SP upload failed, keeping base64:', e);
+        }
+      }
+    }
+  }
+}
+
 async function sgSaveProjectComponents() {
   if (isProtected) {
     alert('請先解鎖密碼保護');
@@ -7618,6 +7640,9 @@ async function sgSaveProjectComponents() {
   status.className = 'save-status';
 
   try {
+    // Upload any base64 images to SP before writing DB (keeps JSON compact)
+    await tcpNormalizeSPImages();
+
     // Update project document
     await dbAdapter.updateDoc('projects', sgProjectId, {
       rf_data: sgProjectData.rf_data || [],
