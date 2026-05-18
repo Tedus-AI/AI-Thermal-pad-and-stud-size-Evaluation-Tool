@@ -7080,7 +7080,7 @@ function tcpCompressImage(file) {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const MAX_DIM = 2000, QUALITY = 0.85;
+        const MAX_DIM = 1000, QUALITY = 0.72;
         let w = img.width, h = img.height;
         if (w > MAX_DIM || h > MAX_DIM) {
           const scale = MAX_DIM / Math.max(w, h);
@@ -7487,6 +7487,18 @@ function railSave() {
   }
 }
 
+function tcpStripTransient(tcPlacement) {
+  if (!tcPlacement) return {};
+  const out = {};
+  for (const [cat, catData] of Object.entries(tcPlacement)) {
+    out[cat] = {
+      ...catData,
+      pages: (catData.pages || []).map(({ history, historyIndex, ...rest }) => rest)
+    };
+  }
+  return out;
+}
+
 async function sgSaveProjectComponents() {
   if (isProtected) {
     alert('請先解鎖密碼保護');
@@ -7516,7 +7528,7 @@ async function sgSaveProjectComponents() {
       param_duplex: sgProjectData.param_duplex || 'TDD 75%',
       param_backoff_rt: sgProjectData.param_backoff_rt || '',
       param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
-      tcPlacement: sgProjectData.tcPlacement || {}
+      tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
     });
 
     // Update library entries for each component
