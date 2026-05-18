@@ -1490,11 +1490,11 @@
   .tcp-marker-label:focus { border-color: var(--gm-primary, #1d4ed8); }
   .tcp-marker-del-btn {
     position: absolute; top: -2px; right: -2px;
-    width: 9px; height: 9px;
+    width: 17px; height: 17px;
     border-radius: 50%;
     background: #dc2626; color: #fff;
-    border: 1px solid #fff;
-    font-size: 6px; line-height: 1; font-weight: 700;
+    border: 1.5px solid #fff;
+    font-size: 11px; line-height: 1; font-weight: 700;
     cursor: pointer;
     display: none; align-items: center; justify-content: center;
     padding: 0;
@@ -6566,7 +6566,7 @@ function tcpRenderEditor() {
           ${hasPhoto
             ? `<div class="tcp-img-outer" id="tcp-img-outer" style="display:none">
                  <div class="tcp-img-frame" id="tcp-img-frame">
-                   <img src="${page.imageData}" alt="PCB layout" id="tcp-photo-img">
+                   <img src="" alt="PCB layout" id="tcp-photo-img">
                  </div>
                  <div class="tcp-rh" data-dir="nw"></div>
                  <div class="tcp-rh" data-dir="ne"></div>
@@ -6941,12 +6941,32 @@ function tcpSetupImgInteraction(page) {
   });
 }
 
+/* Resolve a sp: reference to a real URL (or return dataUrl unchanged) */
+async function tcpResolveSrc(imageData) {
+  if (imageData?.startsWith('sp:') && dbAdapter.isSharePointMode?.()) {
+    return await dbAdapter.getTcpImageSrc(imageData.slice(3)) || imageData;
+  }
+  return imageData;
+}
+
+/* Download an sp: image to base64 in-place; returns old spPath or null */
+async function tcpPreloadSpImage(page) {
+  if (!page.imageData?.startsWith('sp:')) return null;
+  const spPath = page.imageData.slice(3);
+  const url = await dbAdapter.getTcpImageSrc(spPath);
+  const blob = await fetch(url).then(r => r.blob());
+  page.imageData = await new Promise(res => {
+    const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob);
+  });
+  return spPath;
+}
+
 /* Bake the non-destructive crop into imageData before a destructive transform */
 async function tcpBakeCrop(page) {
   const f = page.imgFrame;
   if (!f) return;
   if (f.ix === 0 && f.iy === 0 && f.fw === f.iw && f.fh === f.ih) return; // no crop applied
-  const img = await tcpLoadImgEl(page.imageData);
+  const img = await tcpLoadImgEl(await tcpResolveSrc(page.imageData));
   const scaleX = img.width  / f.iw;
   const scaleY = img.height / f.ih;
   const cropX = Math.round(-f.ix * scaleX);
@@ -6972,6 +6992,10 @@ async function tcpBakeCrop(page) {
 async function tcpRotateImg(deg) {
   const page = _tcpActivePage;
   if (!page?.imageData) return;
+  // Download SP image to base64 first so canvas + history both work;
+  // spPath is returned so we can delete the file after a successful bake
+  let oldSp = null;
+  try { oldSp = await tcpPreloadSpImage(page); } catch(e) { console.warn('[tcp] SP pre-load failed:', e); return; }
   tcpPushHistory(page);
   await tcpBakeCrop(page);
   const img = await tcpLoadImgEl(page.imageData);
@@ -6983,6 +7007,7 @@ async function tcpRotateImg(deg) {
   ctx.rotate(deg * Math.PI / 180);
   ctx.drawImage(img, -img.width / 2, -img.height / 2);
   page.imageData = c.toDataURL('image/jpeg', 0.92);
+  if (oldSp) dbAdapter.deleteTcpImage(oldSp).catch(() => {});
   const isCW = (deg === 90 || deg === -270);
   page.annotations.forEach(a => {
     const ox = a.x, oy = a.y;
@@ -6994,13 +7019,15 @@ async function tcpRotateImg(deg) {
       else       { a.labelX = ly;        a.labelY = 100 - lx; }
     }
   });
-  page.imgFrame = null;  // re-center with new dimensions
+  page.imgFrame = null;
   tcpRenderEditor();
 }
 
 async function tcpFlipImg(axis) {
   const page = _tcpActivePage;
   if (!page?.imageData) return;
+  let oldSp = null;
+  try { oldSp = await tcpPreloadSpImage(page); } catch(e) { console.warn('[tcp] SP pre-load failed:', e); return; }
   tcpPushHistory(page);
   await tcpBakeCrop(page);
   const img = await tcpLoadImgEl(page.imageData);
@@ -7010,6 +7037,7 @@ async function tcpFlipImg(axis) {
   else              { ctx.translate(0, img.height); ctx.scale(1, -1); }
   ctx.drawImage(img, 0, 0);
   page.imageData = c.toDataURL('image/jpeg', 0.92);
+  if (oldSp) dbAdapter.deleteTcpImage(oldSp).catch(() => {});
   page.annotations.forEach(a => {
     if (axis === 'h') { a.x = 100 - a.x; if (a.labelX >= 0) a.labelX = 100 - a.labelX; }
     else              { a.y = 100 - a.y; if (a.labelY >= 0) a.labelY = 100 - a.labelY; }
