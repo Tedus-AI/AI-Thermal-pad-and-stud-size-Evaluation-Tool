@@ -1308,7 +1308,7 @@
     border-radius: 12px;
     box-shadow: var(--gm-shadow-lg, 0 24px 56px -16px rgba(15,23,42,0.22));
     width: 90vw;
-    height: 90vh;
+    height: 95vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1445,17 +1445,17 @@
   }
   .tcp-marker-dot {
     position: absolute;
-    width: 14px; height: 14px;
+    width: 3.5px; height: 3.5px;
     border-radius: 50%;
     background: #dc2626;
     transform: translate(-50%, -50%);
     cursor: grab; z-index: 15;
     user-select: none;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.85), 0 0 10px rgba(220,38,38,0.65);
+    box-shadow: 0 0 0 0.75px rgba(255,255,255,0.85), 0 0 2.5px rgba(220,38,38,0.65);
     transition: box-shadow 0.12s;
   }
-  .tcp-marker-dot:hover { box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 14px rgba(220,38,38,0.85); }
-  .tcp-marker-dot.dragging { cursor: grabbing; box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 18px rgba(220,38,38,1); }
+  .tcp-marker-dot:hover { box-shadow: 0 0 0 0.75px rgba(255,255,255,0.9), 0 0 3.5px rgba(220,38,38,0.85); }
+  .tcp-marker-dot.dragging { cursor: grabbing; box-shadow: 0 0 0 1px rgba(255,255,255,0.9), 0 0 4.5px rgba(220,38,38,1); }
   .tcp-marker-label-wrap {
     position: absolute; z-index: 20;
     display: flex; align-items: stretch;
@@ -1475,12 +1475,12 @@
   }
   .tcp-marker-label:focus { border-color: var(--gm-primary, #1d4ed8); }
   .tcp-marker-del-btn {
-    position: absolute; top: -8px; right: -8px;
-    width: 17px; height: 17px;
+    position: absolute; top: -2px; right: -2px;
+    width: 4.5px; height: 4.5px;
     border-radius: 50%;
     background: #dc2626; color: #fff;
-    border: 1.5px solid #fff;
-    font-size: 11px; line-height: 1; font-weight: 700;
+    border: 0.5px solid #fff;
+    font-size: 3px; line-height: 1; font-weight: 700;
     cursor: pointer;
     display: none; align-items: center; justify-content: center;
     padding: 0;
@@ -1608,6 +1608,32 @@
     opacity: 0.5;
     text-decoration: line-through;
   }
+
+  /* ── 圖片工具列 ── */
+  .tcp-img-toolbar { display:flex; gap:6px; align-items:center; padding:5px 10px; background:#f5f7fa; border-bottom:1px solid #dde3ec; flex-shrink:0; }
+  .tcp-img-toolbar button { padding:3px 9px; border:1px solid #bcc5d3; border-radius:4px; background:#fff; cursor:pointer; font-size:0.8rem; white-space:nowrap; }
+  .tcp-img-toolbar button:hover { background:#e8edf4; }
+  .tcp-toolbar-sep { width:1px; height:18px; background:#dde3ec; margin:0 2px; }
+
+  /* ── 裁切 overlay ── */
+  .tcp-crop-overlay { position:absolute; inset:0; z-index:25; }
+  .tcp-crop-shade { position:absolute; inset:0; background:rgba(0,0,0,0.45); pointer-events:none; }
+  .tcp-crop-box { position:absolute; border:2px solid #fff; cursor:move; }
+  .tcp-crop-box::before { content:''; position:absolute; inset:-2px; box-shadow:0 0 0 9999px rgba(0,0,0,0.45); pointer-events:none; }
+  .tcp-crop-handle { position:absolute; width:10px; height:10px; background:#fff; border:1px solid #555; border-radius:2px; }
+  .tcp-crop-handle[data-dir="nw"] { top:-5px; left:-5px; cursor:nw-resize; }
+  .tcp-crop-handle[data-dir="ne"] { top:-5px; right:-5px; cursor:ne-resize; }
+  .tcp-crop-handle[data-dir="sw"] { bottom:-5px; left:-5px; cursor:sw-resize; }
+  .tcp-crop-handle[data-dir="se"] { bottom:-5px; right:-5px; cursor:se-resize; }
+  .tcp-crop-edge { position:absolute; }
+  .tcp-crop-edge-t,.tcp-crop-edge-b { left:0; right:0; height:6px; cursor:ns-resize; }
+  .tcp-crop-edge-t { top:-3px; } .tcp-crop-edge-b { bottom:-3px; }
+  .tcp-crop-edge-l,.tcp-crop-edge-r { top:0; bottom:0; width:6px; cursor:ew-resize; }
+  .tcp-crop-edge-l { left:-3px; } .tcp-crop-edge-r { right:-3px; }
+  .tcp-crop-actions { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); display:flex; gap:8px; z-index:26; }
+  .tcp-crop-actions button { padding:5px 18px; border-radius:4px; border:none; cursor:pointer; font-size:0.85rem; font-weight:600; }
+  .tcp-crop-actions button:first-child { background:#dc2626; color:#fff; }
+  .tcp-crop-actions button:last-child { background:#fff; border:1px solid #bcc5d3; }
 
   .sg-comp-save-bar {
     display: flex;
@@ -6503,6 +6529,15 @@ function tcpRenderEditor() {
           <input class="tcp-title-input" id="tcp-title-input" type="text" value="${titleVal.replace(/"/g,'&quot;')}" placeholder="標題">
         </div>
         <div class="tcp-comp-bar" id="tcp-comp-bar"></div>
+        ${hasPhoto ? `<div class="tcp-img-toolbar" id="tcp-img-toolbar">
+          <button onclick="tcpRotateImg(-90)" title="逆時針旋轉 90°">↺ 左轉</button>
+          <button onclick="tcpRotateImg(90)"  title="順時針旋轉 90°">↻ 右轉</button>
+          <span class="tcp-toolbar-sep"></span>
+          <button onclick="tcpFlipImg('h')" title="水平翻轉">↔ 翻轉</button>
+          <button onclick="tcpFlipImg('v')" title="垂直翻轉">↕ 垂直翻</button>
+          <span class="tcp-toolbar-sep"></span>
+          <button onclick="tcpStartCrop()" title="裁切邊緣">✂ 裁切</button>
+        </div>` : ''}
         <div class="tcp-workspace-wrap" id="tcp-workspace">
           <div class="tcp-photo-zone${hasPhoto ? ' has-photo' : ''}" id="tcp-photo-zone">
             ${hasPhoto
@@ -6522,6 +6557,22 @@ function tcpRenderEditor() {
           <svg class="tcp-drag-svg" id="tcp-drag-svg" style="display:none">
             <line x1="0" y1="0" x2="0" y2="0"/>
           </svg>
+          <div class="tcp-crop-overlay" id="tcp-crop-overlay" style="display:none">
+            <div class="tcp-crop-box" id="tcp-crop-box">
+              <div class="tcp-crop-handle" data-dir="nw"></div>
+              <div class="tcp-crop-handle" data-dir="ne"></div>
+              <div class="tcp-crop-handle" data-dir="sw"></div>
+              <div class="tcp-crop-handle" data-dir="se"></div>
+              <div class="tcp-crop-edge tcp-crop-edge-t" data-dir="n"></div>
+              <div class="tcp-crop-edge tcp-crop-edge-b" data-dir="s"></div>
+              <div class="tcp-crop-edge tcp-crop-edge-l" data-dir="w"></div>
+              <div class="tcp-crop-edge tcp-crop-edge-r" data-dir="e"></div>
+            </div>
+            <div class="tcp-crop-actions">
+              <button onclick="tcpApplyCrop()">確認裁切</button>
+              <button onclick="tcpCancelCrop()">取消</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>`;
@@ -6600,6 +6651,157 @@ function tcpRefreshDropdowns() {
 }
 
 /* ── image compression ── */
+/* ── 圖片工具列：旋轉 / 翻轉 / 裁切 ── */
+
+function tcpLoadImgEl(src) {
+  return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.src = src; });
+}
+
+async function tcpRotateImg(deg) {
+  const page = _tcpActivePage;
+  if (!page?.imageData) return;
+  const img = await tcpLoadImgEl(page.imageData);
+  const sw = (deg % 180 !== 0) ? img.height : img.width;
+  const sh = (deg % 180 !== 0) ? img.width  : img.height;
+  const c = document.createElement('canvas'); c.width = sw; c.height = sh;
+  const ctx = c.getContext('2d');
+  ctx.translate(sw / 2, sh / 2);
+  ctx.rotate(deg * Math.PI / 180);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  page.imageData = c.toDataURL('image/jpeg', 0.92);
+  const isCW = (deg === 90 || deg === -270);
+  page.annotations.forEach(a => {
+    const ox = a.x, oy = a.y;
+    if (isCW)  { a.x = 100 - oy; a.y = ox; }
+    else       { a.x = oy;       a.y = 100 - ox; }
+    if (a.labelX >= 0) {
+      const lx = a.labelX, ly = a.labelY;
+      if (isCW)  { a.labelX = 100 - ly; a.labelY = lx; }
+      else       { a.labelX = ly;        a.labelY = 100 - lx; }
+    }
+  });
+  tcpRenderEditor();
+}
+
+async function tcpFlipImg(axis) {
+  const page = _tcpActivePage;
+  if (!page?.imageData) return;
+  const img = await tcpLoadImgEl(page.imageData);
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const ctx = c.getContext('2d');
+  if (axis === 'h') { ctx.translate(img.width, 0); ctx.scale(-1, 1); }
+  else              { ctx.translate(0, img.height); ctx.scale(1, -1); }
+  ctx.drawImage(img, 0, 0);
+  page.imageData = c.toDataURL('image/jpeg', 0.92);
+  page.annotations.forEach(a => {
+    if (axis === 'h') { a.x = 100 - a.x; if (a.labelX >= 0) a.labelX = 100 - a.labelX; }
+    else              { a.y = 100 - a.y; if (a.labelY >= 0) a.labelY = 100 - a.labelY; }
+  });
+  tcpRenderEditor();
+}
+
+function tcpStartCrop() {
+  const overlay = document.getElementById('tcp-crop-overlay');
+  const box     = document.getElementById('tcp-crop-box');
+  const wrap    = document.getElementById('tcp-workspace');
+  if (!overlay || !box || !wrap) return;
+  const { width: zw, height: zh } = wrap.getBoundingClientRect();
+  const inset = 0.1;
+  box.style.left   = Math.round(zw * inset) + 'px';
+  box.style.top    = Math.round(zh * inset) + 'px';
+  box.style.width  = Math.round(zw * (1 - 2 * inset)) + 'px';
+  box.style.height = Math.round(zh * (1 - 2 * inset)) + 'px';
+  overlay.style.display = 'block';
+  tcpSetupCropDrag(box, wrap);
+}
+
+function tcpCancelCrop() {
+  const overlay = document.getElementById('tcp-crop-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function tcpApplyCrop() {
+  const page = _tcpActivePage;
+  const box  = document.getElementById('tcp-crop-box');
+  const wrap = document.getElementById('tcp-workspace');
+  if (!page?.imageData || !box || !wrap) return;
+  const zr = wrap.getBoundingClientRect();
+  const br = box.getBoundingClientRect();
+  const x1 = Math.max(0, (br.left  - zr.left)  / zr.width  * 100);
+  const y1 = Math.max(0, (br.top   - zr.top)   / zr.height * 100);
+  const x2 = Math.min(100, (br.right  - zr.left)  / zr.width  * 100);
+  const y2 = Math.min(100, (br.bottom - zr.top)   / zr.height * 100);
+  if (x2 - x1 < 2 || y2 - y1 < 2) return; // 太小不裁
+  const img = await tcpLoadImgEl(page.imageData);
+  const sx = img.width  * (x1 / 100), sy = img.height * (y1 / 100);
+  const sw = img.width  * ((x2 - x1) / 100), sh = img.height * ((y2 - y1) / 100);
+  const c = document.createElement('canvas'); c.width = sw; c.height = sh;
+  c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  page.imageData = c.toDataURL('image/jpeg', 0.92);
+  page.annotations = page.annotations
+    .filter(a => a.x >= x1 && a.x <= x2 && a.y >= y1 && a.y <= y2)
+    .map(a => ({
+      ...a,
+      x: (a.x - x1) / (x2 - x1) * 100,
+      y: (a.y - y1) / (y2 - y1) * 100,
+      labelX: a.labelX >= 0 ? (a.labelX - x1) / (x2 - x1) * 100 : -1,
+      labelY: a.labelY >= 0 ? (a.labelY - y1) / (y2 - y1) * 100 : -1,
+    }));
+  tcpCancelCrop();
+  tcpRenderEditor();
+}
+
+function tcpSetupCropDrag(box, wrap) {
+  const MIN = 30;
+  let drag = null;
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function onDown(e) {
+    e.preventDefault(); e.stopPropagation();
+    const dir  = e.currentTarget.dataset.dir || 'move';
+    const wr   = wrap.getBoundingClientRect();
+    const bx   = parseInt(box.style.left), by = parseInt(box.style.top);
+    const bw   = parseInt(box.style.width), bh = parseInt(box.style.height);
+    drag = { dir, sx: e.clientX, sy: e.clientY, bx, by, bw, bh, wr };
+    box.setPointerCapture(e.pointerId);
+  }
+
+  function onMove(e) {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    const { dir, bx, by, bw, bh, wr } = drag;
+    let nl = bx, nt = by, nw = bw, nh = bh;
+    const maxW = wr.width, maxH = wr.height;
+    if (dir === 'move') {
+      nl = clamp(bx + dx, 0, maxW - bw);
+      nt = clamp(by + dy, 0, maxH - bh);
+    } else {
+      if (dir.includes('e')) { nw = clamp(bw + dx, MIN, maxW - bx); }
+      if (dir.includes('w')) { const d = clamp(dx, bx - maxW, bw - MIN); nl = bx + d; nw = bw - d; }
+      if (dir.includes('s')) { nh = clamp(bh + dy, MIN, maxH - by); }
+      if (dir.includes('n')) { const d = clamp(dy, by - maxH, bh - MIN); nt = by + d; nh = bh - d; }
+    }
+    box.style.left = nl + 'px'; box.style.top  = nt + 'px';
+    box.style.width = nw + 'px'; box.style.height = nh + 'px';
+  }
+
+  function onUp() { drag = null; }
+
+  // 方向控點
+  box.querySelectorAll('.tcp-crop-handle, .tcp-crop-edge').forEach(el => {
+    el.addEventListener('pointerdown', onDown);
+  });
+
+  // 框體拖移
+  box.addEventListener('pointerdown', e => {
+    if (e.target === box) { e.currentTarget.dataset.dir = 'move'; onDown(e); }
+  });
+
+  box.addEventListener('pointermove', onMove);
+  box.addEventListener('pointerup',   onUp);
+}
+
 function tcpCompressImage(file) {
   return new Promise((resolve) => {
     const reader = new FileReader();
