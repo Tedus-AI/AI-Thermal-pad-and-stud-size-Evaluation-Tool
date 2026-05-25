@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>SharePoint Lists - Phase 0.8 MSAL 驗證 v2</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; line-height: 1.5; }
+  h1 { color: #333; }
+  button { padding: 8px 16px; margin: 4px; font-size: 14px; cursor: pointer; border: 1px solid #888; background: #f5f5f5; border-radius: 4px; }
+  button:hover:not(:disabled) { background: #e5e5e5; }
+  button.primary { background: #0078d4; color: white; border-color: #0078d4; }
+  button.primary:hover:not(:disabled) { background: #106ebe; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow: auto; max-height: 400px; font-size: 12px; }
+  .ok { color: green; font-weight: bold; }
+  .err { color: red; font-weight: bold; }
+  .status-line { padding: 8px; margin: 4px 0; border-left: 4px solid #ccc; }
+  .status-line.ok { border-left-color: green; background: #e8f5e8; }
+  .status-line.err { border-left-color: red; background: #fde8e8; }
+  .status-line.warn { border-left-color: orange; background: #fff4e5; }
+  .meta { color: #666; font-size: 12px; }
+  #boot-status { padding: 12px; border-radius: 4px; margin-bottom: 16px; }
+  #boot-status.loading { background: #fff4e5; }
+  #boot-status.ok { background: #e8f5e8; }
+  #boot-status.err { background: #fde8e8; }
+</style>
+</head>
+<body>
+<h1>Phase 0.8：MSAL + Sites.ReadWrite.All 驗證</h1>
+
+<p class="meta">
+  目的：確認升級 scope 後，throwaway 頁可以用同樣 MSAL config 拿 token，並對 Feedback List 跑完整 CRUD。<br>
+  ⚠️ 這是測試頁，不要 commit 到 repo。驗證完直接刪除。
+</p>
+
+<div id="boot-status" class="loading">⏳ 正在載入 MSAL 函式庫...</div>
+
+<h3>Step 1：登入</h3>
+<button class="primary" id="btn-login" onclick="doLogin()" disabled>🔐 用 Tedus.Chen@deltaww.com 登入</button>
+<div id="login-status" class="status-line"></div>
+
+<h3>Step 2：拿 token（含 Sites.ReadWrite.All）</h3>
+<button id="btn-token" onclick="doGetToken()" disabled>🎫 取得 Access Token</button>
+<div id="token-status" class="status-line"></div>
+
+<h3>Step 3：CRUD 測試</h3>
+<button id="btn-create" onclick="doCreate()" disabled>➕ CREATE 一筆 test item</button>
+<button id="btn-read" onclick="doRead()" disabled>👀 READ 該筆</button>
+<button id="btn-patch" onclick="doPatch()" disabled>✏️ PATCH AdminNote</button>
+<button id="btn-delete" onclick="doDelete()" disabled>🗑️ DELETE</button>
+<div id="crud-status"></div>
+
+<h3>Output</h3>
+<pre id="output">（等待操作...）</pre>
+
+<script>
+// ============================================
+// 多 CDN fallback 載入 MSAL.js v3
+// ============================================
+const MSAL_CDN_URLS = [
+  'https://alcdn.msauth.net/browser/3.7.1/js/msal-browser.min.js',                       // Microsoft 官方
+  'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.7.1/lib/msal-browser.min.js',      // jsdelivr
+  'https://unpkg.com/@azure/msal-browser@3.7.1/lib/msal-browser.min.js'                  // unpkg
+];
+
+function loadMsalFromCdn(idx) {
+  return new Promise((resolve, reject) => {
+    if (idx >= MSAL_CDN_URLS.length) {
+      reject(new Error('所有 CDN 都失敗了'));
+      return;
+    }
+    const url = MSAL_CDN_URLS[idx];
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = function() {
+      console.log('[MSAL] 載入成功:', url);
+      resolve(url);
+    };
+    script.onerror = function() {
+      console.warn('[MSAL] 載入失敗，嘗試下一個 CDN:', url);
+      script.remove();
+      loadMsalFromCdn(idx + 1).then(resolve).catch(reject);
+    };
+    document.head.appendChild(script);
+  });
+}
+
+// ============================================
+// 配置（從你 config.js 複製）
+// ============================================
+const MSAL_CONFIG = {
+  auth: {
+    clientId: '17fc1ab4-0ab0-4520-9315-6faa86d9e8ec',
+    authority: 'https://login.microsoftonline.com/19f25823-17ff-421f-ad4e-8fed035aedda',
+    redirectUri: 'https://tedus-ai.github.io/AI-Thermal-pad-and-stud-size-Evaluation-Tool/'
+  },
+  cache: {
+    cacheLocation: 'sessionStorage',
+    storeAuthStateInCookie: false
+  }
+};
+
+const SCOPES = ['Files.ReadWrite.All', 'Sites.ReadWrite.All'];
+
+const SITE_ID = 'deltao365.sharepoint.com,7c5179cc-7bcc-42f3-928f-aeaaeb860787,f30d898c-bf60-4d5e-a6b3-306e3ea83cce';
+const LIST_ID = 'f916276f-d0ac-45fd-90f0-c9be2e7938e6';
+const URL_PREFIX = 'https://graph.microsoft.com/v1.0/sites/' + SITE_ID + '/lists/' + LIST_ID;
+
+// ============================================
+// State
+// ============================================
+let msalInstance = null;
+let accessToken = null;
+let testItemId = null;
+let testItemEtag = null;
+
+// ============================================
+// Helpers
+// ============================================
+function log(label, data) {
+  const out = document.getElementById('output');
+  const time = new Date().toLocaleTimeString();
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  out.textContent = '[' + time + '] ' + label + '\n' + dataStr + '\n\n' + out.textContent;
+}
+
+function statusMsg(id, ok, msg) {
+  const el = document.getElementById(id);
+  el.className = 'status-line ' + (ok ? 'ok' : 'err');
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+}
+
+async function callGraph(method, url, body, extraHeaders) {
+  if (!accessToken) throw new Error('No access token. 請先按 Step 2.');
+  const headers = Object.assign({
+    'Authorization': 'Bearer ' + accessToken,
+    'Content-Type': 'application/json'
+  }, extraHeaders || {});
+  const opts = { method: method, headers: headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch (e) { data = text; }
+  if (!res.ok) {
+    const err = new Error('HTTP ' + res.status);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return { data: data, status: res.status };
+}
+
+// ============================================
+// Boot sequence
+// ============================================
+(async function boot() {
+  const bootEl = document.getElementById('boot-status');
+  try {
+    const usedUrl = await loadMsalFromCdn(0);
+    bootEl.textContent = '⏳ MSAL 載入完成，正在初始化...';
+    
+    if (typeof msal === 'undefined') {
+      throw new Error('MSAL 載入後 global `msal` 仍未定義');
+    }
+    
+    msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+    
+    // MSAL v3 需要 explicit initialize
+    if (typeof msalInstance.initialize === 'function') {
+      await msalInstance.initialize();
+    }
+    
+    bootEl.className = 'ok';
+    bootEl.innerHTML = '✅ MSAL 初始化完成（CDN: ' + usedUrl + '）';
+    
+    document.getElementById('btn-login').disabled = false;
+    log('Boot OK', { cdn: usedUrl });
+  } catch (e) {
+    bootEl.className = 'err';
+    bootEl.innerHTML = '❌ MSAL 初始化失敗：' + e.message + '<br><span class="meta">請開瀏覽器 F12 → Console / Network tab 看細節</span>';
+    log('Boot Error', { error: e.message, stack: e.stack });
+  }
+})();
+
+// ============================================
+// Step 1: Login
+// ============================================
+async function doLogin() {
+  if (!msalInstance) {
+    statusMsg('login-status', false, 'MSAL 還沒初始化完成');
+    return;
+  }
+  try {
+    const result = await msalInstance.loginPopup({ scopes: SCOPES, prompt: 'select_account' });
+    const acct = result.account;
+    msalInstance.setActiveAccount(acct);
+    statusMsg('login-status', true, '已登入：' + acct.username + ' (' + (acct.name || '') + ')');
+    log('Login OK', { username: acct.username, tenantId: acct.tenantId });
+    document.getElementById('btn-token').disabled = false;
+  } catch (e) {
+    statusMsg('login-status', false, '登入失敗：' + e.message);
+    log('Login Error', { error: e.message, errorCode: e.errorCode, stack: e.stack });
+  }
+}
+
+// ============================================
+// Step 2: Get Token
+// ============================================
+async function doGetToken() {
+  try {
+    const acct = msalInstance.getActiveAccount();
+    if (!acct) throw new Error('尚未登入');
+    
+    let result;
+    try {
+      result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: acct });
+    } catch (silentErr) {
+      console.log('Silent token failed, fallback to popup', silentErr);
+      result = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
+    }
+    
+    accessToken = result.accessToken;
+    
+    // 直接從 MSAL 拿 scope（避免手解 JWT，因為 JWT 是 base64url 不是標準 base64）
+    const grantedScopes = result.scopes || [];
+    const hasSitesRW = grantedScopes.some(function(s) {
+      return s === 'Sites.ReadWrite.All' || s.endsWith('/Sites.ReadWrite.All');
+    });
+    
+    statusMsg('token-status', hasSitesRW, 
+      hasSitesRW 
+        ? 'Token 拿到，scope 包含 Sites.ReadWrite.All ✅' 
+        : 'Token 拿到，但 scope 沒看到 Sites.ReadWrite.All ❌ 取得的 scope: ' + grantedScopes.join(', '));
+    log('Token Acquired', { 
+      scopes: grantedScopes, 
+      expiresOn: result.expiresOn, 
+      tokenLength: accessToken.length,
+      account: result.account ? result.account.username : null
+    });
+    
+    if (hasSitesRW) {
+      document.getElementById('btn-create').disabled = false;
+    }
+  } catch (e) {
+    statusMsg('token-status', false, '取 Token 失敗：' + e.message);
+    log('Token Error', { error: e.message, errorCode: e.errorCode });
+  }
+}
+
+// ============================================
+// Step 3: CRUD
+// ============================================
+async function doCreate() {
+  try {
+    const now = new Date().toISOString();
+    const body = {
+      fields: {
+        Title: 'FB-PHASE08-TEST-' + Date.now(),
+        Type: 'Bug',
+        Tab: '整體工具',
+        FbTitle: 'Phase 0.8 驗證 - 可刪除',
+        Priority: '低',
+        Reporter: 'TEDUS.CHEN 陳慶峰',
+        Contact: 'Tedus.Chen@deltaww.com',
+        Description: '這是 Phase 0.8 throwaway 測試建立的 item，驗證完請刪除',
+        FbAttachments: '[]',
+        Status: '待處理',
+        CreatedAt: now,
+        UpdatedAt: now
+      }
+    };
+    const r = await callGraph('POST', URL_PREFIX + '/items', body);
+    testItemId = r.data.id;
+    testItemEtag = r.data['@odata.etag'];
+    statusMsg('crud-status', true, 'CREATE 成功，新 item id = ' + testItemId);
+    log('CREATE OK', r.data);
+    document.getElementById('btn-read').disabled = false;
+    document.getElementById('btn-patch').disabled = false;
+    document.getElementById('btn-delete').disabled = false;
+  } catch (e) {
+    statusMsg('crud-status', false, 'CREATE 失敗：' + e.message);
+    log('CREATE Error', e.data || e);
+  }
+}
+
+async function doRead() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE，先按 Create');
+    const r = await callGraph('GET', URL_PREFIX + '/items/' + testItemId + '?$expand=fields');
+    testItemEtag = r.data['@odata.etag'];
+    statusMsg('crud-status', true, 'READ 成功，FbTitle = ' + r.data.fields.FbTitle);
+    log('READ OK', r.data);
+  } catch (e) {
+    statusMsg('crud-status', false, 'READ 失敗：' + e.message);
+    log('READ Error', e.data || e);
+  }
+}
+
+async function doPatch() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE');
+    const body = { fields: { AdminNote: 'Phase 0.8 PATCH 測試 @ ' + new Date().toISOString() } };
+    const r = await callGraph('PATCH', URL_PREFIX + '/items/' + testItemId, body, {
+      'If-Match': testItemEtag
+    });
+    testItemEtag = r.data['@odata.etag'];
+    statusMsg('crud-status', true, 'PATCH 成功，etag 更新到 ' + testItemEtag);
+    log('PATCH OK', r.data);
+  } catch (e) {
+    statusMsg('crud-status', false, 'PATCH 失敗：' + e.message);
+    log('PATCH Error', e.data || e);
+  }
+}
+
+async function doDelete() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE');
+    if (!confirm('確定刪除 item ' + testItemId + '？')) return;
+    await callGraph('DELETE', URL_PREFIX + '/items/' + testItemId, null, {
+      'If-Match': testItemEtag
+    });
+    statusMsg('crud-status', true, 'DELETE 成功，item ' + testItemId + ' 已移除');
+    log('DELETE OK', { id: testItemId });
+    testItemId = null;
+    testItemEtag = null;
+    document.getElementById('btn-read').disabled = true;
+    document.getElementById('btn-patch').disabled = true;
+    document.getElementById('btn-delete').disabled = true;
+  } catch (e) {
+    statusMsg('crud-status', false, 'DELETE 失敗：' + e.message);
+    log('DELETE Error', e.data || e);
+  }
+}
+</script>
+</body>
+</html>
