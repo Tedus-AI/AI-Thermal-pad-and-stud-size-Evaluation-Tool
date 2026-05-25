@@ -6,7 +6,7 @@ const SHAREPOINT_CONFIG = {
   tenantId: '19f25823-17ff-421f-ad4e-8fed035aedda',
   authority: 'https://login.microsoftonline.com/19f25823-17ff-421f-ad4e-8fed035aedda',
   redirectUri: 'https://tedus-ai.github.io/AI-Thermal-pad-and-stud-size-Evaluation-Tool/',
-  scopes: ['Files.ReadWrite.All', 'Sites.Read.All'],
+  scopes: ['Files.ReadWrite.All', 'Sites.Read.All', 'Sites.ReadWrite.All'],
   siteHostname: 'deltao365.sharepoint.com',
   sitePath: '/sites/Thermal-Spec-DB',
   filePath: '/ToolDatabase/thermal_db.json',
