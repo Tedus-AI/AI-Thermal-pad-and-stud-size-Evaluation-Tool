@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>SharePoint Lists - Phase 0.8 MSAL 驗證</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; line-height: 1.5; }
+  h1 { color: #333; }
+  button { padding: 8px 16px; margin: 4px; font-size: 14px; cursor: pointer; border: 1px solid #888; background: #f5f5f5; border-radius: 4px; }
+  button:hover { background: #e5e5e5; }
+  button.primary { background: #0078d4; color: white; border-color: #0078d4; }
+  button.primary:hover { background: #106ebe; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 4px; overflow: auto; max-height: 400px; font-size: 12px; }
+  .ok { color: green; font-weight: bold; }
+  .err { color: red; font-weight: bold; }
+  .status-line { padding: 8px; margin: 4px 0; border-left: 4px solid #ccc; }
+  .status-line.ok { border-left-color: green; background: #e8f5e8; }
+  .status-line.err { border-left-color: red; background: #fde8e8; }
+  .meta { color: #666; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Phase 0.8：MSAL + Sites.ReadWrite.All 驗證</h1>
+
+<p class="meta">
+  目的：確認升級 scope 後，throwaway 頁可以用同樣 MSAL config 拿 token，並對 Feedback List 跑完整 CRUD。<br>
+  ⚠️ 這是測試頁，不要 commit 到 repo。驗證完直接刪除。
+</p>
+
+<h3>Step 1：登入</h3>
+<button class="primary" onclick="doLogin()">🔐 用 Tedus.Chen@deltaww.com 登入</button>
+<div id="login-status" class="status-line"></div>
+
+<h3>Step 2：拿 token（含 Sites.ReadWrite.All）</h3>
+<button onclick="doGetToken()">🎫 取得 Access Token</button>
+<div id="token-status" class="status-line"></div>
+
+<h3>Step 3：CRUD 測試</h3>
+<button onclick="doCreate()">➕ CREATE 一筆 test item</button>
+<button onclick="doRead()">👀 READ 該筆</button>
+<button onclick="doPatch()">✏️ PATCH AdminNote</button>
+<button onclick="doDelete()">🗑️ DELETE</button>
+<div id="crud-status"></div>
+
+<h3>Output</h3>
+<pre id="output">（等待操作...）</pre>
+
+<script>
+// ============================================
+// Phase 0.8 驗證配置（從你 config.js 複製）
+// ============================================
+const MSAL_CONFIG = {
+  auth: {
+    clientId: '17fc1ab4-0ab0-4520-9315-6faa86d9e8ec',
+    authority: 'https://login.microsoftonline.com/19f25823-17ff-421f-ad4e-8fed035aedda',
+    redirectUri: 'https://tedus-ai.github.io/AI-Thermal-pad-and-stud-size-Evaluation-Tool/',
+  },
+  cache: {
+    cacheLocation: 'sessionStorage',
+    storeAuthStateInCookie: false,
+  }
+};
+
+const SCOPES = ['Files.ReadWrite.All', 'Sites.ReadWrite.All'];
+
+const SITE_ID = 'deltao365.sharepoint.com,7c5179cc-7bcc-42f3-928f-aeaaeb860787,f30d898c-bf60-4d5e-a6b3-306e3ea83cce';
+const LIST_ID = 'f916276f-d0ac-45fd-90f0-c9be2e7938e6';
+const URL_PREFIX = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/lists/${LIST_ID}`;
+
+// ============================================
+// State
+// ============================================
+const msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+let accessToken = null;
+let testItemId = null;
+let testItemEtag = null;
+
+// ============================================
+// Helpers
+// ============================================
+function log(label, data) {
+  const out = document.getElementById('output');
+  const time = new Date().toLocaleTimeString();
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  out.textContent = `[${time}] ${label}\n${dataStr}\n\n` + out.textContent;
+}
+
+function status(id, ok, msg) {
+  const el = document.getElementById(id);
+  el.className = 'status-line ' + (ok ? 'ok' : 'err');
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+}
+
+async function callGraph(method, url, body, extraHeaders) {
+  if (!accessToken) throw new Error('No access token. 請先按 Step 2.');
+  const headers = {
+    'Authorization': 'Bearer ' + accessToken,
+    'Content-Type': 'application/json',
+    ...(extraHeaders || {})
+  };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = text; }
+  if (!res.ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  // 拿 etag 從 header
+  const etag = res.headers.get('ETag');
+  return { data, etag, status: res.status };
+}
+
+// ============================================
+// Step 1: Login
+// ============================================
+async function doLogin() {
+  try {
+    await msalInstance.initialize();
+    const result = await msalInstance.loginPopup({ scopes: SCOPES, prompt: 'select_account' });
+    const acct = result.account;
+    msalInstance.setActiveAccount(acct);
+    status('login-status', true, `已登入：${acct.username} (${acct.name || ''})`);
+    log('Login OK', { username: acct.username, tenantId: acct.tenantId });
+  } catch (e) {
+    status('login-status', false, '登入失敗：' + e.message);
+    log('Login Error', e);
+  }
+}
+
+// ============================================
+// Step 2: Get Token
+// ============================================
+async function doGetToken() {
+  try {
+    const acct = msalInstance.getActiveAccount();
+    if (!acct) throw new Error('尚未登入');
+    
+    let result;
+    try {
+      result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: acct });
+    } catch (silentErr) {
+      // 若需要互動 consent 會跳出（如果 admin consent 完成這通常不會發生）
+      result = await msalInstance.acquireTokenPopup({ scopes: SCOPES });
+    }
+    
+    accessToken = result.accessToken;
+    
+    // 解析 JWT 看 scope
+    const payload = JSON.parse(atob(accessToken.split('.')[1]));
+    const scp = payload.scp || '';
+    const hasSitesRW = scp.includes('Sites.ReadWrite.All');
+    
+    status('token-status', hasSitesRW, 
+      hasSitesRW 
+        ? `Token 拿到，scope 包含 Sites.ReadWrite.All ✅` 
+        : `Token 拿到，但 scope 沒看到 Sites.ReadWrite.All ❌ scope = ${scp}`);
+    log('Token Acquired', { scopes: scp, expiresOn: result.expiresOn, audience: payload.aud });
+  } catch (e) {
+    status('token-status', false, '取 Token 失敗：' + e.message);
+    log('Token Error', e);
+  }
+}
+
+// ============================================
+// Step 3: CRUD
+// ============================================
+async function doCreate() {
+  try {
+    const now = new Date().toISOString();
+    const body = {
+      fields: {
+        Title: 'FB-PHASE08-TEST-' + Date.now(),
+        Type: 'Bug',
+        Tab: '整體工具',
+        FbTitle: 'Phase 0.8 驗證 - 可刪除',
+        Priority: '低',
+        Reporter: 'TEDUS.CHEN 陳慶峰',
+        Contact: 'Tedus.Chen@deltaww.com',
+        Description: '這是 Phase 0.8 throwaway 測試建立的 item，驗證完請刪除',
+        FbAttachments: '[]',
+        Status: '待處理',
+        CreatedAt: now,
+        UpdatedAt: now
+      }
+    };
+    const { data } = await callGraph('POST', `${URL_PREFIX}/items`, body);
+    testItemId = data.id;
+    testItemEtag = data['@odata.etag'];
+    status('crud-status', true, `CREATE 成功，新 item id = ${testItemId}`);
+    log('CREATE OK', data);
+  } catch (e) {
+    status('crud-status', false, 'CREATE 失敗：' + e.message);
+    log('CREATE Error', e.data || e);
+  }
+}
+
+async function doRead() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE，先按 Create');
+    const { data } = await callGraph('GET', `${URL_PREFIX}/items/${testItemId}?$expand=fields`);
+    testItemEtag = data['@odata.etag'];
+    status('crud-status', true, `READ 成功，FbTitle = ${data.fields.FbTitle}`);
+    log('READ OK', data);
+  } catch (e) {
+    status('crud-status', false, 'READ 失敗：' + e.message);
+    log('READ Error', e.data || e);
+  }
+}
+
+async function doPatch() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE');
+    const body = { fields: { AdminNote: 'Phase 0.8 PATCH 測試 @ ' + new Date().toISOString() } };
+    const { data } = await callGraph('PATCH', `${URL_PREFIX}/items/${testItemId}`, body, {
+      'If-Match': testItemEtag
+    });
+    testItemEtag = data['@odata.etag'];
+    status('crud-status', true, `PATCH 成功，etag 更新到 ${testItemEtag}`);
+    log('PATCH OK', data);
+  } catch (e) {
+    status('crud-status', false, 'PATCH 失敗：' + e.message);
+    log('PATCH Error', e.data || e);
+  }
+}
+
+async function doDelete() {
+  try {
+    if (!testItemId) throw new Error('還沒 CREATE');
+    if (!confirm(`確定刪除 item ${testItemId}？`)) return;
+    await callGraph('DELETE', `${URL_PREFIX}/items/${testItemId}`, null, {
+      'If-Match': testItemEtag
+    });
+    status('crud-status', true, `DELETE 成功，item ${testItemId} 已移除`);
+    log('DELETE OK', { id: testItemId });
+    testItemId = null;
+    testItemEtag = null;
+  } catch (e) {
+    status('crud-status', false, 'DELETE 失敗：' + e.message);
+    log('DELETE Error', e.data || e);
+  }
+}
+</script>
+</body>
+</html>
