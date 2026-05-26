@@ -17,35 +17,60 @@ const _primary = ()   => window.FEATURE_FLAGS?.PRIMARY_FEEDBACK ?? 'json';
 
 /* shadow-write helpers（非阻擋；失敗只 log，不影響主流程）*/
 function _shadowAdd(docId, data) {
-  graphListsDb.feedback.add({ ...data, id: docId })
-    .then(() => _logFb({ id: docId, op: 'add', ok: true }))
-    .catch(e => {
-      console.warn('[dual-write] List.add failed:', e);
-      _logFb({ id: docId, op: 'add', ok: false, error: e.message });
-    });
+  if (typeof graphListsDb === 'undefined') {
+    console.warn('[dual-write] graphListsDb 未載入，略過 shadow add');
+    _logFb({ id: docId, op: 'add', ok: false, error: 'graphListsDb not loaded' });
+    return;
+  }
+  try {
+    graphListsDb.feedback.add({ ...data, id: docId })
+      .then(() => _logFb({ id: docId, op: 'add', ok: true }))
+      .catch(e => {
+        console.warn('[dual-write] List.add failed:', e);
+        _logFb({ id: docId, op: 'add', ok: false, error: e.message });
+      });
+  } catch (e) {
+    console.warn('[dual-write] _shadowAdd sync error:', e);
+    _logFb({ id: docId, op: 'add', ok: false, error: e.message });
+  }
 }
 
 function _shadowUpdate(docId, fields) {
-  // 需要先查 spItemId（Title filter），再 PATCH；非阻擋
-  graphListsDb.feedback.list({ Title: docId })
-    .then(items => {
-      if (!items.length) return;
-      return graphListsDb.feedback.update(items[0].spItemId, fields, items[0].etag);
-    })
-    .then(() => _logFb({ id: docId, op: 'update', ok: true }))
-    .catch(e => {
-      console.warn('[dual-write] List.update failed:', e);
-      _logFb({ id: docId, op: 'update', ok: false, error: e.message });
-    });
+  if (typeof graphListsDb === 'undefined') {
+    console.warn('[dual-write] graphListsDb 未載入，略過 shadow update');
+    return;
+  }
+  try {
+    graphListsDb.feedback.list({ Title: docId })
+      .then(items => {
+        if (!items.length) return;
+        return graphListsDb.feedback.update(items[0].spItemId, fields, items[0].etag);
+      })
+      .then(() => _logFb({ id: docId, op: 'update', ok: true }))
+      .catch(e => {
+        console.warn('[dual-write] List.update failed:', e);
+        _logFb({ id: docId, op: 'update', ok: false, error: e.message });
+      });
+  } catch (e) {
+    console.warn('[dual-write] _shadowUpdate sync error:', e);
+  }
 }
 
 function _shadowDelete(docId) {
-  graphListsDb.feedback.list({ Title: docId })
-    .then(items => {
-      if (!items.length) return;
-      return graphListsDb.feedback.delete(items[0].spItemId, items[0].etag);
-    })
-    .catch(e => console.warn('[dual-write] List.delete failed:', e));
+  if (typeof graphListsDb === 'undefined') {
+    console.warn('[dual-write] graphListsDb 未載入，略過 shadow delete');
+    return;
+  }
+  try {
+    graphListsDb.feedback.list({ Title: docId })
+      .then(items => {
+        if (!items.length) return;
+        return graphListsDb.feedback.delete(items[0].spItemId, items[0].etag);
+      })
+      .catch(e => console.warn('[dual-write] List.delete failed:', e));
+  } catch (e) {
+    console.warn('[dual-write] _shadowDelete sync error:', e);
+  }
 }
 
 const dbAdapter = {
