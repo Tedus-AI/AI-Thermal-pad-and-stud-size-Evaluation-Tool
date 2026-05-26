@@ -15,3 +15,16 @@ const SHAREPOINT_CONFIG = {
 
 window.DB_MODE = DB_MODE;
 window.SHAREPOINT_CONFIG = SHAREPOINT_CONFIG;
+
+/* ── Feature Flags（Phase 2+ dual-write 控制）─────────────────────
+ * 預設全 false / 'json'，行為與改動前完全一致。
+ * 切換方式：在 browser console 輸入：
+ *   window.FEATURE_FLAGS.DUAL_WRITE_FEEDBACK = true
+ * 回退方式：
+ *   window.FEATURE_FLAGS.DUAL_WRITE_FEEDBACK = false
+ */
+window.FEATURE_FLAGS = {
+  DUAL_WRITE_FEEDBACK: false,   // 寫 feedback_items 時同步 shadow-write 到 List
+  SHOW_DEV_PANEL:      false,   // 顯示開發者驗證區（維護者用）
+  PRIMARY_FEEDBACK:    'json',  // 'json' | 'list'，控制 feedback 讀取來源（Phase 4+）
+};

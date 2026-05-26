@@ -1,5 +1,53 @@
 // DB_MODE is defined in config.js (loaded before this file)
 
+/* ── dual-write 私有 helpers ──────────────────────────────────────
+ * 只在 dbAdapter 內部使用，不 expose 到外部。
+ * 僅對 feedback_items collection 生效；其他 collection 完全不走這裡。
+ */
+const _fbLog = [];   // 最近 20 筆 dual-write 結果
+
+function _logFb(entry) {
+  _fbLog.unshift({ ts: Date.now(), ...entry });
+  if (_fbLog.length > 20) _fbLog.pop();
+}
+
+const _isFb    = col  => col === 'feedback_items';
+const _dualOn  = ()   => !!(window.FEATURE_FLAGS?.DUAL_WRITE_FEEDBACK);
+const _primary = ()   => window.FEATURE_FLAGS?.PRIMARY_FEEDBACK ?? 'json';
+
+/* shadow-write helpers（非阻擋；失敗只 log，不影響主流程）*/
+function _shadowAdd(docId, data) {
+  graphListsDb.feedback.add({ ...data, id: docId })
+    .then(() => _logFb({ id: docId, op: 'add', ok: true }))
+    .catch(e => {
+      console.warn('[dual-write] List.add failed:', e);
+      _logFb({ id: docId, op: 'add', ok: false, error: e.message });
+    });
+}
+
+function _shadowUpdate(docId, fields) {
+  // 需要先查 spItemId（Title filter），再 PATCH；非阻擋
+  graphListsDb.feedback.list({ Title: docId })
+    .then(items => {
+      if (!items.length) return;
+      return graphListsDb.feedback.update(items[0].spItemId, fields, items[0].etag);
+    })
+    .then(() => _logFb({ id: docId, op: 'update', ok: true }))
+    .catch(e => {
+      console.warn('[dual-write] List.update failed:', e);
+      _logFb({ id: docId, op: 'update', ok: false, error: e.message });
+    });
+}
+
+function _shadowDelete(docId) {
+  graphListsDb.feedback.list({ Title: docId })
+    .then(items => {
+      if (!items.length) return;
+      return graphListsDb.feedback.delete(items[0].spItemId, items[0].etag);
+    })
+    .catch(e => console.warn('[dual-write] List.delete failed:', e));
+}
+
 const dbAdapter = {
   _backend() {
     return DB_MODE === 'sharepoint' ? graphDb : fileDb;
@@ -44,23 +92,41 @@ const dbAdapter = {
   },
 
   async getCollection(colName) {
+    // Phase 4+：PRIMARY_FEEDBACK='list' 時從 List 讀；現在預設 'json' 不走這裡
+    if (_isFb(colName) && _primary() === 'list') {
+      const items = await graphListsDb.feedback.list();
+      const result = {};
+      for (const it of items) {
+        if (it.data?.id) result[it.data.id] = it.data;
+      }
+      return result;
+    }
     return await this._backend().getCollection(colName);
   },
 
   async getDoc(colName, docId) {
+    // Phase 4+：PRIMARY_FEEDBACK='list' 時從 List 讀
+    if (_isFb(colName) && _primary() === 'list') {
+      const items = await graphListsDb.feedback.list({ Title: docId });
+      return items.length ? items[0].data : null;
+    }
     return await this._backend().getDoc(colName, docId);
   },
 
   async setDoc(colName, docId, data) {
-    return await this._backend().setDoc(colName, docId, data);
+    await this._backend().setDoc(colName, docId, data);
+    // Phase 2+：DUAL_WRITE_FEEDBACK=true 時 shadow-write 到 List
+    if (_isFb(colName) && _dualOn()) _shadowAdd(docId, data);
   },
 
   async updateDoc(colName, docId, fields) {
-    return await this._backend().updateDoc(colName, docId, fields);
+    await this._backend().updateDoc(colName, docId, fields);
+    if (_isFb(colName) && _dualOn()) _shadowUpdate(docId, fields);
   },
 
   async deleteDoc(colName, docId) {
-    return await this._backend().deleteDoc(colName, docId);
+    await this._backend().deleteDoc(colName, docId);
+    if (_isFb(colName) && _dualOn()) _shadowDelete(docId);
   },
 
   async getProjectsSorted() {
@@ -137,6 +203,11 @@ const dbAdapter = {
   async deleteTcpImage(spPath) {
     if (DB_MODE !== 'sharepoint') return;
     return await graphDb.deleteTcpImage(spPath);
+  },
+
+  /* ─── dual-write log（Phase 2 dev panel 用）──────────────────── */
+  getDualWriteLog() {
+    return _fbLog.slice();   // 回傳 copy，不讓外部直接改
   }
 };
 
