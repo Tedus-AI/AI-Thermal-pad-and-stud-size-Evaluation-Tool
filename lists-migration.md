@@ -55,7 +55,7 @@
   - ✅ graphListsDb 未載入時 dbAdapter 不崩潰
   - ✅ DUAL_WRITE_FEEDBACK=true → JSON 寫入成功（primary write 不受 shadow 影響）
   - ✅ DUAL_WRITE_FEEDBACK=true → SharePoint List 同步寫入（dual-write 真的雙寫）
-- [ ] **Milestone 4**：Phase 1 收尾文件 + Phase 2 啟動條件確認
+- [x] **Milestone 4**：Phase 1 收尾文件 + Full smoke test 報告（12 項驗證點全綠）+ Phase 2 啟動條件確認（2026-05-26 完成）
 
 ---
 

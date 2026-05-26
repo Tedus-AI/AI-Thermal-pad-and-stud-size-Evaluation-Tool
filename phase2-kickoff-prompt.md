@@ -53,7 +53,7 @@
   - 修改 `fbSubmitFeedback()` 加 dual-write 邏輯
   - 加開發者驗證區 HTML + CSS
   - 加 `fbCompareWithList()` / `fbShowDualWriteLog()` / `fbForceListPush()` 三個 function
-  - 修改 `fbOnTabActivate()` 在啟動時根據 SHOW_DEV_PANEL flag 顯示驗證區（不動 `switchTab()`）
+  - 修改 `fbOnTabActivate()` 在 feedback tab 啟用時根據 SHOW_DEV_PANEL flag 顯示驗證區（**不是 switchTab()，那是全 app 共用 tab switcher**）
 - 修改 `config.js`：保持 flags 結構，但 default 仍全 false
 - 修改 `dbAdapter.js`：完善 dual-write 路由邏輯（如果 Phase 1 還沒完整）
 
@@ -69,17 +69,18 @@
 ### Milestone 2.1：透明 dual-write 寫入端 ✅（PR #113 已 merge）
 
 **內容**：
-- `index.html` 加 `<script src="graphListsDb.js"></script>`（插在 `graphDb.js` 之後、`dbAdapter.js` 之前）
-
-**實作說明**（已決策，勿重複討論）：
-- `fbSubmitFeedback()` **不需修改**：shadow write 已在 Phase 1 M3 的 `dbAdapter.setDoc()` 內實作（fire-and-forget，flag=false 時完全不執行）
-- **不在 index.html 另立 `_dualWriteLog`**：`dbAdapter.js` 已有 `_fbLog` 陣列（最近 20 筆）+ `getDualWriteLog()` public method，Milestone 2.3 直接呼叫 `dbAdapter.getDualWriteLog()`
-- bail-out 確認：`dbAdapter._shadowAdd/Update/Delete` 三個 helper 都有 `typeof graphListsDb === 'undefined'` guard，graphListsDb 未載入時 silent bail-out，不噴 ReferenceError
+- `index.html` 加 `<script src="graphListsDb.js"></script>`（插在 `graphDb.js` 之後、`dbAdapter.js` 之前）✅
+- 確認 `fbSubmitFeedback()` → `fbSaveItem()` → `dbAdapter.setDoc()` 這條路徑跟 Phase 1 M3 已實作的 shadow-write 路由正確銜接
+  - Phase 1 M3 在 `dbAdapter.setDoc('feedback_items', ...)` 內部已實作 fire-and-forget shadow write + `_fbLog` 記錄
+  - **不要在 `fbSubmitFeedback()` 重複加 shadow write 邏輯**
+  - **不要在 index.html 另立 `_dualWriteLog`**，Milestone 2.3 的 `fbShowDualWriteLog()` 直接讀 `dbAdapter.getDualWriteLog()`
+- 確認 `graphListsDb.js` 沒載入時 `dbAdapter._shadowAdd()` 會 silently bail out（無 ReferenceError）✅
 
 **Review 點**：
 - flag 仍 default false，使用者完全無感 ✅
-- graphListsDb.js 載入後，flag 開啟即可 shadow write ✅
-- graphListsDb.js 未載入時 dbAdapter bail-out 不崩潰 ✅
+- flag 開啟測試時，JSON 寫入失敗等於整個操作失敗（既有行為）
+- flag 開啟測試時，List 寫入失敗不影響使用者，但記到 `_fbLog`
+- 不存在「shadow write 改成 await 同步等待」的需求（fire-and-forget 是設計選擇，避免 List throttle 拖慢使用者）
 
 ### Milestone 2.2：開發者驗證區 UI
 
@@ -102,9 +103,11 @@
 
 **內容**：
 - **`fbCompareWithList()`**：當下開啟某筆 feedback 詳情時觸發
-  - 讀取 `window._currentFbItemId`（由 `fbShowDetail()` 設入，`fbCloseDetail()` 清空）
-  - 從 JSON 拿該筆（透過 `dbAdapter.getDoc('feedback_items', currentId)`）
-  - 從 List 拿該筆：`graphListsDb.feedback.list({ Title: currentId })` 取 `[0]`（**不加 `findByFeedbackId` method**，`Title` 已建索引）；`results.length === 0` 時顯示「List 尚無此筆」
+  - 從 `window._currentFbItemId` 取得當下開啟的 feedback id（`fbShowDetail()` 設入，`fbCloseDetail()` 清空）
+  - 從 JSON 拿該筆：透過 `dbAdapter.getDoc('feedback_items', id)`
+  - 從 List 拿該筆：用 `graphListsDb.feedback.list({ Title: id })` + 取 `[0]`（Title 已 indexed，效能 OK；**不加 `findByFeedbackId` method**）
+  - 處理「List 找不到該筆」的情況（提示「可能還沒 dual-write 過」）
+  - 用 `graphListsDb.fromListFields()` 還原成 JSON 形狀後再 diff
   - 並排顯示 + diff 視覺化（三種狀態：✅完全一致 / ⚠️已知lossy / ❌真diff）
   
 - **`fbShowDualWriteLog()`**：呼叫 `dbAdapter.getDualWriteLog()` 取最近 20 筆，顯示 timestamp + id + ok/fail + error msg（**不讀 `_dualWriteLog`，直接讀 dbAdapter 的 `_fbLog`**）
