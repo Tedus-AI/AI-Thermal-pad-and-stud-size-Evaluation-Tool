@@ -128,12 +128,14 @@
 
     const resp = await fetch(url, opts);
 
-    if (resp.status === 412) {
+    // SharePoint 對格式正確但過時的 etag 回 412；對完全無效的 etag 字串回 409
+    // 兩者都視為並行衝突，throw ConflictError
+    if (resp.status === 412 || resp.status === 409) {
       let code = 'resourceModified';
       try { code = (await resp.json()).error?.code ?? code; } catch {}
       const e = new ConflictError('資料已被他人更新，請重新整理後再試');
       e.code   = code;
-      e.status = 412;
+      e.status = resp.status;
       throw e;
     }
 
