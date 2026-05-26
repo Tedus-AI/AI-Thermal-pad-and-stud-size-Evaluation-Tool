@@ -45,6 +45,9 @@
    * - dateTime 空字串 → null（SharePoint 不接受空字串 dateTime）
    * - 其他空字串保留（text/note 欄位接受空字串）
    * - dateTime 含毫秒直接寫入，SharePoint 自動截斷（lossy，已知）
+   * ⚠️  caller 責任：item 必須包含 id 欄位（FeedbackId，如 'FB-...'）
+   *    feedback_items[docId] 的 inner object 沒有 id，呼叫前要補：
+   *    toListFields({ ...item, id: docId })
    */
   function toListFields(jsonItem) {
     const out = {};
@@ -71,6 +74,11 @@
    * - 回傳物件含 id 欄位（對應 Title）方便 caller 識別
    */
   function fromListFields(f) {
+    if (!f.Title) {
+      // Title（FeedbackId）遺失時資料會無聲 corrupt，提早警告
+      console.warn('[fromListFields] item 缺少 Title (FeedbackId)，id 將為空字串');
+    }
+
     let attachments = [];
     try {
       if (f.FbAttachments) attachments = JSON.parse(f.FbAttachments);
@@ -412,13 +420,14 @@
               hasTrueDiff = true;
             }
           } else if (k === 'attachments') {
-            // attachments 比 JSON string
-            const origJ = JSON.stringify(orig ?? []);
-            const backJ = JSON.stringify(back ?? []);
-            if (origJ === backJ) {
+            // attachments：orig 可能是 undefined（JSON inner object 無此 key）
+            // fromListFields 一律回 []，所以 undefined/null/[] 都視為「空附件」一致
+            const origArr = Array.isArray(orig) ? orig : [];
+            const backArr = Array.isArray(back) ? back : [];
+            if (JSON.stringify(origArr) === JSON.stringify(backArr)) {
               // ok
             } else {
-              console.error(`  ❌ ${k}: attachments diff  orig=${origJ}  rt=${backJ}`);
+              console.error(`  ❌ ${k}: attachments diff  orig=${JSON.stringify(origArr)}  rt=${JSON.stringify(backArr)}`);
               hasTrueDiff = true;
             }
           } else {
