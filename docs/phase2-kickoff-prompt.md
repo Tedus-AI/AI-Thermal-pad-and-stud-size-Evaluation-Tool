@@ -24,7 +24,7 @@
 5. **`index.html`** ← 重點：
    - `fbSubmitFeedback()` 函式（在 8481 行附近）
    - Tab5 feedback 區塊的 HTML 結構
-   - `fbSwitchTab()` 函式（切到 Tab5 時的 hook 點）
+   - `fbOnTabActivate()` 函式（切到 Tab5 時的 hook 點，**不是** `switchTab()`/`fbSwitchTab()`）
 
 讀完之後 STOP，跟我說「文件讀完了，準備進入 Phase 2 實作」，**不要直接開始寫 code**。
 
@@ -91,7 +91,7 @@
   - 📝 dual-write log（最近 20 筆）
   - ⬆️ 強制 push 所有 JSON 到 List
 - 一個 `<div id="fb-dev-output">` 結果展示區
-- `fbSwitchTab()` 切到 Tab5 時根據 `FEATURE_FLAGS.SHOW_DEV_PANEL` 決定 display
+- `fbOnTabActivate()` 切到 Tab5 時根據 `FEATURE_FLAGS.SHOW_DEV_PANEL` 決定 display（**不是 switchTab()，那是全 app 共用 tab switcher**）
 
 **Review 點**：
 - SHOW_DEV_PANEL=false 時，正式使用者完全看不到驗證區
@@ -109,7 +109,7 @@
   - 用 `graphListsDb.fromListFields()` 還原成 JSON 形狀後再 diff
   - 並排顯示 + diff 視覺化（三種狀態：✅完全一致 / ⚠️已知lossy / ❌真diff）
   
-- **`fbShowDualWriteLog()`**：顯示 `_dualWriteLog` 內容（最近 20 筆，timestamp + id + ok/fail + error msg）
+- **`fbShowDualWriteLog()`**：呼叫 `dbAdapter.getDualWriteLog()` 取得 log，顯示在 `<div id="fb-dev-output">`（最近 20 筆，timestamp + id + ok/fail + error msg）
 
 - **`fbForceListPush()`**：
   - confirm 對話框（強調這是一次性同步工具）
