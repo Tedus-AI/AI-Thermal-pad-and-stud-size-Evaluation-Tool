@@ -8913,6 +8913,137 @@ async function fbOnTabActivate() {
   const devPanel = document.getElementById('fb-dev-panel');
   if (devPanel) devPanel.style.display = window.FEATURE_FLAGS?.SHOW_DEV_PANEL ? '' : 'none';
 }
+
+/* ── Phase 2 / Milestone 2.3：開發者驗證 functions ───────────────── */
+
+function fbDevOutput(content, raw) {
+  const el = document.getElementById('fb-dev-output');
+  if (!el) return;
+  if (raw) el.innerHTML = content;
+  else el.textContent = content;
+}
+
+function _fbEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function fbCompareWithList() {
+  const id = window._currentFbItemId;
+  if (!id) {
+    fbDevOutput('⚠️ 請先在列表點「閱讀 👁️」開啟某筆回饋，再點此按鈕。');
+    return;
+  }
+  if (typeof graphListsDb === 'undefined') {
+    fbDevOutput('❌ graphListsDb 未載入，無法讀取 SharePoint List。');
+    return;
+  }
+  fbDevOutput('比對中，請稍候...');
+  try {
+    const fromJson = await dbAdapter.getDoc('feedback_items', id);
+    if (!fromJson) { fbDevOutput(`❌ JSON 端找不到 ${id}`); return; }
+
+    const found = await graphListsDb.feedback.list({ Title: id });
+    if (!found.length) {
+      fbDevOutput(`⚠️ List 端找不到 ${id}\n（可能尚未 dual-write 過，可先用「🔄 同步既有 JSON 到 List」補齊）`);
+      return;
+    }
+    const fromList = found[0].data;
+
+    const KEYS = ['id','type','tab','title','priority','reporter','contact',
+      'description','current_behavior','expected_behavior','attachments',
+      'note','admin_note','status','closed_at','created_at','updated_at'];
+    const LOSSY = new Set(['created_at','updated_at','closed_at']);
+    const jsonItem = { ...fromJson, id };
+
+    let okCnt = 0, lossyCnt = 0, badCnt = 0;
+    const rows = KEYS.map(k => {
+      let jv = jsonItem[k] ?? '';
+      let lv = fromList[k]  ?? '';
+
+      if (k === 'attachments') {
+        jv = JSON.stringify(Array.isArray(jv) ? jv : []);
+        lv = JSON.stringify(Array.isArray(lv) ? lv : []);
+      }
+      if (LOSSY.has(k)) {
+        jv = typeof jv === 'string' ? jv.replace(/\.\d{3}Z$/, 'Z') : '';
+        lv = typeof lv === 'string' ? lv.replace(/\.\d{3}Z$/, 'Z') : '';
+      }
+
+      const same = String(jv) === String(lv);
+      let bg, icon;
+      if (same)              { bg = '#e8f5e9'; icon = '✅'; okCnt++;    }
+      else if (LOSSY.has(k)) { bg = '#fff8e1'; icon = '⚠️'; lossyCnt++; }
+      else                   { bg = '#fde8e8'; icon = '❌'; badCnt++;   }
+
+      return `<tr style="background:${bg}">
+        <td style="padding:3px 8px;font-weight:600;white-space:nowrap;font-family:monospace">${icon} ${k}</td>
+        <td style="padding:3px 8px;word-break:break-all;max-width:220px">${_fbEsc(jv)}</td>
+        <td style="padding:3px 8px;word-break:break-all;max-width:220px">${_fbEsc(lv)}</td>
+      </tr>`;
+    }).join('');
+
+    const summary = `✅ ${okCnt} 一致　⚠️ ${lossyCnt} 已知 lossy　❌ ${badCnt} 真 diff`;
+    fbDevOutput(
+      `<b style="font-family:sans-serif">比對：${_fbEsc(id)}</b>` +
+      `<div style="font-size:0.79rem;margin:4px 0 6px;font-family:sans-serif">${summary}</div>` +
+      `<table style="width:100%;border-collapse:collapse;font-size:0.79rem">` +
+      `<tr style="background:#f5f8fb;font-family:sans-serif">` +
+      `<th style="padding:3px 8px;text-align:left">欄位</th>` +
+      `<th style="padding:3px 8px;text-align:left">JSON</th>` +
+      `<th style="padding:3px 8px;text-align:left">List</th></tr>` +
+      rows + `</table>`, true);
+  } catch(e) {
+    fbDevOutput(`❌ 比對失敗：${e.message}`);
+    console.error('[fbCompareWithList]', e);
+  }
+}
+
+function fbShowDualWriteLog() {
+  const log = dbAdapter.getDualWriteLog();
+  if (!log.length) { fbDevOutput('（尚無寫入記錄）'); return; }
+  const lines = log.map(entry => {
+    const t = new Date(entry.ts).toISOString().replace('T',' ').slice(0,19) + 'Z';
+    const s = entry.ok ? '✅ ok' : `❌ fail: ${entry.error || ''}`;
+    return `[${t}]  ${entry.id}  ${entry.op}  ${s}`;
+  }).join('\n');
+  fbDevOutput(`dual-write log（${log.length} 筆）：\n${lines}`);
+}
+
+async function fbForceListPush() {
+  if (typeof graphListsDb === 'undefined') {
+    alert('graphListsDb 未載入，無法執行同步。');
+    return;
+  }
+  if (!confirm('確定要把所有 JSON feedback 同步推到 SharePoint List？\n已存在的 item 會被更新，不存在的會新增。\n（這是一次性同步工具，完成後通常不需再跑）')) return;
+
+  const allFb = await dbAdapter.getCollection('feedback_items');
+  const ids = Object.keys(allFb);
+  if (!ids.length) { alert('JSON 端沒有任何 feedback 資料。'); return; }
+
+  let ok = 0, fail = 0;
+  fbDevOutput(`同步中，共 ${ids.length} 筆...`);
+
+  for (const id of ids) {
+    const item = { ...allFb[id], id };
+    try {
+      const existing = await graphListsDb.feedback.list({ Title: id });
+      if (existing.length) {
+        await graphListsDb.feedback.update(existing[0].spItemId, item, existing[0].etag);
+      } else {
+        await graphListsDb.feedback.add(item);
+      }
+      ok++;
+    } catch(e) {
+      console.warn('[fbForceListPush] fail', id, e);
+      fail++;
+    }
+  }
+
+  const msg = `同步完成：成功 ${ok} / 失敗 ${fail}`;
+  fbDevOutput(msg);
+  alert(msg);
+}
 </script>
 
 <div class="tc-rail-wrapper">
