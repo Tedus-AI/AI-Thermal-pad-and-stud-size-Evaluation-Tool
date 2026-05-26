@@ -3,8 +3,9 @@
    *
    * 依賴（必須在本檔案之前載入）：
    *   window.ConflictError   — fileDb.js 定義，直接重用，不重複宣告
-   *   window.graphDb         — graphDb.js；重用 graphDb._getAccessToken()（public method）
+   *   window.graphDb         — graphDb.js；重用 graphDb._getAccessToken()（既有 public method，非新增）
    *                            ⚠️ 如需重構 graphDb.js，請保留 _getAccessToken 為 public method
+   *                            或抽出共用 utility 並同步更新本檔引用（見 lists-migration.md gotcha #13）
    *   window.SHAREPOINT_CONFIG — config.js 定義
    */
 
