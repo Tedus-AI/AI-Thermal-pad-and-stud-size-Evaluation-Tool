@@ -9011,15 +9011,18 @@ function fbShowDualWriteLog() {
 }
 
 async function fbForceListPush() {
+  // ⚠️ TODO Phase 3+：當 feedback 累積超過 50 筆時，加入 rate limit
+  // （例如每筆間隔 100ms）避免 Graph API 429 throttle
   if (typeof graphListsDb === 'undefined') {
     alert('graphListsDb 未載入，無法執行同步。');
     return;
   }
-  if (!confirm('確定要把所有 JSON feedback 同步推到 SharePoint List？\n已存在的 item 會被更新，不存在的會新增。\n（這是一次性同步工具，完成後通常不需再跑）')) return;
 
   const allFb = await dbAdapter.getCollection('feedback_items');
   const ids = Object.keys(allFb);
   if (!ids.length) { alert('JSON 端沒有任何 feedback 資料。'); return; }
+
+  if (!confirm(`確定要把所有 JSON feedback（共 ${ids.length} 筆）同步推到 SharePoint List？\n已存在的 item 會被更新，不存在的會新增。\n（這是一次性同步工具，完成後通常不需再跑）`)) return;
 
   let ok = 0, fail = 0;
   fbDevOutput(`同步中，共 ${ids.length} 筆...`);
