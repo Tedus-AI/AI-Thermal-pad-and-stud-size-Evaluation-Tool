@@ -59,6 +59,22 @@
 
 ---
 
+## Milestone 進度（Phase 2）
+
+- [x] **Milestone 2.1**：`index.html` 加 `<script src="graphListsDb.js"></script>`，確認 `dbAdapter._shadowAdd()` 在 graphListsDb 未載入時 silently bail out（無 ReferenceError）（2026-05-27 完成）
+- [x] **Milestone 2.2**：開發者驗證區 UI — 摺疊式 `<details id="fb-dev-panel">` + 三個按鈕 + `<div id="fb-dev-output">`；`fbShowDetail`/`fbCloseDetail` 設入 `window._currentFbItemId`；`fbOnTabActivate()` 根據 `SHOW_DEV_PANEL` flag 控制 display（2026-05-27 完成）
+- [x] **Milestone 2.3**：三個驗證 function 實作：`fbCompareWithList()`（並排 diff，三色 ✅⚠️❌）、`fbShowDualWriteLog()`（最近 20 筆）、`fbForceListPush()`（帶 upsert 邏輯 + 進度提示）（2026-05-27 完成）
+- [x] **Milestone 2.4**：Phase 2 啟動 checklist + doc 更新（本節）（2026-05-27 完成）
+
+### Phase 2 Retrospective（新增 Gotchas）
+
+1. **`fbOnTabActivate()` vs `switchTab()` 命名衝突**：phase2-kickoff-prompt.md 原本描述有誤（寫成 `fbSwitchTab()`），正確函式是 `fbOnTabActivate()`，已修正 doc。`switchTab()` 是全 app 共用 tab switcher，不該在裡面加 feedback-only 邏輯。
+2. **`graphListsDb.feedback.list()` 回傳形狀**：回傳 `Array<{ spItemId, etag, data }>` 而非 raw SharePoint fields；`data` 已是 `fromListFields()` 還原的 JSON 形狀。`fbCompareWithList()` 直接用 `found[0].data` 比對，不需要再呼叫 `fromListFields()`。
+3. **`add()` / `update()` 的輸入格式**：兩個方法都接受 raw JSON object（內部自動呼叫 `toListFields()`），caller 不需手動轉換。`fbForceListPush()` 直接傳 `{ ...allFb[id], id }` 即可。
+4. **config.js 語法錯誤會讓 FEATURE_FLAGS 整個 undefined**：`ture` 拼錯造成 `ReferenceError`，所有 flag check 失敗（`window.FEATURE_FLAGS?.X` 回傳 `undefined`，等同 falsy）。Console override `window.FEATURE_FLAGS = {...}` 後，仍需用 `fbOnTabActivate()` 觸發 panel 顯示邏輯（直接呼叫，不是 `switchTab()`）。
+
+---
+
 ## 環境資訊
 
 | 項目 | 值 |
@@ -334,17 +350,17 @@ f916276f-d0ac-45fd-90f0-c9be2e7938e6
 - [x] 0.8　**已完成**：MSAL 整合驗證通過（throwaway HTML 頁實測 5 步驟全綠：MSAL 載入 → 登入 → Token + scope 驗證 → CREATE 成功）
 - [x] 0.9　5 個 column index 建好（Status / Type / Tab / Priority / CreatedAt），實測 Status filter 無需 Prefer header 即可運作
 
-### Phase 1+（後續規劃，暫未動工）
+### Phase 1+（後續規劃）
 
-- [ ] **Phase 1**：寫 `graphListsDb.js` 的 feedback CRUD methods（mirror 現有 graphDb collection API）
-- [ ] **Phase 2**：啟動 dual-write（採用「設計 C：透明寫入 + 顯式驗證讀取」，詳見下方「Phase 2 設計」章節）
-  - [ ] 2.1 加 feature flag `DUAL_WRITE_FEEDBACK` / `SHOW_DEV_PANEL` / `PRIMARY_FEEDBACK`
-  - [ ] 2.2 `fbSubmitFeedback()` 加上 shadow write 邏輯
-  - [ ] 2.3 加開發者驗證區 UI（摺疊式 details）
-  - [ ] 2.4 實作 `fbCompareWithList()` 並排 diff 視覺化
-  - [ ] 2.5 實作 `fbShowDualWriteLog()` 顯示最近寫入結果
-  - [ ] 2.6 實作 `fbForceListPush()` 一次性同步既有 JSON 資料到 List
-  - [ ] 2.7 dual-write 跑 7 天觀察期 + 進入 Phase 3 條件驗證
+- [x] **Phase 1**：寫 `graphListsDb.js` 的 feedback CRUD methods（mirror 現有 graphDb collection API）（✅ 2026-05-26 完成）
+- [x] **Phase 2**：啟動 dual-write（採用「設計 C：透明寫入 + 顯式驗證讀取」，詳見下方「Phase 2 設計」章節）（✅ 2026-05-27 完成）
+  - [x] 2.1 加 `<script src="graphListsDb.js"></script>` + 確認 bail-out guard
+  - [x] 2.2 feature flag 路由（`DUAL_WRITE_FEEDBACK` / `SHOW_DEV_PANEL` / `PRIMARY_FEEDBACK` 已在 Phase 1 M3 完成；Phase 2 M2 加 UI）
+  - [x] 2.3 開發者驗證區 UI（摺疊式 details + `_currentFbItemId` hook）
+  - [x] 2.4 實作 `fbCompareWithList()` 並排 diff 視覺化
+  - [x] 2.5 實作 `fbShowDualWriteLog()` 顯示最近寫入結果
+  - [x] 2.6 實作 `fbForceListPush()` 一次性同步既有 JSON 資料到 List
+  - [ ] 2.7 dual-write 跑 7 天觀察期 + 進入 Phase 3 條件驗證（⏳ 觀察期進行中）
 - [ ] **Phase 3**：Shadow-read 自動 diff（讀仍走 JSON，但同時讀 List 做 diff verification）
 - [ ] **Phase 4**：Cutover（`PRIMARY_FEEDBACK: 'list'`，仍 dual-write 保險）
 - [ ] **Phase 5**：Decommission JSON 的 feedback_items 區塊（`DUAL_WRITE_FEEDBACK: false`）
@@ -632,6 +648,47 @@ Phase 2 dual-write 跑一段時間後，當以下都符合才進 Phase 3：
 | 自動化驗證 | dual-write log 累積、Phase 3 shadow-read | 不用全靠人眼 |
 | 緊急回退 | 兩個 flag 切回 false | 1 秒回到 JSON-only 原狀 |
 | 資料一致性 | 寫入永遠同步雙寫 | Phase 4 cutover 時 List 已是完整 source of truth |
+
+---
+
+## Phase 2 啟動後 7 天觀察期 checklist
+
+> 啟用 flags（`DUAL_WRITE_FEEDBACK: true`, `SHOW_DEV_PANEL: true`）後，每天或每次使用後確認。
+> 7 天全綠即可進入 Phase 3。
+
+### Day 1（啟動當天）
+
+- [ ] `FEATURE_FLAGS.DUAL_WRITE_FEEDBACK = true` 後，提交一筆新 feedback，JSON 寫入成功
+- [ ] `fbShowDualWriteLog()` 顯示最近一筆 `op: add, ok: true`
+- [ ] `fbCompareWithList()` 比對該筆：全 ✅ 或只有已知 lossy ⚠️（created_at / updated_at 毫秒截斷）
+- [ ] `fbForceListPush()` 跑一次，把啟動前的歷史 feedback 補進 List
+- [ ] 驗證 fallback：`DUAL_WRITE_FEEDBACK = false` → 提交另一筆 → JSON 只寫入、List 不動
+
+### Day 2–6（持續觀察）
+
+- [ ] 每天至少提交一筆 feedback，確認 dual-write log 無 `ok: false`
+- [ ] 每次開發者驗證區看 log，若出現 fail，記錄 error 訊息並評估是否需回退
+
+### Day 7（進 Phase 3 前評估）
+
+- [ ] `fbShowDualWriteLog()` 顯示最近 20 筆全綠（無 fail）
+- [ ] 隨機抽 3 筆 feedback → `fbCompareWithList()` 逐一比對 → 無紅色 ❌
+- [ ] 確認 `fbForceListPush()` 上線後 SharePoint List 筆數 ≥ JSON 端筆數
+- [ ] 更新本文件 2.7 checkbox ✅ 並記錄觀察結果
+- [ ] **若全部通過**：啟動 Phase 3 規劃
+
+### 緊急回退步驟
+
+若任何時間點發現 dual-write 嚴重問題（List 資料不一致、API 頻繁失敗等）：
+
+```js
+// Browser console 立即回退（改完重整頁面）：
+window.FEATURE_FLAGS.DUAL_WRITE_FEEDBACK = false;
+// 或永久回退（改 config.js 這行並 commit + push）：
+// DUAL_WRITE_FEEDBACK: false,
+```
+
+回退後 JSON 恢復為唯一 source of truth，等問題診斷清楚再重啟。
 
 ---
 
