@@ -8832,6 +8832,13 @@ function fbShowDetail(id) {
       <div class="fb-dtl-att-grid">
         ${item.attachments.map(a => `<img src="${a.data}" alt="${esc(a.name)}" class="fb-dtl-att-img" onclick="fbOpenImage('${a.data}')">`).join('')}
       </div>` : ''}`;
+  if (window.FEATURE_FLAGS?.SHOW_DEV_PANEL) {
+    document.getElementById('fb-detail-body').insertAdjacentHTML('beforeend', `
+      <div id="fb-modal-dev-section" style="margin-top:14px;border-top:1px solid #ddd;padding-top:10px;">
+        <button class="fb-dev-btn" onclick="document.getElementById('fb-modal-dev-out').textContent='比對中…';fbCompareWithList()">📋 與 SharePoint List 比對</button>
+        <div id="fb-modal-dev-out" class="fb-dev-output" style="margin-top:8px;"></div>
+      </div>`);
+  }
   document.getElementById('fb-detail-modal').classList.add('open');
 }
 
@@ -8918,9 +8925,9 @@ async function fbOnTabActivate() {
 
 function fbDevOutput(content, raw) {
   const el = document.getElementById('fb-dev-output');
-  if (!el) return;
-  if (raw) el.innerHTML = content;
-  else el.textContent = content;
+  if (el) { if (raw) el.innerHTML = content; else el.textContent = content; }
+  const el2 = document.getElementById('fb-modal-dev-out');
+  if (el2) { if (raw) el2.innerHTML = content; else el2.textContent = content; }
 }
 
 function _fbEsc(s) {
