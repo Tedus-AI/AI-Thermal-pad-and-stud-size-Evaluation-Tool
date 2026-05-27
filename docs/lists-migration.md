@@ -66,12 +66,33 @@
 - [x] **Milestone 2.3**：三個驗證 function 實作：`fbCompareWithList()`（並排 diff，三色 ✅⚠️❌）、`fbShowDualWriteLog()`（最近 20 筆）、`fbForceListPush()`（帶 upsert 邏輯 + 進度提示）（2026-05-27 完成）
 - [x] **Milestone 2.4**：Phase 2 啟動 checklist + doc 更新（本節）（2026-05-27 完成）
 
+### Phase 2 Smoke Test 結果（2026-05-27）
+
+11 項驗證點全部通過 ✅：
+
+| # | 驗證點 | 結果 |
+|---|---|---|
+| 1 | FEATURE_FLAGS 全 false，行為與 Phase 1 一致 | ✅ |
+| 2 | 只開 SHOW_DEV_PANEL，驗證區可見（預設摺疊） | ✅ |
+| 3 | 開 DUAL_WRITE_FEEDBACK，submit 一筆，JSON + List 都有 | ✅ |
+| 4 | fbCompareWithList：diff 全綠，0 真 diff | ✅ |
+| 5 | fbShowDualWriteLog：顯示正確記錄 | ✅ |
+| 6 | fbForceListPush：成功同步，筆數一致 | ✅ |
+| 7 | guard（未開 detail 就按比對）：顯示正確提示 | ✅ |
+| 8 | flag 切回 false：驗證區消失、既有流程正常 | ✅ |
+| 9 | Modal 內「📋 與 SharePoint List 比對」按鈕可點 | ✅ |
+| 10 | 已知 lossy（created_at/updated_at）顯示黃色 ⚠️ | ✅ |
+| 11 | 測試資料清回 baseline only | ✅ |
+
+**Smoke test finding**：detail modal 在浮動狀態時遮住開發者驗證區按鈕，無法點擊「從 List 載入並比對」。修復：在 `fbShowDetail()` 內部當 `SHOW_DEV_PANEL=true` 時，自動在 modal 底部注入比對按鈕 + `#fb-modal-dev-out` 結果區。`fbDevOutput()` 同步鏡射輸出到 modal 內。
+
 ### Phase 2 Retrospective（新增 Gotchas）
 
 1. **`fbOnTabActivate()` vs `switchTab()` 命名衝突**：phase2-kickoff-prompt.md 原本描述有誤（寫成 `fbSwitchTab()`），正確函式是 `fbOnTabActivate()`，已修正 doc。`switchTab()` 是全 app 共用 tab switcher，不該在裡面加 feedback-only 邏輯。
 2. **`graphListsDb.feedback.list()` 回傳形狀**：回傳 `Array<{ spItemId, etag, data }>` 而非 raw SharePoint fields；`data` 已是 `fromListFields()` 還原的 JSON 形狀。`fbCompareWithList()` 直接用 `found[0].data` 比對，不需要再呼叫 `fromListFields()`。
 3. **`add()` / `update()` 的輸入格式**：兩個方法都接受 raw JSON object（內部自動呼叫 `toListFields()`），caller 不需手動轉換。`fbForceListPush()` 直接傳 `{ ...allFb[id], id }` 即可。
 4. **config.js 語法錯誤會讓 FEATURE_FLAGS 整個 undefined**：`ture` 拼錯造成 `ReferenceError`，所有 flag check 失敗（`window.FEATURE_FLAGS?.X` 回傳 `undefined`，等同 falsy）。Console override `window.FEATURE_FLAGS = {...}` 後，仍需用 `fbOnTabActivate()` 觸發 panel 顯示邏輯（直接呼叫，不是 `switchTab()`）。
+5. **detail modal 遮住驗證區按鈕（Smoke test 發現）**：`fbCompareWithList()` 需要先在列表點「閱讀 👁️」設定 `_currentFbItemId`，但此時 modal 展開、遮住下方驗證區，無法點「從 List 載入並比對」。修法：`fbShowDetail()` 內偵測 `SHOW_DEV_PANEL=true` 時，在 modal body 底部動態注入比對按鈕 + `#fb-modal-dev-out`；`fbDevOutput()` 同時鏡射到 `#fb-dev-output` 和 `#fb-modal-dev-out`。
 
 ---
 
