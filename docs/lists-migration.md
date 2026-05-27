@@ -92,6 +92,19 @@
 4. **config.js 語法錯誤會讓 FEATURE_FLAGS 整個 undefined**：`ture` 拼錯造成 `ReferenceError`，所有 flag check 失敗（`window.FEATURE_FLAGS?.X` 回傳 `undefined`，等同 falsy）。Console override `window.FEATURE_FLAGS = {...}` 後，仍需用 `fbOnTabActivate()` 觸發 panel 顯示邏輯（直接呼叫，不是 `switchTab()`）。
 5. **detail modal 遮住驗證區按鈕**：`fbCompareWithList()` 需要先在列表點「閱讀 👁️」設定 `_currentFbItemId`，但此時 modal 展開、遮住下方驗證區，無法點「從 List 載入並比對」。修法：`fbShowDetail()` 內偵測 `SHOW_DEV_PANEL=true` 時，在 modal body 底部動態注入比對按鈕 + `#fb-modal-dev-out`；`fbDevOutput()` 同時鏡射到 `#fb-dev-output` 和 `#fb-modal-dev-out`。
 
+## Milestone 進度（Phase 3）
+
+- [x] **Milestone 3.1**：`dbAdapter.js` shadow-read 私有 helpers — `_shadowReadLog`、`_logShadowRead()`、`_shadowReadOn()`、`_SR_KEYS`（17 欄）、`_SR_LOSSY`、`_doShadowReadDiff()`；公開 `getShadowReadLog()`；`config.js` 新增 `SHADOW_READ_FEEDBACK: false` flag（2026-05-27 完成）
+- [x] **Milestone 3.2**：`dbAdapter.getDoc()` 整合 shadow-read trigger — `_shadowReadOn() && result` 條件成立時，`setTimeout` fire-and-forget 呼叫 `_doShadowReadDiff()`；`fbShowDetail()` 內新增一行，當 `SHADOW_READ_FEEDBACK=true` 時呼叫 `dbAdapter.getDoc()` 純當 trigger（不 await 回傳值）（2026-05-27 完成）
+- [x] **Milestone 3.3**：開發者驗證區新增第 4 顆按鈕「📊 查看 shadow-read 報告」+ `fbShowShadowReadReport()` 實作 — 統計表（consistent / lossy_only / real_diff / list_missing / error）+ 明細表（三色 row：綠色一致、黃色 lossy、紅色真差異）（2026-05-27 完成）
+- [x] **Milestone 3.4**：Phase 3 啟動 checklist（`docs/phase3-activation-checklist.md`）+ 本文件 Phase 3 進度與 retrospective 更新（2026-05-27 完成）
+
+### Phase 3 Retrospective（新增 Gotchas）
+
+1. **`fbShowDetail()` 不走 `dbAdapter.getDoc()`**：feedback detail modal 用 in-memory `fbItems` cache 直接組 HTML，不呼叫 `getDoc`。解法：在 `fbShowDetail()` 內新增一行，當 `SHADOW_READ_FEEDBACK=true` 時呼叫 `dbAdapter.getDoc('feedback_items', id)` 純當 trigger，fire-and-forget（不 await、不使用回傳值）。好處：shadow-read 的觸發點統一在 `dbAdapter.getDoc()` 邊界，未來任何路徑只要走 `getDoc` 就自動 cover，不需要在每個 caller 分別埋 trigger。
+2. **`getDoc` 的 `_primary() === 'list'` 分支順手一起寫**：M3.2 整合 shadow-read 時發現 `getDoc` 的 Phase 4 分支可以順手完成。Phase 4 只需要把 `config.js` 的 `PRIMARY_FEEDBACK` 改成 `'list'` 即可 cutover，不需要改任何 code。
+3. **Paired entry pattern 是預期行為**：`fbShowDetail()` 和 `fbCompareWithList()` 兩個操作都呼叫 `dbAdapter.getDoc()`，同一筆 feedback 打開 + 手動比對時，shadow-read log 裡同一 id 會出現 2 次（間隔可能在 5 秒內）。這不是 bug。決策：先觀察，14 天後若 5 秒內重複率 > 30% 才加 throttle；< 30% 維持現有簡單實作。
+
 ---
 
 ## 環境資訊
@@ -380,7 +393,12 @@ f916276f-d0ac-45fd-90f0-c9be2e7938e6
   - [x] 2.5 實作 `fbShowDualWriteLog()` 顯示最近寫入結果
   - [x] 2.6 實作 `fbForceListPush()` 一次性同步既有 JSON 資料到 List
   - [ ] 2.7 dual-write 跑 7 天觀察期 + 進入 Phase 3 條件驗證（⏳ 觀察期進行中）
-- [ ] **Phase 3**：Shadow-read 自動 diff（讀仍走 JSON，但同時讀 List 做 diff verification）
+- [x] **Phase 3**：Shadow-read 自動 diff（讀仍走 JSON，但同時讀 List 做 diff verification）（✅ 2026-05-27 完成）
+  - [x] 3.1 shadow-read helpers + `_doShadowReadDiff()` 在 `dbAdapter.js`
+  - [x] 3.2 `getDoc()` 整合 fire-and-forget shadow-read trigger
+  - [x] 3.3 開發者驗證區「📊 查看 shadow-read 報告」+ `fbShowShadowReadReport()`
+  - [x] 3.4 Phase 3 啟動 checklist + doc 收尾
+  - [ ] 3.5 shadow-read 跑 14 天觀察期，`real_diff: 0`（⏳ 觀察期尚未開始）
 - [ ] **Phase 4**：Cutover（`PRIMARY_FEEDBACK: 'list'`，仍 dual-write 保險）
 - [ ] **Phase 5**：Decommission JSON 的 feedback_items 區塊（`DUAL_WRITE_FEEDBACK: false`）
 - [ ] **Phase 2+ 額外**：FbAttachments 改用 Document Library 存圖片，List 只存路徑
