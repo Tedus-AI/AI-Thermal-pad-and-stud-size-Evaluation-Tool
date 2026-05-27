@@ -4618,6 +4618,7 @@
           <button class="fb-dev-btn" onclick="fbCompareWithList()">📋 從 List 載入這筆並比對</button>
           <button class="fb-dev-btn" onclick="fbShowDualWriteLog()">📝 查看寫入記錄（最近 20 筆）</button>
           <button class="fb-dev-btn" onclick="fbForceListPush()">🔄 同步既有 JSON 到 List</button>
+          <button class="fb-dev-btn" onclick="fbShowShadowReadReport()">📊 查看 shadow-read 報告</button>
         </div>
         <div id="fb-dev-output" class="fb-dev-output"></div>
       </div>
@@ -9060,6 +9061,80 @@ async function fbForceListPush() {
   const msg = `同步完成：成功 ${ok} / 失敗 ${fail}`;
   fbDevOutput(msg);
   alert(msg);
+}
+
+function fbShowShadowReadReport() {
+  const log = dbAdapter.getShadowReadLog();
+  if (!log.length) {
+    fbDevOutput('（尚無 shadow-read 記錄。請開啟 SHADOW_READ_FEEDBACK 並讀取 feedback。）');
+    return;
+  }
+
+  // 統計
+  const counts = { consistent: 0, lossy_only: 0, real_diff: 0, list_missing: 0, error: 0 };
+  for (const e of log) { const k = e.result; if (k in counts) counts[k]++; }
+  const total = log.length;
+
+  const statsHtml =
+    `<div style="margin-bottom:10px;padding:8px;background:#f5f5f5;border-radius:4px;` +
+    `font-family:monospace;font-size:13px">` +
+    `✅ consistent: <b>${counts.consistent}</b>　` +
+    `⚠️ lossy_only: <b>${counts.lossy_only}</b>　` +
+    `❌ real_diff: <b style="color:#c62828">${counts.real_diff}</b>　` +
+    `🔍 list_missing: <b>${counts.list_missing}</b>　` +
+    `💥 error: <b>${counts.error}</b>　` +
+    `<span style="color:#666">（總 ${total} 筆，顯示最近 ${Math.min(total,20)} 筆）</span></div>`;
+
+  const BG = { consistent:'#e8f5e9', lossy_only:'#fff8e1', real_diff:'#fde8e8',
+               list_missing:'#fff3e0', error:'#fde8e8' };
+
+  const rows = log.slice(0, 20).map(entry => {
+    const t = new Date(entry.ts).toISOString().replace('T',' ').slice(0,19) + 'Z';
+    const bg = BG[entry.result] ?? '#fff';
+    let summary;
+
+    if (entry.result === 'real_diff') {
+      const diffs = entry.diffs ?? [];
+      const diffRows = diffs.map(d =>
+        `<tr><td style="padding:2px 6px;font-family:monospace;white-space:nowrap">${_fbEsc(d.field)}</td>` +
+        `<td style="padding:2px 6px;word-break:break-all;max-width:180px;color:#c62828">${_fbEsc(d.jsonValue)}</td>` +
+        `<td style="padding:2px 6px;word-break:break-all;max-width:180px;color:#1565c0">${_fbEsc(d.listValue)}</td></tr>`
+      ).join('');
+      summary =
+        `<details><summary style="cursor:pointer;color:#c62828;font-weight:600">` +
+        `${diffs.length} 個欄位 diff（點開查看）</summary>` +
+        `<table style="margin-top:4px;border-collapse:collapse;font-size:12px;width:100%">` +
+        `<tr style="background:#eee"><th style="padding:2px 6px">欄位</th>` +
+        `<th style="padding:2px 6px">JSON</th><th style="padding:2px 6px">List</th></tr>` +
+        `${diffRows}</table></details>`;
+    } else if (entry.result === 'error') {
+      summary = `錯誤: ${_fbEsc(entry.error || '')}`;
+    } else if (entry.result === 'lossy_only') {
+      summary = 'lossy 欄位有差但 normalize 後一致';
+    } else if (entry.result === 'list_missing') {
+      summary = 'List 端找不到該筆';
+    } else {
+      summary = '-';
+    }
+
+    return `<tr style="background:${bg}">` +
+      `<td style="padding:3px 8px;white-space:nowrap;font-family:monospace;font-size:12px">${t}</td>` +
+      `<td style="padding:3px 8px;font-family:monospace;font-size:12px;word-break:break-all">${_fbEsc(entry.id)}</td>` +
+      `<td style="padding:3px 8px;white-space:nowrap">${entry.result}</td>` +
+      `<td style="padding:3px 8px">${summary}</td></tr>`;
+  }).join('');
+
+  fbDevOutput(
+    `<b style="font-family:sans-serif">Shadow-read 報告</b>` + statsHtml +
+    `<table style="width:100%;border-collapse:collapse;font-size:13px">` +
+    `<thead><tr style="background:#e0e0e0">` +
+    `<th style="padding:4px 8px;text-align:left">時間</th>` +
+    `<th style="padding:4px 8px;text-align:left">id</th>` +
+    `<th style="padding:4px 8px;text-align:left">result</th>` +
+    `<th style="padding:4px 8px;text-align:left">摘要</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`,
+    true
+  );
 }
 </script>
 
