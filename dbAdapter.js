@@ -98,7 +98,7 @@ async function _doShadowReadDiff(id, jsonItem) {
   try {
     const found = await graphListsDb.feedback.list({ Title: id });
     if (!found.length) {
-      _logShadowRead({ id, result: 'list_missing' });
+      _logShadowRead({ id, result: 'list_missing', diffs: [] });
       return;
     }
     const listItem = found[0].data;
@@ -131,7 +131,7 @@ async function _doShadowReadDiff(id, jsonItem) {
     else                           _logShadowRead({ id, result: 'consistent'  });
   } catch (e) {
     console.warn('[shadow-read] diff failed:', e);
-    _logShadowRead({ id, result: 'error', error: e.message });
+    _logShadowRead({ id, result: 'error', diffs: [], error: e.message });
   }
 }
 
