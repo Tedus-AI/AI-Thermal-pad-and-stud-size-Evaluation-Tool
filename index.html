@@ -8840,6 +8840,12 @@ function fbShowDetail(id) {
         <div id="fb-modal-dev-out" class="fb-dev-output" style="margin-top:8px;"></div>
       </div>`);
   }
+  // Phase 3+：背景觸發 shadow-read（fire-and-forget，回傳值丟掉）
+  if (window.FEATURE_FLAGS?.SHADOW_READ_FEEDBACK) {
+    dbAdapter.getDoc('feedback_items', id).catch(e =>
+      console.warn('[shadow-read trigger] getDoc failed', e)
+    );
+  }
   document.getElementById('fb-detail-modal').classList.add('open');
 }
 
