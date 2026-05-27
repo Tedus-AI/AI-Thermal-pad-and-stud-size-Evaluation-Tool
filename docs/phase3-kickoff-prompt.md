@@ -124,11 +124,13 @@ _shadowReadLog = [
 **內容**：
 - 修改 `dbAdapter.getDoc('feedback_items', id)`：在 primary read 之後觸發 shadow-read
 - **保證 shadow-read 失敗絕不 throw 出 getDoc 邊界**
-- 加 throttle 機制：同一筆 id 在 5 分鐘內已 shadow-read 過則 skip（避免重複比對）
+- **不要預先加 throttle**：先用最簡實作，14 天觀察期看 `_shadowReadLog` 重複 entry 比率，
+  若實證有問題（同一筆 id 短時間內 shadow-read 5+ 次）再加 throttle。
+  YAGNI 原則，避免引入不必要的狀態管理複雜度。
 
 **Review 點**：
 - 手動把 graphListsDb 改成會 throw error 的 stub，確認 getDoc 還是正常回傳 JSON
-- 同一個 feedback 連續開 3 次 detail，只跑 1 次 shadow-read（throttle 生效）
+- shadow-read 的 console.warn / log 是否會干擾正常 console 使用
 
 ### Milestone 3.3：開發者驗證區新按鈕 + diff 報告 UI
 
