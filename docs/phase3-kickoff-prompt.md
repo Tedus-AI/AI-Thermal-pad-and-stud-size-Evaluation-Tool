@@ -74,11 +74,38 @@ async function getDoc(collection, id) {
 }
 ```
 
-### 2. Shadow-read 失敗一律 silent
+### 2. Shadow-read 觸發點：getDoc + fbShowDetail
+
+**重要設計決策**（Phase 3 M3.1 之前的 grep finding 確認）：
+- `dbAdapter.getDoc('feedback_items', id)` 在既有 code 只有一個呼叫端（`fbCompareWithList`）
+- `fbShowDetail(id)` 直接讀 `fbItems[id]` in-memory cache，不走 getDoc
+- 所以光在 getDoc 加 hook 不夠，**還要在 `fbShowDetail` 內手動觸發 getDoc（純為了 shadow-read）**
+
+```js
+function fbShowDetail(id) {
+  // 既有：用 fbItems[id] 渲染 UI
+  // ... existing code ...
+  
+  // Phase 3：背景觸發 shadow-read（fire-and-forget）
+  // 不 await、回傳值丟掉，純粹利用 getDoc 內部的 shadow-read hook
+  if (window.FEATURE_FLAGS?.SHADOW_READ_FEEDBACK) {
+    dbAdapter.getDoc('feedback_items', id).catch(e => 
+      console.warn('[shadow-read trigger] getDoc failed', e)
+    );
+  }
+}
+```
+
+為什麼選這個設計：
+- 統一觸發點在 `getDoc` 邊界
+- 拿 fresh JSON（從 SharePoint thermal_db.json）而不是 in-memory cache，比對的是 dual-write 真實一致性
+- 未來新增 feedback UI 入口時，只要走 getDoc 自動就 shadow-read
+
+### 3. Shadow-read 失敗一律 silent
 
 任何 throw 都被 catch 起來、記 log、不重試（避免拖慢使用者下次操作）。
 
-### 3. Diff log 結構
+### 4. Diff log 結構
 
 ```js
 _shadowReadLog = [
@@ -92,12 +119,21 @@ _shadowReadLog = [
 ]
 ```
 
-### 4. 三筆抽查 finding（Phase 2 結案時的發現）
+### 5. 三筆抽查 finding（Phase 2 結案時的發現）
 
 實測 Phase 2 累積資料**全部 0 lossy**（dateTime 兩邊都不含毫秒）。
 這代表：
 - Phase 3 diff 規則可以直接 `===` 比對，**不需要做 dateTime normalize tolerance**
 - 但 Phase 2 的 `fbCompareWithList` 已實作 lossy normalize（為了安全），Phase 3 可以**複用相同 normalize 邏輯**確保未來如果有路徑寫入帶毫秒的 timestamp 不會誤報
+
+### 6. Paired-entry pattern（throttle 之觀察依據）
+
+選定上述觸發點後，會出現以下 paired pattern：
+- 使用者點「閱讀 👁️」開 detail → 觸發一次 shadow-read（Phase 3 新增 trigger）
+- 使用者再點「📋 比對」 → 觸發另一次 shadow-read（既有 fbCompareWithList getDoc 路徑）
+
+**14 天觀察期看 `_shadowReadLog`**：若同一個 id 在 5 秒內出現 2 次的比率 > 30%，
+代表 paired pattern 嚴重，加 throttle 處理。否則維持簡實作。
 
 ## 工作方式：4 milestone
 
