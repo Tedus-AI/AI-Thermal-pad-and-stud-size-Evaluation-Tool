@@ -73,6 +73,68 @@ function _shadowDelete(docId) {
   }
 }
 
+/* ── shadow-read 私有 helpers（Phase 3+）──────────────────────────
+ * 讀 List 端資料並與 JSON 端 diff，結果記到 _shadowReadLog。
+ * 任何失敗 silent（不影響主流程）。
+ * 觸發點在 dbAdapter.getDoc（Milestone 3.2 整合）。
+ */
+const _shadowReadLog = [];   // 最近 100 筆 shadow-read diff 結果
+
+function _logShadowRead(entry) {
+  _shadowReadLog.unshift({ ts: Date.now(), ...entry });
+  if (_shadowReadLog.length > 100) _shadowReadLog.pop();
+}
+
+const _shadowReadOn = () => !!(window.FEATURE_FLAGS?.SHADOW_READ_FEEDBACK);
+
+// 17 欄比對 key 清單 + 已知 lossy 欄位（與 fbCompareWithList 邏輯一致）
+const _SR_KEYS  = ['id','type','tab','title','priority','reporter','contact',
+  'description','current_behavior','expected_behavior','attachments',
+  'note','admin_note','status','closed_at','created_at','updated_at'];
+const _SR_LOSSY = new Set(['created_at','updated_at','closed_at']);
+
+async function _doShadowReadDiff(id, jsonItem) {
+  if (typeof graphListsDb === 'undefined') return;
+  try {
+    const found = await graphListsDb.feedback.list({ Title: id });
+    if (!found.length) {
+      _logShadowRead({ id, result: 'list_missing' });
+      return;
+    }
+    const listItem = found[0].data;
+    const jObj = { ...jsonItem, id };   // 確保 id 欄位存在
+
+    const realDiffs = [];
+    let hasLossy = false;
+
+    for (const k of _SR_KEYS) {
+      let jv = jObj[k]     ?? '';
+      let lv = listItem[k] ?? '';
+
+      if (k === 'attachments') {
+        jv = JSON.stringify(Array.isArray(jv) ? jv : []);
+        lv = JSON.stringify(Array.isArray(lv) ? lv : []);
+      }
+      if (_SR_LOSSY.has(k)) {
+        jv = typeof jv === 'string' ? jv.replace(/\.\d{3}Z$/, 'Z') : '';
+        lv = typeof lv === 'string' ? lv.replace(/\.\d{3}Z$/, 'Z') : '';
+      }
+
+      if (String(jv) !== String(lv)) {
+        if (_SR_LOSSY.has(k)) hasLossy = true;
+        else realDiffs.push({ field: k, jsonValue: jv, listValue: lv });
+      }
+    }
+
+    if      (realDiffs.length > 0) _logShadowRead({ id, result: 'real_diff',   diffs: realDiffs });
+    else if (hasLossy)             _logShadowRead({ id, result: 'lossy_only'  });
+    else                           _logShadowRead({ id, result: 'consistent'  });
+  } catch (e) {
+    console.warn('[shadow-read] diff failed:', e);
+    _logShadowRead({ id, result: 'error', error: e.message });
+  }
+}
+
 const dbAdapter = {
   _backend() {
     return DB_MODE === 'sharepoint' ? graphDb : fileDb;
@@ -232,7 +294,12 @@ const dbAdapter = {
 
   /* ─── dual-write log（Phase 2 dev panel 用）──────────────────── */
   getDualWriteLog() {
-    return _fbLog.slice();   // 回傳 copy，不讓外部直接改
+    return _fbLog.slice();
+  },
+
+  /* ─── shadow-read log（Phase 3 dev panel 用）─────────────────── */
+  getShadowReadLog() {
+    return _shadowReadLog.slice();
   }
 };
 
