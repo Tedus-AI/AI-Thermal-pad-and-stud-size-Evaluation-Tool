@@ -197,7 +197,12 @@ const dbAdapter = {
       const items = await graphListsDb.feedback.list({ Title: docId });
       return items.length ? items[0].data : null;
     }
-    return await this._backend().getDoc(colName, docId);
+    const result = await this._backend().getDoc(colName, docId);
+    // Phase 3+：shadow-read fire-and-forget（不 await，立刻回傳 result）
+    if (_isFb(colName) && _shadowReadOn() && result) {
+      setTimeout(() => _doShadowReadDiff(docId, result), 0);
+    }
+    return result;
   },
 
   async setDoc(colName, docId, data) {
