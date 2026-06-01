@@ -228,7 +228,11 @@
 
         const resp = await _req('GET', url, { needPrefer });
         const data = await resp.json();
-        return (data.value ?? []).map(_wrapResult);
+        const mapped = (data.value ?? []).map(_wrapResult);
+        if (mapped.length >= 200) {
+          console.warn('[graphListsDb] feedback 達 200 筆上限，可能被截斷，需實作分頁');
+        }
+        return mapped;
       },
 
       /**
