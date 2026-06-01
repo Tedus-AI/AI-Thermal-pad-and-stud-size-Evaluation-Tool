@@ -4321,9 +4321,9 @@
     <!-- Password Protection Bar (Feedback Tab) -->
     <div id="fb-protect-bar" class="protect-bar">
       <span class="protect-status" id="fb-protect-status">&#128274; 密碼保護：啟用中（管理功能需解鎖）</span>
-      <input type="password" id="fb-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
-      <button class="protect-unlock-btn" id="fb-protect-btn" onclick="toggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 解鎖後可修改回饋狀態與處理備註</div>
+      <input type="password" id="fb-protect-pwd" placeholder="輸入開發者密碼" onkeydown="if(event.key==='Enter')fbToggleProtection()">
+      <button class="protect-unlock-btn" id="fb-protect-btn" onclick="fbToggleProtection()">解鎖</button>
+      <div class="protect-hint">&#9888; 開發者專用：解鎖後可修改回饋狀態與處理備註</div>
     </div>
 
     <!-- Page Header -->
@@ -4698,14 +4698,18 @@ let thermalSpecs = {};            // thermal_specs map (本工具專用)
 
 /* 密碼保護 */
 const PROTECT_PASSWORD = '0000';
-let isProtected = true;          // 預設啟用保護
+let isProtected = true;          // 預設啟用保護（前幾頁專案資料）
+
+/* Tab5「使用者建議與改善」的管理功能僅開發者使用，密碼與前幾頁分開 */
+const FB_PROTECT_PASSWORD = '0420';
+let fbIsProtected = true;        // 預設啟用保護（Tab5 開發者管理）
 
 /* ---- Helpers: apply unlocked/locked UI state ---- */
 function _applyUnlockedUI() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('fb-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('fb-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('fb-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('fb-protect-btn')].filter(Boolean);
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
 
   isProtected = false;
   bars.forEach(bar => bar.classList.add('unlocked'));
@@ -4720,14 +4724,13 @@ function _applyUnlockedUI() {
   if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = false;
-  if (typeof fbRenderTable === 'function') fbRenderTable();
 }
 
 function relock() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('fb-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('fb-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('fb-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('fb-protect-btn')].filter(Boolean);
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
 
   isProtected = true;
   bars.forEach(bar => bar.classList.remove('unlocked'));
@@ -4742,12 +4745,11 @@ function relock() {
   if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = true;
-  if (typeof fbRenderTable === 'function') fbRenderTable();
 }
 
 async function toggleProtection() {
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('fb-protect-pwd')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('fb-protect-btn')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
 
   // Find whichever password input has a value
   const typedPwd = pwdInputs.find(el => el.value) || pwdInputs[0];
@@ -4794,11 +4796,85 @@ async function toggleProtection() {
 
     _applyUnlockedUI();
   } else {
-    // 重新鎖定：SharePoint 模式釋放 lock
-    if (dbAdapter.isSharePointMode()) {
+    // 重新鎖定：SharePoint 模式釋放 lock（Tab5 仍解鎖時保留共用鎖）
+    if (dbAdapter.isSharePointMode() && fbIsProtected) {
       try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
     }
     relock();
+  }
+}
+
+/* ---- Tab5「使用者建議與改善」開發者專用鎖（密碼與前幾頁分開）---- */
+function _fbApplyUnlockedUI() {
+  fbIsProtected = false;
+  const bar = document.getElementById('fb-protect-bar');
+  const status = document.getElementById('fb-protect-status');
+  const btn = document.getElementById('fb-protect-btn');
+  const pwd = document.getElementById('fb-protect-pwd');
+  if (bar) bar.classList.add('unlocked');
+  if (status) status.innerHTML = '&#128275; 開發者模式：已解鎖（可修改回饋狀態與處理備註）';
+  if (btn) { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; }
+  if (pwd) { pwd.value = ''; pwd.style.display = 'none'; }
+  if (typeof fbRenderTable === 'function') fbRenderTable();
+}
+
+function _fbRelockUI() {
+  fbIsProtected = true;
+  const bar = document.getElementById('fb-protect-bar');
+  const status = document.getElementById('fb-protect-status');
+  const btn = document.getElementById('fb-protect-btn');
+  const pwd = document.getElementById('fb-protect-pwd');
+  if (bar) bar.classList.remove('unlocked');
+  if (status) status.innerHTML = '&#128274; 密碼保護：啟用中（管理功能需解鎖）';
+  if (btn) { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; }
+  if (pwd) { pwd.style.display = ''; }
+  if (typeof fbRenderTable === 'function') fbRenderTable();
+}
+
+async function fbToggleProtection() {
+  const pwd = document.getElementById('fb-protect-pwd');
+  const btn = document.getElementById('fb-protect-btn');
+
+  if (fbIsProtected) {
+    // 嘗試解鎖：驗證開發者密碼（與前幾頁不同）
+    if (!pwd || pwd.value !== FB_PROTECT_PASSWORD) {
+      alert('密碼錯誤，請重新輸入');
+      if (pwd) { pwd.value = ''; pwd.focus(); }
+      return;
+    }
+
+    // SharePoint 模式：確保持有編輯鎖（前幾頁已解鎖時即已持有，毋須重取）
+    if (dbAdapter.isSharePointMode()) {
+      if (!dbAdapter.isSignedIn()) {
+        alert('請先登入 SharePoint');
+        if (pwd) pwd.value = '';
+        return;
+      }
+      if (!dbAdapter.hasLock()) {
+        const orig = btn ? btn.textContent : '解鎖';
+        if (btn) { btn.disabled = true; btn.textContent = '取得鎖定中...'; }
+        try {
+          await dbAdapter.acquireLock();
+          // 取得 lock 後重新載入回饋以顯示最新內容
+          if (typeof fbLoadItems === 'function') { fbLoaded = false; await fbLoadItems(); }
+        } catch (e) {
+          if (btn) { btn.disabled = false; btn.textContent = orig || '解鎖'; }
+          if (pwd) pwd.value = '';
+          if (e instanceof LockError) showLockWarning(e);
+          else alert('無法取得編輯鎖定：' + (e.message || e));
+          return;
+        }
+        if (btn) { btn.disabled = false; btn.textContent = orig || '解鎖'; }
+      }
+    }
+
+    _fbApplyUnlockedUI();
+  } else {
+    // 重新鎖定：前幾頁也已鎖定時才釋放共用 SharePoint 鎖
+    if (dbAdapter.isSharePointMode() && isProtected) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+    }
+    _fbRelockUI();
   }
 }
 
@@ -8633,7 +8709,7 @@ function fbRenderTable() {
     return;
   }
   filtered.sort((a, b) => new Date(b[1].created_at) - new Date(a[1].created_at));
-  const canEdit = !isProtected;
+  const canEdit = !fbIsProtected;
   tbody.innerHTML = filtered.map(([id, item]) => {
     const statusCell = canEdit
       ? `<select class="fb-status-sel" onchange="fbUpdateStatus('${id}',this.value)">${
