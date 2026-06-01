@@ -3779,6 +3779,58 @@
   }
   @media (max-width: 1100px) { .tc-rail-wrapper { display: none; } }
 
+  /* 工具列解鎖鈕：已解鎖時的視覺狀態 */
+  .gm-action-rail #rail-lock-btn.rail-unlocked {
+    color: #1f9d55;
+    background: rgba(31,157,85,0.12);
+  }
+  /* 工具列浮動密碼框 */
+  .rail-lock-popover {
+    position: fixed;
+    z-index: 1400;
+    transform: translate(-100%, -50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #d7dde6;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+    padding: 10px 12px;
+    width: max-content;
+  }
+  .rail-lock-popover .rail-lock-hint {
+    font-size: 0.72rem;
+    color: #6b7785;
+    font-weight: 600;
+  }
+  .rail-lock-popover .rail-lock-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .rail-lock-popover input {
+    width: 130px;
+    padding: 6px 9px;
+    border: 1.5px solid #d0d8e0;
+    border-radius: 7px;
+    font-size: 0.85rem;
+    outline: none;
+  }
+  .rail-lock-popover input:focus { border-color: #6264a7; }
+  .rail-lock-popover button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 7px;
+    background: #6264a7;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .rail-lock-popover button:hover { background: #50529a; }
+
   /* Message-type dropdown */
   .tc-action-select {
     width: 100%;
@@ -4724,6 +4776,7 @@ function _applyUnlockedUI() {
   if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = false;
+  if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 function relock() {
@@ -4745,6 +4798,7 @@ function relock() {
   if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = true;
+  if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 async function toggleProtection() {
@@ -4816,6 +4870,7 @@ function _fbApplyUnlockedUI() {
   if (btn) { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; }
   if (pwd) { pwd.value = ''; pwd.style.display = 'none'; }
   if (typeof fbRenderTable === 'function') fbRenderTable();
+  if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 function _fbRelockUI() {
@@ -4829,6 +4884,7 @@ function _fbRelockUI() {
   if (btn) { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; }
   if (pwd) { pwd.style.display = ''; }
   if (typeof fbRenderTable === 'function') fbRenderTable();
+  if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 async function fbToggleProtection() {
@@ -4876,6 +4932,94 @@ async function fbToggleProtection() {
     }
     _fbRelockUI();
   }
+}
+
+/* ── 側邊小工具列：浮動解鎖密碼框（不必捲到最上方）──
+ * 依目前作用中的分頁決定解鎖範圍:
+ *   Tab5「使用者建議與改善」→ 走開發者密碼(fbToggleProtection / 0420)
+ *   其他分頁              → 走資料庫密碼(toggleProtection / 0000)
+ */
+function railIsFeedbackActive() {
+  return !!document.getElementById('tab-feedback')?.classList.contains('active');
+}
+function railCurrentLocked() {
+  return railIsFeedbackActive() ? fbIsProtected : isProtected;
+}
+function railSyncLockIcon() {
+  const btn = document.getElementById('rail-lock-btn');
+  if (!btn) return;
+  const locked = railCurrentLocked();
+  const onFb = railIsFeedbackActive();
+  btn.setAttribute('data-tip',
+    locked ? (onFb ? '解鎖回饋管理（開發者）' : '解鎖資料庫')
+           : (onFb ? '鎖定回饋管理' : '鎖定資料庫'));
+  btn.classList.toggle('rail-unlocked', !locked);
+}
+function railLockOutsideClose(e) {
+  const pop = document.getElementById('rail-lock-popover');
+  const btn = document.getElementById('rail-lock-btn');
+  if (!pop) return;
+  if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+  railHideLockPopover();
+}
+function railHideLockPopover() {
+  const pop = document.getElementById('rail-lock-popover');
+  if (pop) pop.style.display = 'none';
+  const inp = document.getElementById('rail-lock-pwd');
+  if (inp) inp.value = '';
+  document.removeEventListener('mousedown', railLockOutsideClose);
+}
+async function railToggleLock() {
+  // 已解鎖 → 直接重新鎖定(不需密碼)
+  if (!railCurrentLocked()) {
+    railHideLockPopover();
+    if (railIsFeedbackActive()) await fbToggleProtection();
+    else await toggleProtection();
+    railSyncLockIcon();
+    return;
+  }
+  // 鎖定中 → 切換顯示浮動密碼框，並定位在解鎖鈕左側
+  const pop = document.getElementById('rail-lock-popover');
+  const btn = document.getElementById('rail-lock-btn');
+  if (!pop || !btn) return;
+  if (pop.style.display === 'flex') { railHideLockPopover(); return; }
+  const hint = document.getElementById('rail-lock-hint');
+  if (hint) hint.textContent = railIsFeedbackActive() ? '開發者密碼（Tab5 管理）' : '資料庫密碼';
+  const r = btn.getBoundingClientRect();
+  pop.style.top  = (r.top + r.height / 2) + 'px';
+  pop.style.left = (r.left - 10) + 'px';
+  pop.style.display = 'flex';
+  const inp = document.getElementById('rail-lock-pwd');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 0); }
+  setTimeout(() => document.addEventListener('mousedown', railLockOutsideClose), 0);
+}
+async function railConfirmUnlock() {
+  const inp = document.getElementById('rail-lock-pwd');
+  if (!inp || inp.disabled) return;   // 防止解鎖過程中重複送出
+  const pwd = inp.value;
+  inp.disabled = true;
+  try {
+    // 把密碼填入對應範圍的隱藏欄位，沿用既有解鎖流程(含 SharePoint 取鎖)
+    if (railIsFeedbackActive()) {
+      const fld = document.getElementById('fb-protect-pwd');
+      if (fld) fld.value = pwd;
+      await fbToggleProtection();
+    } else {
+      const fld = document.getElementById('protect-pwd');
+      if (fld) fld.value = pwd;
+      await toggleProtection();
+    }
+  } finally {
+    inp.disabled = false;
+  }
+  // 解鎖成功 → 收起；失敗(仍鎖定)→ 清空讓使用者重打
+  if (!railCurrentLocked()) {
+    railHideLockPopover();
+  } else {
+    inp.value = '';
+    inp.focus();
+  }
+  railSyncLockIcon();
 }
 
 /* 三大分類對應 */
@@ -5037,6 +5181,9 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn')[tabIndex].classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'feedback') fbOnTabActivate();
+  // 切換分頁時，工具列鎖頭圖示要反映該頁的鎖定範圍，並收起浮動密碼框
+  if (typeof railHideLockPopover === 'function') railHideLockPopover();
+  if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 /* ============================
@@ -9246,7 +9393,7 @@ function fbShowShadowReadReport() {
     </svg>
   </button>
   <div class="gm-rail-divider"></div>
-  <button type="button" data-tip="解鎖資料庫" onclick="toggleProtection()">
+  <button type="button" id="rail-lock-btn" data-tip="解鎖資料庫" onclick="railToggleLock()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
       <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
@@ -9260,6 +9407,16 @@ function fbShowShadowReadReport() {
     </svg>
   </button>
 </aside>
+
+<!-- 工具列解鎖：浮動密碼框（位置由 JS 依解鎖鈕動態定位） -->
+<div id="rail-lock-popover" class="rail-lock-popover" style="display:none;">
+  <div class="rail-lock-hint" id="rail-lock-hint">資料庫密碼</div>
+  <div class="rail-lock-row">
+    <input type="password" id="rail-lock-pwd" placeholder="輸入密碼"
+           onkeydown="if(event.key==='Enter')railConfirmUnlock()">
+    <button type="button" onclick="railConfirmUnlock()">解鎖</button>
+  </div>
+</div>
 
 </div><!-- /.tc-rail-wrapper -->
 
