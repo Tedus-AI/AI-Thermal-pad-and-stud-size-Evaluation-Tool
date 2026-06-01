@@ -4954,6 +4954,12 @@ function railSyncLockIcon() {
     locked ? (onFb ? '解鎖回饋管理（開發者）' : '解鎖資料庫')
            : (onFb ? '鎖定回饋管理' : '鎖定資料庫'));
   btn.classList.toggle('rail-unlocked', !locked);
+  // 鎖頭圖示反映狀態:鎖定=閉合掛鎖、已解鎖=開啟掛鎖
+  const shackle = locked ? 'M7 11V7a5 5 0 0 1 10 0v4' : 'M7 11V7a5 5 0 0 1 9.9-1';
+  btn.innerHTML =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
+    '<path d="' + shackle + '"/></svg>';
 }
 function railLockOutsideClose(e) {
   const pop = document.getElementById('rail-lock-popover');
@@ -5150,6 +5156,9 @@ async function handleSpLogout() {
 }
 
 initDatabase();
+
+// 啟動時同步工具列鎖頭圖示（預設為鎖定 = 閉合掛鎖）
+if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 
 // Poll lock status every 60 s (re-reads SharePoint file for freshness)
 setInterval(async () => {
@@ -9396,7 +9405,7 @@ function fbShowShadowReadReport() {
   <button type="button" id="rail-lock-btn" data-tip="解鎖資料庫" onclick="railToggleLock()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-      <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
   </button>
   <button type="button" data-tip="儲存資料" onclick="railSave()">
@@ -9408,7 +9417,11 @@ function fbShowShadowReadReport() {
   </button>
 </aside>
 
-<!-- 工具列解鎖：浮動密碼框（位置由 JS 依解鎖鈕動態定位） -->
+</div><!-- /.tc-rail-wrapper -->
+
+<!-- 工具列解鎖：浮動密碼框（位置由 JS 依解鎖鈕動態定位）
+     注意：必須放在 .tc-rail-wrapper 之外，否則 wrapper 的 transform 會成為
+     fixed 定位的 containing block，導致用視窗座標定位時跑到畫面外。 -->
 <div id="rail-lock-popover" class="rail-lock-popover" style="display:none;">
   <div class="rail-lock-hint" id="rail-lock-hint">資料庫密碼</div>
   <div class="rail-lock-row">
@@ -9417,8 +9430,6 @@ function fbShowShadowReadReport() {
     <button type="button" onclick="railConfirmUnlock()">解鎖</button>
   </div>
 </div>
-
-</div><!-- /.tc-rail-wrapper -->
 
 <!-- Teams Contact Modal -->
 <div id="tc-modal-overlay" class="tc-overlay" role="dialog" aria-modal="true" aria-label="聯絡專案成員">
