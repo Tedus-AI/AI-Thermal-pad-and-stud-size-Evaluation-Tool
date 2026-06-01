@@ -121,8 +121,16 @@ const graphDb = {
   /* ─── Graph API Helpers ───────────────────────────────── */
   async _graphGet(url, allowInteractive = true) {
     const token = await this._getAccessToken(allowInteractive);
+    // cache:'no-store' + no-cache headers prevent the browser/proxy from
+    // serving a stale copy, which would make the version check read an old
+    // version and falsely report a conflict.
     const resp = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      cache: 'no-store',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
     });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
@@ -204,7 +212,8 @@ const graphDb = {
       }
     }
 
-    dbCache.version = Date.now();
+    // Strictly increasing version (avoids same-millisecond collisions)
+    dbCache.version = Math.max(Date.now(), (currentVersion ?? 0) + 1);
     currentVersion = dbCache.version;
     const body = JSON.stringify(dbCache, null, 2);
     await this._graphPut(
@@ -318,6 +327,27 @@ const graphDb = {
   async updateDoc(colName, docId, fields) {
     const existing = dbCache[colName]?.[docId] ?? {};
     dbCache[colName][docId] = { ...existing, ...fields };
+    await this._writeFile();
+  },
+
+  /**
+   * Apply multiple set/update mutations in memory, then write ONCE.
+   * Collapses the N+1 write pattern into a single round-trip + version
+   * check, which is the main fix for single-user false version conflicts
+   * (each extra write previously re-read SharePoint, and a stale read
+   * triggered a spurious conflict).
+   * ops: [{ type:'set'|'update', col, id, data?, fields? }]
+   */
+  async writeBatch(ops) {
+    for (const op of ops) {
+      if (!dbCache[op.col]) dbCache[op.col] = {};
+      if (op.type === 'update') {
+        const existing = dbCache[op.col][op.id] ?? {};
+        dbCache[op.col][op.id] = { ...existing, ...op.fields };
+      } else {
+        dbCache[op.col][op.id] = op.data;
+      }
+    }
     await this._writeFile();
   },
 

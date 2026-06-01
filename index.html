@@ -7695,29 +7695,36 @@ async function sgSaveProjectComponents() {
     // Upload any base64 images to SP before writing DB (keeps JSON compact)
     await tcpNormalizeSPImages();
 
-    // Update project document
-    await dbAdapter.updateDoc('projects', sgProjectId, {
-      rf_data: sgProjectData.rf_data || [],
-      digital_data: sgProjectData.digital_data || [],
-      pwr_data: sgProjectData.pwr_data || [],
-      param_temp: sgProjectData.param_temp || '55',
-      param_temp_custom: sgProjectData.param_temp_custom || '',
-      param_backoff: sgProjectData.param_backoff || '',
-      param_duplex: sgProjectData.param_duplex || 'TDD 75%',
-      param_backoff_rt: sgProjectData.param_backoff_rt || '',
-      param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
-      tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
-    });
+    // Build all mutations and write them in a SINGLE flush. Previously this
+    // did 1 project update + N library writes, each with its own re-read +
+    // version check — and a single stale SharePoint read among those N+1
+    // round-trips would falsely report a version conflict even for a lone user.
+    const ops = [
+      { type: 'update', col: 'projects', id: sgProjectId, fields: {
+        rf_data: sgProjectData.rf_data || [],
+        digital_data: sgProjectData.digital_data || [],
+        pwr_data: sgProjectData.pwr_data || [],
+        param_temp: sgProjectData.param_temp || '55',
+        param_temp_custom: sgProjectData.param_temp_custom || '',
+        param_backoff: sgProjectData.param_backoff || '',
+        param_duplex: sgProjectData.param_duplex || 'TDD 75%',
+        param_backoff_rt: sgProjectData.param_backoff_rt || '',
+        param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
+        tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
+      } }
+    ];
 
-    // Update library entries for each component
+    // Library entries for each component
     for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
       const items = sgProjectData[catInfo.field] || [];
       for (const comp of items) {
         if (!comp.Component || comp.Component.trim() === '') continue;
         const docId = toDocId(comp.Component);
-        await dbAdapter.setDoc(catInfo.collection, docId, { ...comp });
+        ops.push({ type: 'set', col: catInfo.collection, id: docId, data: { ...comp } });
       }
     }
+
+    await dbAdapter.writeBatch(ops);
 
     // SharePoint: release lock + return to protected state
     if (dbAdapter.isSharePointMode()) {
