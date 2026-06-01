@@ -5834,48 +5834,8 @@ function deleteCustomComponent(catKey, customIdx) {
   renderAllCategories();
 }
 
-/* ---- 儲存至 Firebase ---- */
-async function saveThermalSpecs() {
-  if (isProtected) {
-    alert('\u5bc6\u78bc\u4fdd\u8b77\u555f\u7528\u4e2d\uff0c\u8acb\u5148\u89e3\u9396\u5f8c\u624d\u80fd\u5132\u5b58\u3002');
-    return;
-  }
-  if (!currentProjectId || !dbAdapter.isReady()) return;
-
-  const btn = document.getElementById('save-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span>\u5132\u5b58\u4e2d...';
-  showSaveStatus('\u6b63\u5728\u5132\u5b58...', 'saving');
-
-  try {
-    await dbAdapter.updateDoc('projects', currentProjectId, {
-      thermal_specs: thermalSpecs,
-      hidden_components: hiddenComponents
-    });
-    // SharePoint: release lock + return to protected state
-    if (dbAdapter.isSharePointMode()) {
-      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
-      relock();
-    }
-    showSaveStatus('\u5132\u5b58\u6210\u529f\uff01', 'saved');
-  } catch (e) {
-    console.error('Save error:', e);
-    if (e instanceof ConflictError) {
-      showConflictWarning();
-      showSaveStatus('版本衝突，已載入最新資料，請重新儲存', 'err');
-      // Reload project data from refreshed dbCache
-      currentProjectData = await dbAdapter.getDoc('projects', currentProjectId);
-      thermalSpecs = currentProjectData?.thermal_specs ?? {};
-      hiddenComponents = currentProjectData?.hidden_components ?? {};
-      renderComponentList();
-    } else {
-      showSaveStatus('\u5132\u5b58\u5931\u6557\uff1a' + e.message, 'err');
-    }
-  }
-
-  btn.disabled = isProtected;
-  btn.textContent = '\u5132\u5b58\u71b1\u8a2d\u8a08\u8cc7\u6599';
-}
+/* ---- 儲存：統一一次存 Tab1/Tab2/Tab3 三頁 ---- */
+async function saveThermalSpecs() { return saveAllTabs(); }
 
 /* ---- 隱藏元件切換 ---- */
 function onToggleHide(el) {
@@ -7706,15 +7666,134 @@ function sgAddCompRow(cat) {
 }
 
 /* ---- Save project components to DB ---- */
-function railSave() {
-  if (document.getElementById('tab-specgen')?.classList.contains('active')) {
-    sgSaveProjectComponents();
-  } else if (document.getElementById('tab-complist')?.classList.contains('active')) {
-    saveThermalSpecs();
-  } else if (document.getElementById('tab-validation')?.classList.contains('active')) {
-    vdSaveValidation();
+/**
+ * 一次儲存 Tab1(特規/EE-RF-PWR)、Tab2(熱設計/TH-ME)、Tab3(模擬與實測驗證)
+ * 三頁的變更。三頁各有獨立的專案選單,因此「各存各的」——每頁把自己的變更
+ * 寫回自己當前選定的專案(只跳過尚未選專案的頁)。
+ *
+ * 效能:所有變更合併成單一 writeBatch(一次版本檢查 + 一次寫入 + 一次釋放鎖),
+ * 所以一次存三頁的耗時與只存一頁幾乎相同,不會是三倍。
+ */
+async function saveAllTabs() {
+  if (isProtected) {
+    alert('密碼保護啟用中，請先解鎖後才能儲存。');
+    return;
   }
+  if (!dbAdapter.isReady()) return;
+
+  // 哪幾頁有載入專案(沒選專案的頁直接跳過,避免用空資料覆寫)
+  const hasSg = !!(sgProjectId && sgProjectData);
+  const hasCl = !!currentProjectId;
+  const hasVd = !!vdProjectId;
+  if (!hasSg && !hasCl && !hasVd) { alert('尚未選擇專案'); return; }
+
+  // 三頁的儲存按鈕 + 狀態列
+  const saveBtn = document.getElementById('save-btn');
+  const sgBtn   = document.getElementById('sg-comp-save-btn');
+  const vdBtn   = document.getElementById('vd-save-btn');
+  const sgStatus = document.getElementById('sg-comp-save-status');
+  const vdStatus = document.getElementById('vd-save-status');
+  const setStatus = (msg, type, clearMs) => {
+    showSaveStatus(msg, type);
+    [sgStatus, vdStatus].forEach(el => {
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'save-status ' + type;
+      if (clearMs) setTimeout(() => { el.textContent = ''; el.className = 'save-status'; }, clearMs);
+    });
+  };
+  [saveBtn, sgBtn, vdBtn].forEach(b => { if (b) b.disabled = true; });
+  const spinner = '<span class="loading-spinner"></span>儲存中...';
+  [sgBtn, vdBtn].forEach(b => { if (b) b.innerHTML = spinner; });
+  setStatus('正在儲存全部…', 'saving');
+
+  try {
+    // Tab1 的貼圖需先上傳到 SP(讓 JSON 保持精簡)
+    if (hasSg) await tcpNormalizeSPImages();
+
+    // 把三頁的寫入合併成單一批次(每頁寫回各自的專案 id)
+    const ops = [];
+    if (hasSg) {
+      ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: {
+        rf_data: sgProjectData.rf_data || [],
+        digital_data: sgProjectData.digital_data || [],
+        pwr_data: sgProjectData.pwr_data || [],
+        param_temp: sgProjectData.param_temp || '55',
+        param_temp_custom: sgProjectData.param_temp_custom || '',
+        param_backoff: sgProjectData.param_backoff || '',
+        param_duplex: sgProjectData.param_duplex || 'TDD 75%',
+        param_backoff_rt: sgProjectData.param_backoff_rt || '',
+        param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
+        tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
+      } });
+      for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
+        const items = sgProjectData[catInfo.field] || [];
+        for (const comp of items) {
+          if (!comp.Component || comp.Component.trim() === '') continue;
+          ops.push({ type: 'set', col: catInfo.collection, id: toDocId(comp.Component), data: { ...comp } });
+        }
+      }
+    }
+    if (hasCl) {
+      ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: {
+        thermal_specs: thermalSpecs,
+        hidden_components: hiddenComponents
+      } });
+    }
+    if (hasVd) {
+      ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: {
+        validation_data: vdValidationData,
+        vd_hidden_components: vdHiddenComps
+      } });
+    }
+
+    await dbAdapter.writeBatch(ops);
+
+    // SharePoint:整批寫完後只釋放鎖 + 重新上鎖「一次」
+    if (dbAdapter.isSharePointMode()) {
+      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+      relock();
+    }
+
+    // 重新繪製有載入的頁
+    if (hasSg && typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
+    if (hasCl && typeof renderAllCategories === 'function') renderAllCategories();
+    if (hasVd && typeof vdRender === 'function') vdRender();
+
+    setStatus('全部儲存成功！', 'saved', 3000);
+  } catch (e) {
+    console.error('Save-all error:', e);
+    if (e instanceof ConflictError) {
+      showConflictWarning();
+      setStatus('版本衝突，已載入最新資料，請重新操作', 'err');
+      // 重新載入有載入的頁的最新資料
+      if (hasCl) {
+        currentProjectData = await dbAdapter.getDoc('projects', currentProjectId);
+        thermalSpecs = currentProjectData?.thermal_specs ?? {};
+        hiddenComponents = currentProjectData?.hidden_components ?? {};
+        if (typeof renderAllCategories === 'function') renderAllCategories();
+      }
+      if (hasSg) {
+        sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
+        if (typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
+      }
+      if (hasVd) {
+        vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
+        if (typeof vdOnProjectChange === 'function') await vdOnProjectChange();
+      }
+    } else {
+      setStatus('儲存失敗：' + e.message, 'err');
+    }
+  }
+
+  // 還原按鈕文字與啟用狀態
+  if (saveBtn) { saveBtn.disabled = isProtected; saveBtn.textContent = '儲存熱設計資料'; }
+  if (sgBtn)   { sgBtn.disabled   = isProtected; sgBtn.textContent   = '儲存元件變更'; }
+  if (vdBtn)   { vdBtn.disabled   = isProtected; vdBtn.textContent   = '儲存驗證資料'; }
 }
+
+/* 各頁儲存按鈕與工具列儲存鈕統一走 saveAllTabs（一次存三頁） */
+function railSave() { return saveAllTabs(); }
 
 function tcpStripTransient(tcPlacement) {
   if (!tcPlacement) return {};
@@ -7750,87 +7829,7 @@ async function tcpNormalizeSPImages() {
   }
 }
 
-async function sgSaveProjectComponents() {
-  if (isProtected) {
-    alert('請先解鎖密碼保護');
-    return;
-  }
-  if (!sgProjectId || !sgProjectData) {
-    alert('尚未選擇專案');
-    return;
-  }
-
-  const btn = document.getElementById('sg-comp-save-btn');
-  const status = document.getElementById('sg-comp-save-status');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span>儲存中...';
-  status.textContent = '';
-  status.className = 'save-status';
-
-  try {
-    // Upload any base64 images to SP before writing DB (keeps JSON compact)
-    await tcpNormalizeSPImages();
-
-    // Build all mutations and write them in a SINGLE flush. Previously this
-    // did 1 project update + N library writes, each with its own re-read +
-    // version check — and a single stale SharePoint read among those N+1
-    // round-trips would falsely report a version conflict even for a lone user.
-    const ops = [
-      { type: 'update', col: 'projects', id: sgProjectId, fields: {
-        rf_data: sgProjectData.rf_data || [],
-        digital_data: sgProjectData.digital_data || [],
-        pwr_data: sgProjectData.pwr_data || [],
-        param_temp: sgProjectData.param_temp || '55',
-        param_temp_custom: sgProjectData.param_temp_custom || '',
-        param_backoff: sgProjectData.param_backoff || '',
-        param_duplex: sgProjectData.param_duplex || 'TDD 75%',
-        param_backoff_rt: sgProjectData.param_backoff_rt || '',
-        param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
-        tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
-      } }
-    ];
-
-    // Library entries for each component
-    for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
-      const items = sgProjectData[catInfo.field] || [];
-      for (const comp of items) {
-        if (!comp.Component || comp.Component.trim() === '') continue;
-        const docId = toDocId(comp.Component);
-        ops.push({ type: 'set', col: catInfo.collection, id: docId, data: { ...comp } });
-      }
-    }
-
-    await dbAdapter.writeBatch(ops);
-
-    // SharePoint: release lock + return to protected state
-    if (dbAdapter.isSharePointMode()) {
-      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
-      relock();
-    }
-
-    // Re-render component list + power summary with latest in-memory data
-    sgRenderProjectComponents();
-
-    status.textContent = '已儲存';
-    status.className = 'save-status saved';
-    setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 3000);
-  } catch (e) {
-    if (e instanceof ConflictError) {
-      showConflictWarning();
-      status.textContent = '版本衝突，已載入最新資料，請重新操作';
-      status.className = 'save-status err';
-      // Reload project data from refreshed dbCache and re-render
-      sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
-      sgRenderProjectComponents();
-    } else {
-      status.textContent = '儲存失敗：' + e.message;
-      status.className = 'save-status err';
-    }
-  }
-
-  btn.disabled = isProtected;
-  btn.textContent = '儲存元件變更';
-}
+async function sgSaveProjectComponents() { return saveAllTabs(); }
 
 /* ---- Tab 1 export ---- */
 function sgExportExcel() {
@@ -8426,47 +8425,7 @@ function vdAddItem(catLower, compName, power, qty) {
   vdRender();
 }
 
-async function vdSaveValidation() {
-  if (isProtected) { alert('請先解鎖密碼保護'); return; }
-  if (!vdProjectId || !dbAdapter.isReady()) { alert('尚未選擇專案'); return; }
-
-  const btn = document.getElementById('vd-save-btn');
-  const status = document.getElementById('vd-save-status');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span>儲存中...';
-  status.textContent = '';
-  status.className = 'save-status';
-
-  try {
-    await dbAdapter.updateDoc('projects', vdProjectId, {
-      validation_data: vdValidationData,
-      vd_hidden_components: vdHiddenComps
-    });
-
-    if (dbAdapter.isSharePointMode()) {
-      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
-      relock();
-    }
-
-    status.textContent = '已儲存';
-    status.className = 'save-status saved';
-    setTimeout(() => { status.textContent = ''; status.className = 'save-status'; }, 3000);
-  } catch (e) {
-    if (e instanceof ConflictError) {
-      showConflictWarning();
-      status.textContent = '版本衝突，已載入最新資料，請重新操作';
-      status.className = 'save-status err';
-      vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
-      await vdOnProjectChange();
-    } else {
-      status.textContent = '儲存失敗：' + e.message;
-      status.className = 'save-status err';
-    }
-  }
-
-  btn.disabled = isProtected;
-  btn.textContent = '儲存驗證資料';
-}
+async function vdSaveValidation() { return saveAllTabs(); }
 
 /* ---- Tab 3 export ---- */
 function vdExportExcel() {
