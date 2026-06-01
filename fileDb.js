@@ -92,6 +92,26 @@ const fileDb = {
     await this._writeFile();
   },
 
+  /**
+   * Apply multiple set/update mutations in memory, then write ONCE.
+   * Avoids the N+1 write pattern (one re-read + version check per doc),
+   * which is the main source of false version conflicts for a single user.
+   * ops: [{ type:'set'|'update', col, id, data?, fields? }]
+   */
+  async writeBatch(ops) {
+    this._assertReady();
+    for (const op of ops) {
+      if (!dbCache[op.col]) dbCache[op.col] = {};
+      if (op.type === 'update') {
+        const existing = dbCache[op.col][op.id] ?? {};
+        dbCache[op.col][op.id] = { ...existing, ...op.fields };
+      } else {
+        dbCache[op.col][op.id] = op.data;
+      }
+    }
+    await this._writeFile();
+  },
+
   async deleteDoc(colName, docId) {
     this._assertReady();
     if (dbCache[colName]) {
@@ -153,8 +173,9 @@ const fileDb = {
       throw new ConflictError('版本衝突：資料已被他人更新');
     }
 
-    // Step 3: Write with new version
-    dbCache.version = Date.now();
+    // Step 3: Write with new version (strictly increasing to avoid
+    // same-millisecond collisions across rapid sequential writes)
+    dbCache.version = Math.max(Date.now(), currentVersion + 1);
     currentVersion = dbCache.version;
     await this._writeFileRaw();
   },

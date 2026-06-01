@@ -216,6 +216,16 @@ const dbAdapter = {
     if (_isFb(colName) && _dualOn()) _shadowUpdate(docId, fields);
   },
 
+  /**
+   * Batched multi-doc write (single flush + single version check).
+   * Used for project saves that touch many docs at once. Not used for
+   * feedback_items, so no dual-write shadowing is needed here.
+   * ops: [{ type:'set'|'update', col, id, data?, fields? }]
+   */
+  async writeBatch(ops) {
+    return await this._backend().writeBatch(ops);
+  },
+
   async deleteDoc(colName, docId) {
     await this._backend().deleteDoc(colName, docId);
     if (_isFb(colName) && _dualOn()) _shadowDelete(docId);
