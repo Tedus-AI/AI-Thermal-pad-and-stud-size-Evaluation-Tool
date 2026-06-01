@@ -135,6 +135,53 @@ async function _doShadowReadDiff(id, jsonItem) {
   }
 }
 
+/* ── shadow-read 反向 helpers（Phase 4+）──────────────────────────
+ * primary='list' 時用：從 JSON 端讀同一筆，與傳入的 listItem 做 diff。
+ * 複用 _SR_KEYS / _SR_LOSSY / normalize 邏輯，log 加 primary:'list' 標記。
+ * 任何失敗 silent（不影響主流程）。
+ */
+async function _doShadowReadDiffReverse(id, listItem) {
+  // listItem: List 端已讀出的資料（id 已剝除），來自 getDoc list 分支
+  try {
+    const jsonRaw = await (DB_MODE === 'sharepoint' ? graphDb : fileDb).getDoc('feedback_items', id);
+    if (!jsonRaw) {
+      _logShadowRead({ id, result: 'list_missing', diffs: [], primary: 'list' });
+      return;
+    }
+    const jObj = { ...jsonRaw,  id };   // JSON side，補回 id（JSON 端 value 不含 id）
+    const lObj = { ...listItem, id };   // List side，補回被剝除的 id
+
+    const realDiffs = [];
+    let hasLossy = false;
+
+    for (const k of _SR_KEYS) {
+      let jv = jObj[k] ?? '';
+      let lv = lObj[k] ?? '';
+
+      if (k === 'attachments') {
+        jv = JSON.stringify(Array.isArray(jv) ? jv : []);
+        lv = JSON.stringify(Array.isArray(lv) ? lv : []);
+      }
+      if (_SR_LOSSY.has(k)) {
+        jv = typeof jv === 'string' ? jv.replace(/\.\d{3}Z$/, 'Z') : '';
+        lv = typeof lv === 'string' ? lv.replace(/\.\d{3}Z$/, 'Z') : '';
+      }
+
+      if (String(jv) !== String(lv)) {
+        if (_SR_LOSSY.has(k)) hasLossy = true;
+        else realDiffs.push({ field: k, jsonValue: jv, listValue: lv });
+      }
+    }
+
+    if      (realDiffs.length > 0) _logShadowRead({ id, result: 'real_diff',  diffs: realDiffs, primary: 'list' });
+    else if (hasLossy)             _logShadowRead({ id, result: 'lossy_only',                   primary: 'list' });
+    else                           _logShadowRead({ id, result: 'consistent',                   primary: 'list' });
+  } catch (e) {
+    console.warn('[shadow-read-rev] diff failed:', e);
+    _logShadowRead({ id, result: 'error', diffs: [], error: e.message, primary: 'list' });
+  }
+}
+
 const dbAdapter = {
   _backend() {
     return DB_MODE === 'sharepoint' ? graphDb : fileDb;
@@ -184,7 +231,10 @@ const dbAdapter = {
       const items = await graphListsDb.feedback.list();
       const result = {};
       for (const it of items) {
-        if (it.data?.id) result[it.data.id] = it.data;
+        if (it.data?.id) {
+          const { id: _drop, ...rest } = it.data;  // value 剝掉 id，key 仍用 id，保持與 JSON 端形狀一致
+          result[it.data.id] = rest;
+        }
       }
       return result;
     }
@@ -195,7 +245,12 @@ const dbAdapter = {
     // Phase 4+：PRIMARY_FEEDBACK='list' 時從 List 讀
     if (_isFb(colName) && _primary() === 'list') {
       const items = await graphListsDb.feedback.list({ Title: docId });
-      return items.length ? items[0].data : null;
+      if (!items.length) return null;
+      const { id: _drop, ...rest } = items[0].data;  // value 剝掉 id，保持與 JSON 端形狀一致
+      if (_shadowReadOn()) {
+        setTimeout(() => _doShadowReadDiffReverse(docId, rest), 0);
+      }
+      return rest;
     }
     const result = await this._backend().getDoc(colName, docId);
     // Phase 3+：shadow-read fire-and-forget（不 await，立刻回傳 result）
