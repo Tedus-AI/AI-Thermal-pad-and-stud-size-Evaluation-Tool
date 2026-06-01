@@ -126,12 +126,12 @@ async function _doShadowReadDiff(id, jsonItem) {
       }
     }
 
-    if      (realDiffs.length > 0) _logShadowRead({ id, result: 'real_diff',   diffs: realDiffs });
-    else if (hasLossy)             _logShadowRead({ id, result: 'lossy_only'  });
-    else                           _logShadowRead({ id, result: 'consistent'  });
+    if      (realDiffs.length > 0) _logShadowRead({ id, result: 'real_diff',  diffs: realDiffs, primary: 'json' });
+    else if (hasLossy)             _logShadowRead({ id, result: 'lossy_only',                   primary: 'json' });
+    else                           _logShadowRead({ id, result: 'consistent',                   primary: 'json' });
   } catch (e) {
     console.warn('[shadow-read] diff failed:', e);
-    _logShadowRead({ id, result: 'error', diffs: [], error: e.message });
+    _logShadowRead({ id, result: 'error', diffs: [], error: e.message, primary: 'json' });
   }
 }
 
@@ -145,7 +145,7 @@ async function _doShadowReadDiffReverse(id, listItem) {
   try {
     const jsonRaw = await (DB_MODE === 'sharepoint' ? graphDb : fileDb).getDoc('feedback_items', id);
     if (!jsonRaw) {
-      _logShadowRead({ id, result: 'list_missing', diffs: [], primary: 'list' });
+      _logShadowRead({ id, result: 'json_missing', diffs: [], primary: 'list' });
       return;
     }
     const jObj = { ...jsonRaw,  id };   // JSON side，補回 id（JSON 端 value 不含 id）
