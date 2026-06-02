@@ -9071,7 +9071,7 @@ function fbShowShadowReadReport() {
   }
 
   // 統計
-  const counts = { consistent: 0, lossy_only: 0, real_diff: 0, list_missing: 0, error: 0 };
+  const counts = { consistent: 0, lossy_only: 0, real_diff: 0, list_missing: 0, json_missing: 0, error: 0 };
   for (const e of log) { const k = e.result; if (k in counts) counts[k]++; }
   const total = log.length;
 
@@ -9082,11 +9082,12 @@ function fbShowShadowReadReport() {
     `⚠️ lossy_only: <b>${counts.lossy_only}</b>　` +
     `❌ real_diff: <b style="color:#c62828">${counts.real_diff}</b>　` +
     `🔍 list_missing: <b>${counts.list_missing}</b>　` +
+    `🔎 json_missing: <b>${counts.json_missing}</b>　` +
     `💥 error: <b>${counts.error}</b>　` +
     `<span style="color:#666">（總 ${total} 筆，顯示最近 ${Math.min(total,20)} 筆）</span></div>`;
 
   const BG = { consistent:'#e8f5e9', lossy_only:'#fff8e1', real_diff:'#fde8e8',
-               list_missing:'#fff3e0', error:'#fde8e8' };
+               list_missing:'#fff3e0', json_missing:'#fff3e0', error:'#fde8e8' };
 
   const rows = log.slice(0, 20).map(entry => {
     const t = new Date(entry.ts).toISOString().replace('T',' ').slice(0,19) + 'Z';
@@ -9113,6 +9114,8 @@ function fbShowShadowReadReport() {
       summary = 'lossy 欄位有差但 normalize 後一致';
     } else if (entry.result === 'list_missing') {
       summary = 'List 端找不到該筆';
+    } else if (entry.result === 'json_missing') {
+      summary = 'JSON 端找不到該筆';
     } else {
       summary = '-';
     }
