@@ -245,7 +245,14 @@ const dbAdapter = {
     // Phase 4+：PRIMARY_FEEDBACK='list' 時從 List 讀
     if (_isFb(colName) && _primary() === 'list') {
       const items = await graphListsDb.feedback.list({ Title: docId });
-      if (!items.length) return null;
+      if (!items.length) {
+        if (_shadowReadOn()) {
+          setTimeout(() => _logShadowRead({
+            id: docId, result: 'list_missing', diffs: [], primary: 'list'
+          }), 0);
+        }
+        return null;
+      }
       const { id: _drop, ...rest } = items[0].data;  // value 剝掉 id，保持與 JSON 端形狀一致
       if (_shadowReadOn()) {
         setTimeout(() => _doShadowReadDiffReverse(docId, rest), 0);
