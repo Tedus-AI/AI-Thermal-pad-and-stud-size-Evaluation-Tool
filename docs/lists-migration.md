@@ -107,6 +107,43 @@
 
 ---
 
+## Milestone 進度（Phase 4）
+
+- [x] **Milestone 4.1**：`dbAdapter.js` cutover 讀取路徑 — `getCollection` / `getDoc` list 分支剝 `id`（schema drift 消除）；新增 `_doShadowReadDiffReverse`（複用 `_SR_KEYS`/`_SR_LOSSY`，`primary:'list'` 標記）；`getDoc` list 分支補 `list_missing` log；`_doShadowReadDiff` 補 `primary:'json'` 對稱；新增 `json_missing` result；`graphListsDb.feedback.list()` 加 200 筆防呆 warning；M4.1 煙霧測試 5+1 個 step 全綠（2026-06-02 完成）
+- [x] **Milestone 4.2**：Phase 4 啟動 checklist（`docs/phase4-activation-checklist.md`）+ 本文件 Phase 4 進度與 retrospective 更新（2026-06-02 完成）
+
+### Phase 4 Retrospective（新增 Gotchas）
+
+1. **M3.2 預埋的 list 分支優勢顯現**：M3.2 在 `getCollection` / `getDoc` 都預先寫好了 `_primary() === 'list'` 分支。Phase 4 開工時發現「路徑幾乎全就緒」，只需補 schema drift 修正（剝 `id`）和 reverse shadow-read，不需重新設計路由邏輯。先寫好 dormant code 的投資在這裡回收。
+2. **schema drift 從源頭消除（不只記錄）**：`fromListFields()` 的 `data` 物件含 `id` 欄位，而 JSON 端 value 不含。初版決策是「記錄就好」，最終改成 `getCollection` / `getDoc` list 分支 return 前剝掉 `id`（`const { id: _drop, ...rest } = it.data`），讓兩邊 value 形狀完全一致。比對時再用 `{ ...item, id }` spread 補回（來自 `docId` 參數）。這個「剝掉再補」的設計讓 JSON 端不會因 Phase 4 cutover 後的 edit 路徑引入 `id` 欄位。
+3. **反向 shadow-read 設計（`_doShadowReadDiffReverse` + `primary` 欄位對稱）**：Phase 3 shadow-read 是「primary=JSON，去 List 查」；Phase 4 cutover 後需反轉。設計成獨立函式（不改既有 `_doShadowReadDiff`，避免 Phase 3 regression），複用 `_SR_KEYS`/`_SR_LOSSY`/normalize 邏輯，所有 log entry 加 `primary:'list'` 標記。同時補 `_doShadowReadDiff` 的 `primary:'json'` 讓兩邊對稱，未來報告 UI 擴展時可直接用 `entry.primary` 區分，不需 fallback 邏輯。
+4. **`list_missing` / `json_missing` 對稱設計（第 6 種 result）**：`getDoc` list 分支找不到 id 時原本 `return null` 無 log（監控盲點）。補上 `list_missing` log（primary='list'）。同時新增 `json_missing`（reverse diff 時 JSON 端找不到）與 `list_missing` 對稱，共 6 種 result 類型。`fbShowShadowReadReport` 同步擴展 counts / BG / 摘要文字，舊 UI 無 breaking change。
+
+---
+
+## Phase 4 完成後 → Phase 5 規劃（停寫 JSON）
+
+> **此節在 Phase 4 14 天觀察期通過後才進入討論**，以下為預規劃備忘。
+
+**Phase 5 的本質**：Phase 4 成功後，List 已是 source of truth，dual-write 是保險；
+Phase 5 是「關掉保險」，讓 JSON 端退出寫入路徑。
+
+**Phase 5 才動工的條件**（來自 Phase 4 觀察期）：
+- `real_diff: 0` 連續 14 天
+- `json_missing: 0`、`list_missing: 0`（或已確認原因）
+- `error` 無持續性異常
+
+**Phase 5 的核心操作**：
+1. `config.js`：`DUAL_WRITE_FEEDBACK: false`（停止 shadow-write 到 JSON）
+2. 確認 JSON 端的 `feedback_items` 不再收到新寫入
+3. 保留 JSON 端舊資料當備份，不刪除
+
+**Phase 5+ 可選清理（非必要）**：
+- 移除 `graphDb` 的 pessimistic lock code（`acquireLock` / `releaseLock` / `LockError` 等）——Phase 5 後 JSON 端已無人寫，鎖機制是死碼。但「保留死碼 vs 刪除」的決策不在 Phase 5 範圍，視穩定程度決定。
+- 移除 `_doShadowReadDiff`（Phase 3 版）——Phase 5 後 `PRIMARY_FEEDBACK` 不會再回 `'json'`，此函式成死碼。同樣視情況決定。
+
+---
+
 ## 環境資訊
 
 | 項目 | 值 |
@@ -400,6 +437,9 @@ f916276f-d0ac-45fd-90f0-c9be2e7938e6
   - [x] 3.4 Phase 3 啟動 checklist + doc 收尾
   - [ ] 3.5 shadow-read 跑 14 天觀察期，`real_diff: 0`（⏳ 觀察期尚未開始）
 - [ ] **Phase 4**：Cutover（`PRIMARY_FEEDBACK: 'list'`，仍 dual-write 保險）
+  - [x] 4.1 `getCollection` / `getDoc` list 分支 + `_doShadowReadDiffReverse` + `json_missing` / `list_missing` 監控
+  - [x] 4.2 Phase 4 啟動 checklist + doc 收尾
+  - [ ] 4.3 Phase 4 cutover 14 天觀察期（⏳ 待啟動）
 - [ ] **Phase 5**：Decommission JSON 的 feedback_items 區塊（`DUAL_WRITE_FEEDBACK: false`）
 - [ ] **Phase 2+ 額外**：FbAttachments 改用 Document Library 存圖片，List 只存路徑
 - [ ] **Phase 5+ 額外**：移除 JSON 端鎖相關 code（見下方「並行控制機制演進」）
