@@ -26,6 +26,6 @@ window.SHAREPOINT_CONFIG = SHAREPOINT_CONFIG;
 window.FEATURE_FLAGS = {
   DUAL_WRITE_FEEDBACK:   true,   // 寫 feedback_items 時同步 shadow-write 到 List
   SHOW_DEV_PANEL:        true,  // 顯示開發者驗證區（維護者用）
-  PRIMARY_FEEDBACK:      'json', // 'json' | 'list'，控制 feedback 讀取來源（Phase 4+）
+  PRIMARY_FEEDBACK:      'list', // 'json' | 'list'，控制 feedback 讀取來源（Phase 4+）
   SHADOW_READ_FEEDBACK:  true,  // 讀 feedback 時背景 shadow-read List 做 diff（Phase 3+）
 };
