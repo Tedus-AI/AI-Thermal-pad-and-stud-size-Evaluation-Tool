@@ -1294,6 +1294,32 @@
   .tcp-placement-btn.digital:hover { background: #245a9a; box-shadow: 0 2px 8px rgba(46,107,181,0.28); }
   .tcp-placement-btn.pwr   { background: #e67e22; }
   .tcp-placement-btn.pwr:hover   { background: #ca6f1e; box-shadow: 0 2px 8px rgba(230,126,34,0.28); }
+  /* 鎖定時編輯鈕反灰（覆寫各分類底色） */
+  .tcp-placement-btn:disabled { background: #b0c4de !important; color: #eef2f6 !important; cursor: not-allowed; box-shadow: none !important; opacity: 0.85; }
+  /* 唯讀檢視（眼睛）按鈕 */
+  .tcp-view-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-left: 6px; padding: 5px 12px; border-radius: 6px;
+    font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    border: 1.5px solid #94a3b8; background: #fff; color: #475569;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .tcp-view-btn:hover { background: #f1f5f9; border-color: #64748b; }
+
+  /* ── 唯讀檢視模式：停用所有編輯操作，只能看 ── */
+  .tcp-modal-box.tcp-view-only .tcp-img-toolbar { display: none; }
+  .tcp-modal-box.tcp-view-only .tcp-workspace-wrap { pointer-events: none; }   /* 擋掉加標記/拖曳/縮放/刪除 */
+  .tcp-modal-box.tcp-view-only .tcp-add-page-btn,
+  .tcp-modal-box.tcp-view-only .tcp-page-del-btn,
+  .tcp-modal-box.tcp-view-only .tcp-browse-btn,
+  .tcp-modal-box.tcp-view-only .tcp-replace-btn,
+  .tcp-modal-box.tcp-view-only .tcp-delete-photo-btn,
+  .tcp-modal-box.tcp-view-only .tcp-rh { display: none !important; }
+  .tcp-modal-box.tcp-view-only .tcp-photo-zone { pointer-events: none; opacity: 0.6; }
+  .tcp-modal-box.tcp-view-only .tcp-title-input { background: #f1f3f5; pointer-events: none; }
+  .tcp-modal-box.tcp-view-only .tcp-modal-title::after {
+    content: ' （👁 唯讀檢視）'; color: #b8860b; font-size: 0.8em; font-weight: 600;
+  }
 
   /* ── TCP Placement Modal ── */
   .tcp-modal-overlay {
@@ -4802,6 +4828,7 @@ function _applyUnlockedUI() {
   if (vdSaveBtn) vdSaveBtn.disabled = false;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = false; sgNewProjBtn.title = '新增專案'; }
+  if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
@@ -4826,6 +4853,7 @@ function relock() {
   if (vdSaveBtn) vdSaveBtn.disabled = true;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = true; sgNewProjBtn.title = '需先解鎖密碼保護才能新增專案'; }
+  if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
@@ -6672,7 +6700,8 @@ function sgRenderProjectComponents() {
     html += `</tbody></table>
       <div class="sg-comp-footer">
         <button class="sg-comp-add-btn" onclick="sgAddCompRow('${catKey}')">&#10133; 新增 ${catInfo.label}</button>
-        <button class="tcp-placement-btn ${catInfo.css}" onclick="tcpOpenModal('${catKey}')" title="${catInfo.label} 元件位置標註">📍 元件位置標註</button>
+        <button class="tcp-placement-btn ${catInfo.css}" onclick="tcpOpenModal('${catKey}')" ${isProtected ? 'disabled' : ''} title="${catInfo.label} 元件位置標註（需解鎖才能編輯）">📍 元件位置標註</button>
+        <button class="tcp-view-btn" onclick="tcpOpenModal('${catKey}', true)" title="檢視 ${catInfo.label} 元件位置標註（唯讀，免解鎖）">👁 檢視</button>
       </div>
     </div>`;
   }
@@ -6822,12 +6851,18 @@ let _tcpActivePageIdx = 0;   // current page index within category
 let _tcpActivePage = null;   // current page object reference
 let _tcpDragState      = null;   // { annoId, dotAbsX, dotAbsY }
 let _tcpMoveMode       = false;  // image pan mode toggle
+let tcpViewOnly        = false;  // 唯讀檢視（未解鎖時用眼睛按鈕進入）
 let _tcpImgMoveDrag    = null;   // { startX, startY, origX, origY }
 let _tcpCropOrigFrame  = null;   // saved imgFrame before crop for cancel
 
 /* ── open / close ── */
-function tcpOpenModal(category) {
+function tcpOpenModal(category, viewOnly) {
   if (!sgProjectData) { alert('請先選擇或建立一個專案'); return; }
+
+  // 鎖定中一律唯讀；眼睛按鈕也以唯讀進入
+  tcpViewOnly = !!viewOnly || isProtected;
+  const _box = document.querySelector('.tcp-modal-box');
+  if (_box) _box.classList.toggle('tcp-view-only', tcpViewOnly);
 
   // If switching categories, reset page index; else keep current index if same category
   if (_tcpCategory !== category) {
@@ -6864,6 +6899,11 @@ function tcpCloseModal() {
   document.getElementById('tcp-modal-overlay').classList.remove('active');
   document.body.style.overflow = '';
   _tcpDragState = null;
+}
+
+/* 依鎖定狀態切換「元件位置標註」編輯鈕的可用性（眼睛檢視鈕永遠可用） */
+function tcpSyncPlacementBtns() {
+  document.querySelectorAll('.tcp-placement-btn').forEach(b => { b.disabled = isProtected; });
 }
 
 document.addEventListener('keydown', function(e) {
@@ -6957,21 +6997,25 @@ function tcpRenderEditor() {
   // Wire up title input
   const titleInput = document.getElementById('tcp-title-input');
   if (titleInput) {
-    titleInput.addEventListener('input', () => {
-      page.title = titleInput.value;
-      page.isCustomTitle = true;
-    });
+    if (tcpViewOnly) {
+      titleInput.readOnly = true;
+    } else {
+      titleInput.addEventListener('input', () => {
+        page.title = titleInput.value;
+        page.isCustomTitle = true;
+      });
+    }
   }
 
-  tcpSetupPhotoHandlers(page);
+  if (!tcpViewOnly) tcpSetupPhotoHandlers(page);
   if (hasPhoto) {
     const launchInteraction = (imgSrc) => {
       const imgEl = document.getElementById('tcp-photo-img');
       if (imgEl && imgSrc) imgEl.src = imgSrc;
       tcpRenderImgFrame(page);
       const outer = document.getElementById('tcp-img-outer');
-      if (outer) { outer.style.display = 'block'; if (_tcpMoveMode) outer.classList.add('move-mode'); }
-      tcpSetupImgInteraction(page);
+      if (outer) { outer.style.display = 'block'; if (_tcpMoveMode && !tcpViewOnly) outer.classList.add('move-mode'); }
+      if (!tcpViewOnly) tcpSetupImgInteraction(page);
       if (page.annotations.length > 0) tcpRenderMarkers(page);
       tcpUpdateHistoryBtns(page);
     };
@@ -7030,6 +7074,7 @@ function tcpSelectPage(idx) {
 }
 
 function tcpAddPage() {
+  if (tcpViewOnly) return;
   if (!_tcpCategory) return;
   const pages = sgProjectData.tcPlacement[_tcpCategory.toLowerCase()].pages;
   pages.push({ id: 'p_' + Date.now(), title: '', imageData: '', annotations: [], isCustomTitle: false });
@@ -7037,6 +7082,7 @@ function tcpAddPage() {
 }
 
 function tcpDeletePage(idx) {
+  if (tcpViewOnly) return;
   if (!_tcpCategory) return;
   const pages = sgProjectData.tcPlacement[_tcpCategory.toLowerCase()].pages;
   if (pages.length <= 1) { alert('至少保留 1 頁'); return; }
@@ -7089,6 +7135,7 @@ function tcpPushHistory(page) {
 }
 
 function tcpUndo() {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   if (!page?.history?.length || page.historyIndex < 0) return;
   if (!page.redoStack) page.redoStack = [];
@@ -7099,6 +7146,7 @@ function tcpUndo() {
 }
 
 function tcpRedo() {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   if (!page?.redoStack?.length) return;
   page.historyIndex++;                     // keep undo pointer in sync
@@ -7152,6 +7200,7 @@ function tcpRenderImgFrame(page) {
 
 /* Toggle image pan mode */
 function tcpToggleMoveMode() {
+  if (tcpViewOnly) return;
   _tcpMoveMode = !_tcpMoveMode;
   const btn   = document.getElementById('tcp-move-btn');
   const outer = document.getElementById('tcp-img-outer');
@@ -7335,6 +7384,7 @@ async function tcpBakeCrop(page) {
 }
 
 async function tcpRotateImg(deg) {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   if (!page?.imageData) return;
   // Download SP image to base64 first so canvas + history both work;
@@ -7369,6 +7419,7 @@ async function tcpRotateImg(deg) {
 }
 
 async function tcpFlipImg(axis) {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   if (!page?.imageData) return;
   let oldSp = null;
@@ -7393,6 +7444,7 @@ async function tcpFlipImg(axis) {
 
 /* Non-destructive crop: adjust the visible frame window without modifying imageData */
 function tcpStartCrop() {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   if (!page?.imgFrame) return;
   const f = page.imgFrame;
@@ -7421,6 +7473,7 @@ function tcpCancelCrop() {
 }
 
 function tcpApplyCrop() {
+  if (tcpViewOnly) return;
   const page = _tcpActivePage;
   const box  = document.getElementById('tcp-crop-box');
   const ws   = document.getElementById('tcp-workspace');
@@ -7838,6 +7891,7 @@ function tcpUpdateLine(svg, annoId, x1, y1, x2, y2) {
 /* ── Ctrl+V paste support ── */
 document.addEventListener('paste', async function(e) {
   if (!document.getElementById('tcp-modal-overlay').classList.contains('active')) return;
+  if (tcpViewOnly) return;
   if (!_tcpActivePage) return;
   const el = document.activeElement;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
