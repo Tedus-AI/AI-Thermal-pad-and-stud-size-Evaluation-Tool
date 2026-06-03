@@ -3833,6 +3833,28 @@
   }
   .rail-lock-popover button:hover { background: #50529a; }
 
+  /* 上鎖前未儲存變更確認對話框 */
+  .unsaved-lock-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45); z-index: 1600;
+    justify-content: center; align-items: center;
+  }
+  .unsaved-lock-overlay.active { display: flex; }
+  .unsaved-lock-box {
+    background: #fff; border-radius: 14px; width: 430px; max-width: 92vw;
+    padding: 22px 24px; box-shadow: 0 12px 48px rgba(0,0,0,0.25);
+  }
+  .unsaved-lock-title { font-size: 1.05rem; font-weight: 700; color: #b8860b; margin-bottom: 10px; }
+  .unsaved-lock-msg { font-size: 0.9rem; color: #444; line-height: 1.6; margin-bottom: 18px; }
+  .unsaved-lock-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .unsaved-lock-actions button { padding: 8px 14px; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+  .unsaved-lock-actions .ul-save { background: #217346; color: #fff; }
+  .unsaved-lock-actions .ul-save:hover { background: #1b5e3a; }
+  .unsaved-lock-actions .ul-discard { background: #e67e22; color: #fff; }
+  .unsaved-lock-actions .ul-discard:hover { background: #cf6e16; }
+  .unsaved-lock-actions .ul-cancel { background: #e9edf2; color: #444; }
+  .unsaved-lock-actions .ul-cancel:hover { background: #dde3ea; }
+
   /* Message-type dropdown */
   .tc-action-select {
     width: 100%;
@@ -4856,6 +4878,22 @@ async function toggleProtection() {
 
     _applyUnlockedUI();
   } else {
+    // 上鎖前:若 Tab1~3 有未儲存變更，先詢問 儲存/放棄/取消（三頁一致）
+    if (hasUnsavedEdits()) {
+      const choice = await askUnsavedBeforeLock();
+      if (choice === 'cancel') return;                 // 維持解鎖，繼續編輯
+      if (choice === 'save') {
+        await saveAllTabs();                           // 正規儲存（SharePoint 模式內含釋放鎖+relock）
+        if (!dbAdapter.isSharePointMode() && !isProtected) relock();  // file 模式補上鎖
+        return;
+      }
+      // discard:重新讀取資料庫，丟棄記憶體中的未儲存編輯（loadProjects 系列會 refresh + 重建）
+      try {
+        if (typeof loadProjects === 'function')   await loadProjects();
+        if (typeof sgLoadProjects === 'function') await sgLoadProjects();
+        if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+      } catch (e) { console.warn('reload after discard failed:', e); }
+    }
     // 重新鎖定：SharePoint 模式釋放 lock（Tab5 仍解鎖時保留共用鎖）
     if (dbAdapter.isSharePointMode() && fbIsProtected) {
       try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
@@ -5032,6 +5070,60 @@ async function railConfirmUnlock() {
     inp.focus();
   }
   railSyncLockIcon();
+}
+
+/* ── 未儲存變更偵測 + 上鎖前攔截（Tab1/Tab2/Tab3 行為一致）──
+ * 以「載入/儲存當下的快照」與目前狀態比對來判斷是否有未儲存編輯。
+ * 只比對各頁儲存時實際會寫入的欄位，避免暫態欄位造成誤判。
+ */
+let _cleanSnap = { sg: null, cl: null, vd: null };
+function _safeStr(v) { try { return JSON.stringify(v); } catch (e) { return null; } }
+function _sgDirtyView() {
+  if (!(sgProjectId && sgProjectData)) return null;
+  return {
+    rf: sgProjectData.rf_data || [], dg: sgProjectData.digital_data || [], pw: sgProjectData.pwr_data || [],
+    pt: sgProjectData.param_temp || '55', ptc: sgProjectData.param_temp_custom || '',
+    pb: sgProjectData.param_backoff || '', pd: sgProjectData.param_duplex || 'TDD 75%',
+    pbr: sgProjectData.param_backoff_rt || '', pdr: sgProjectData.param_duplex_rt || 'TDD 75%',
+    tcp: (typeof tcpStripTransient === 'function') ? tcpStripTransient(sgProjectData.tcPlacement) : (sgProjectData.tcPlacement || null)
+  };
+}
+function _clDirtyView() {
+  if (!currentProjectId) return null;
+  return { ts: thermalSpecs || {}, hc: hiddenComponents || {} };
+}
+function _vdDirtyView() {
+  if (!vdProjectId) return null;
+  return { vd: vdValidationData || {}, hc: vdHiddenComps || {} };
+}
+function snapSgClean() { const v = _sgDirtyView(); _cleanSnap.sg = v ? _safeStr(v) : null; }
+function snapClClean() { const v = _clDirtyView(); _cleanSnap.cl = v ? _safeStr(v) : null; }
+function snapVdClean() { const v = _vdDirtyView(); _cleanSnap.vd = v ? _safeStr(v) : null; }
+function snapAllClean() { snapSgClean(); snapClClean(); snapVdClean(); }
+function hasUnsavedEdits() {
+  if (_cleanSnap.sg !== null && _safeStr(_sgDirtyView()) !== _cleanSnap.sg) return true;
+  if (_cleanSnap.cl !== null && _safeStr(_clDirtyView()) !== _cleanSnap.cl) return true;
+  if (_cleanSnap.vd !== null && _safeStr(_vdDirtyView()) !== _cleanSnap.vd) return true;
+  return false;
+}
+/* 上鎖前詢問:回傳 Promise<'save' | 'discard' | 'cancel'> */
+function askUnsavedBeforeLock() {
+  return new Promise(resolve => {
+    const ov = document.getElementById('unsaved-lock-overlay');
+    if (!ov) { resolve('save'); return; }   // 保險:找不到對話框時預設走儲存，避免誤丟資料
+    const bSave = ov.querySelector('.ul-save');
+    const bDiscard = ov.querySelector('.ul-discard');
+    const bCancel = ov.querySelector('.ul-cancel');
+    const done = (val) => {
+      ov.classList.remove('active');
+      bSave.onclick = bDiscard.onclick = bCancel.onclick = null;
+      resolve(val);
+    };
+    bSave.onclick = () => done('save');
+    bDiscard.onclick = () => done('discard');
+    bCancel.onclick = () => done('cancel');
+    ov.classList.add('active');
+  });
 }
 
 /* 三大分類對應 */
@@ -5398,6 +5490,7 @@ async function onProjectChange() {
     saveBtn.style.display = '';
     saveBtn.disabled = isProtected;
     hideStatus();
+    snapClClean();   // 載入即為乾淨基準
 
   } catch (e) {
     console.error('Load project error:', e);
@@ -6456,6 +6549,7 @@ async function sgOnProjectChange() {
   sgProjectData = null;
   if (!sgProjectId) {
     sgRenderProjectComponents();
+    snapSgClean();
     return;
   }
 
@@ -6463,6 +6557,7 @@ async function sgOnProjectChange() {
     sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
     sgShowStatus('已選擇專案：' + (sgProjectData?.project_name || sgProjectId), 'success');
     sgRenderProjectComponents();
+    snapSgClean();   // 載入即為乾淨基準
   } catch (e) {
     sgShowStatus('載入專案資料失敗：' + e.message, 'error');
   }
@@ -7922,6 +8017,7 @@ async function saveAllTabs() {
     if (hasCl && typeof renderAllCategories === 'function') renderAllCategories();
     if (hasVd && typeof vdRender === 'function') vdRender();
 
+    snapAllClean();   // 已持久化 → 重設乾淨基準
     setStatus('全部儲存成功！', 'saved', 3000);
   } catch (e) {
     console.error('Save-all error:', e);
@@ -7943,6 +8039,7 @@ async function saveAllTabs() {
         vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
         if (typeof vdOnProjectChange === 'function') await vdOnProjectChange();
       }
+      snapAllClean();   // 已重載最新資料 → 重設乾淨基準
     } else {
       setStatus('儲存失敗：' + e.message, 'err');
     }
@@ -8287,7 +8384,7 @@ async function vdOnProjectChange() {
   vdValidationData = {};
   vdHiddenComps = {};
 
-  if (!vdProjectId) { vdRender(); return; }
+  if (!vdProjectId) { vdRender(); snapVdClean(); return; }
 
   try {
     vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
@@ -8340,6 +8437,7 @@ async function vdOnProjectChange() {
     vdHiddenComps = vdProjectData.vd_hidden_components || {};
     vdShowStatus('已載入專案：' + (vdProjectData.project_name || vdProjectId), 'success');
     vdRender();
+    snapVdClean();   // 載入即為乾淨基準
   } catch (e) {
     vdShowStatus('載入專案失敗：' + e.message, 'error');
   }
@@ -9429,6 +9527,19 @@ function fbShowShadowReadReport() {
     <input type="password" id="rail-lock-pwd" placeholder="輸入密碼"
            onkeydown="if(event.key==='Enter')railConfirmUnlock()">
     <button type="button" onclick="railConfirmUnlock()">解鎖</button>
+  </div>
+</div>
+
+<!-- 上鎖前:未儲存變更確認對話框 -->
+<div id="unsaved-lock-overlay" class="unsaved-lock-overlay">
+  <div class="unsaved-lock-box">
+    <div class="unsaved-lock-title">&#9888;&#65039; 有未儲存的變更</div>
+    <div class="unsaved-lock-msg">您在元件清單／驗證頁面有尚未儲存的修改。<br>鎖定前要如何處理？</div>
+    <div class="unsaved-lock-actions">
+      <button type="button" class="ul-save">儲存並鎖定</button>
+      <button type="button" class="ul-discard">放棄變更並鎖定</button>
+      <button type="button" class="ul-cancel">取消</button>
+    </div>
   </div>
 </div>
 
