@@ -625,6 +625,8 @@
   .btn-save { background: #e67e22; color: #fff; }
   .btn-save:hover { background: #d35400; }
   .btn:disabled { background: #b0c4de; cursor: not-allowed; }
+  /* 鎖定時「+ 新增專案」反灰（覆寫 inline 綠色背景） */
+  #sg-new-project-btn:disabled { background: #b0c4de !important; color: #eef2f6 !important; cursor: not-allowed; opacity: 0.85; }
 
   .loading-spinner {
     display: inline-block;
@@ -4312,7 +4314,7 @@
             </select>
           </div>
           <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
-          <button class="btn" style="background:#217346;color:#fff;" onclick="sgToggleNewProject()">+ 新增專案</button>
+          <button class="btn" id="sg-new-project-btn" style="background:#217346;color:#fff;" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
         </div>
         <div id="sg-new-project-form" class="sg-new-project-form">
           <div class="field">
@@ -4776,6 +4778,8 @@ function _applyUnlockedUI() {
   if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = false;
+  const sgNewProjBtn = document.getElementById('sg-new-project-btn');
+  if (sgNewProjBtn) { sgNewProjBtn.disabled = false; sgNewProjBtn.title = '新增專案'; }
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
@@ -4798,6 +4802,8 @@ function relock() {
   if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = true;
+  const sgNewProjBtn = document.getElementById('sg-new-project-btn');
+  if (sgNewProjBtn) { sgNewProjBtn.disabled = true; sgNewProjBtn.title = '需先解鎖密碼保護才能新增專案'; }
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
