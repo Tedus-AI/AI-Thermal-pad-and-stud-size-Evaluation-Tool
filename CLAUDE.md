@@ -62,3 +62,30 @@ await dbAdapter.updateDoc('projects', docId, {
 ```
 
 參考歷史 fix：5G-RRU PR #53（`claude/fix-database-overwrite-bug-W1bT1`）。
+
+## 軟體版本戳記是「自動」的，不要手改 ⚠️
+
+本工具有一套「使用者載入到舊版會被醒目橫幅提醒更新」的機制，版本號**完全由 CI 自動產生**，
+任何 session（包含未來的你）改 code 時**都不需要、也不應該手動更新版本號**。
+
+### 運作方式
+
+- 原始碼裡只放佔位符 `__APP_VERSION__`（出現在 `index.html` 的 `window.APP_VERSION`、
+  6 支本地 JS 的 `?v=__APP_VERSION__` 快取戳記、以及 `version.json`）。
+- `.github/workflows/deploy-pages.yml` 在每次 push 到 `main` 時，用
+  `TZ='Asia/Taipei' date +%Y.%m.%d.%H%M`＋短 SHA 算出版本號，`sed` 戳進上述佔位符，
+  再部署到 GitHub Pages。**因此每次 push 都會自動戳新版本，不靠人記憶。**
+- 前端（`index.html` 的 `setupUpdateChecker`）載入後延遲首檢、每 5 分鐘、切回分頁時，
+  以 `cache:'no-store'` 抓 `version.json` 與烙印的 `APP_VERSION` 比對；不同才跳橫幅，
+  相同則完全靜默。
+
+### 規則
+
+1. **不要把 `__APP_VERSION__` 換成真實版本字串**，那是 CI 的工作。新增需要快取戳記的
+   本地 JS 時，在 script 標籤後面加 `?v=__APP_VERSION__` 即可。
+2. **停用偵測的守衛刻意寫成 `'__APP_' + 'VERSION__'`**（拆字串），這樣 CI 的
+   `sed s/__APP_VERSION__/.../g` 不會把它換掉、導致 production 誤判為「未戳版本」而停用偵測。
+   改這段時務必保持拆字串寫法。
+3. **GitHub Pages 的 Source 必須設為「GitHub Actions」**（Settings → Pages），
+   否則 workflow 戳的版本不會上線。
+4. 參考 PR #140（`claude/version-conflict-single-user-IQ20W`）。
