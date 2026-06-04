@@ -29,8 +29,8 @@ jobs:
 
       - name: Compute version
         id: ver
-        # 人看得懂（UTC 時間）＋ 機器唯一（短 SHA），每次 push 必不同
-        run: echo "value=$(date -u +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        # 人看得懂（台灣時間）＋ 機器唯一（短 SHA），每次 push 必不同
+        run: echo "value=$(TZ='Asia/Taipei' date +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Stamp version into build
         run: |
