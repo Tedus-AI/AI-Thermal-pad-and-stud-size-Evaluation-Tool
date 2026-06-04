@@ -7388,7 +7388,7 @@ function tcpSetupImgInteraction(page) {
     const ay = (cy - f.y - f.iy) / f.ih * 100;
     if (ax < 0 || ax > 100 || ay < 0 || ay > 100) return;
     const id = 'a_' + Date.now();
-    page.annotations.push({ id, x: ax, y: ay, componentRef: '', labelX: -1, labelY: -1 });
+    page.annotations.push({ id, x: ax, y: ay, componentRef: '', labelX: null, labelY: null, lc: 1 });
     _tcpDragState = { annoId: id, dotAbsX: cx, dotAbsY: cy };
     const dragSvg = document.getElementById('tcp-drag-svg');
     if (dragSvg) {
@@ -7426,13 +7426,19 @@ function tcpSetupImgInteraction(page) {
     const anno = page.annotations.find(a => a.id === ds.annoId);
     if (anno) {
       const dist = Math.hypot(labelAbsX - ds.dotAbsX, labelAbsY - ds.dotAbsY);
+      let lpx, lpy;   // 標籤左上角的工作區像素位置
       if (dist < 15) {
-        anno.labelX = ds.dotAbsX < f.x + f.fw / 2 ? 70 : 3;
-        anno.labelY = Math.max(2, Math.min(88, lyPct));
+        // 放開處離紅點很近 → 自動偏移到圖框左/右側（沿用原本視覺）
+        lpx = (ds.dotAbsX < f.x + f.fw / 2 ? 70 : 3) / 100 * wsRect.width;
+        lpy = Math.max(2, Math.min(88, lyPct)) / 100 * wsRect.height;
       } else {
-        anno.labelX = Math.max(0, Math.min(91, lxPct));
-        anno.labelY = Math.max(0, Math.min(91, lyPct));
+        lpx = Math.max(0, Math.min(91, lxPct)) / 100 * wsRect.width;
+        lpy = Math.max(0, Math.min(91, lyPct)) / 100 * wsRect.height;
       }
+      // 以「相對圖框」百分比儲存（與紅點同座標系，可超出 0~100；不隨視窗大小飄移）
+      anno.labelX = (lpx - f.x - f.ix) / f.iw * 100;
+      anno.labelY = (lpy - f.y - f.iy) / f.ih * 100;
+      anno.lc = 1;
     }
     tcpRenderMarkers(page);
     setTimeout(() => {
@@ -7516,8 +7522,8 @@ async function tcpBakeCrop(page) {
       ...a,
       x:      (a.x      / 100 * f.iw + f.ix) / f.fw * 100,
       y:      (a.y      / 100 * f.ih + f.iy) / f.fh * 100,
-      labelX: a.labelX >= 0 ? (a.labelX / 100 * f.iw + f.ix) / f.fw * 100 : a.labelX,
-      labelY: a.labelY >= 0 ? (a.labelY / 100 * f.ih + f.iy) / f.fh * 100 : a.labelY,
+      labelX: a.labelX != null ? (a.labelX / 100 * f.iw + f.ix) / f.fw * 100 : a.labelX,
+      labelY: a.labelY != null ? (a.labelY / 100 * f.ih + f.iy) / f.fh * 100 : a.labelY,
     }))
     .filter(a => a.x >= 0 && a.x <= 100 && a.y >= 0 && a.y <= 100);
   page.imgFrame = null;
@@ -7548,7 +7554,7 @@ async function tcpRotateImg(deg) {
     const ox = a.x, oy = a.y;
     if (isCW)  { a.x = 100 - oy; a.y = ox; }
     else       { a.x = oy;       a.y = 100 - ox; }
-    if (a.labelX >= 0) {
+    if (a.labelX != null) {
       const lx = a.labelX, ly = a.labelY;
       if (isCW)  { a.labelX = 100 - ly; a.labelY = lx; }
       else       { a.labelX = ly;        a.labelY = 100 - lx; }
@@ -7575,8 +7581,8 @@ async function tcpFlipImg(axis) {
   page.imageData = c.toDataURL('image/jpeg', 0.92);
   if (oldSp) dbAdapter.deleteTcpImage(oldSp).catch(() => {});
   page.annotations.forEach(a => {
-    if (axis === 'h') { a.x = 100 - a.x; if (a.labelX >= 0) a.labelX = 100 - a.labelX; }
-    else              { a.y = 100 - a.y; if (a.labelY >= 0) a.labelY = 100 - a.labelY; }
+    if (axis === 'h') { a.x = 100 - a.x; if (a.labelX != null) a.labelX = 100 - a.labelX; }
+    else              { a.y = 100 - a.y; if (a.labelY != null) a.labelY = 100 - a.labelY; }
   });
   page.imgFrame = null;
   tcpRenderEditor();
@@ -7804,6 +7810,22 @@ function tcpRenderMarkers(page) {
 
   const wsRect = workspace.getBoundingClientRect();
 
+  /* 一次性遷移：把舊版「相對工作區」的標籤座標，轉成「相對圖框」座標（與紅點同基準），
+     轉換後標籤就不再隨視窗大小飄移。anno.lc===1 代表已是新座標，不重複轉換。
+     轉換以「舊邏輯當下會畫出的像素位置」為準，因此遷移當下標籤不會跳動。 */
+  page.annotations.forEach(anno => {
+    if (anno.lc === 1) return;
+    if (anno.labelX == null || anno.labelX === -1) {
+      anno.labelX = null; anno.labelY = null;          // 舊的「未放置」哨兵 -1 → null
+    } else {
+      const px = (anno.labelX / 100) * wsRect.width;   // 舊邏輯會畫的位置
+      const py = (anno.labelY / 100) * wsRect.height;
+      anno.labelX = (px - f.x - f.ix) / f.iw * 100;
+      anno.labelY = (py - f.y - f.iy) / f.ih * 100;
+    }
+    anno.lc = 1;
+  });
+
   page.annotations.forEach((anno, idx) => {
     // Dot position in workspace coords (image-relative % → absolute px)
     const dotX = f.x + f.ix + (anno.x / 100) * f.iw;
@@ -7843,7 +7865,7 @@ function tcpRenderMarkers(page) {
         const newDY = fr.y + fr.iy + (anno.y / 100) * fr.ih;
         dot.style.left = newDX + 'px';
         dot.style.top  = newDY + 'px';
-        if (anno.labelX >= 0) {
+        if (anno.labelX != null) {
           const lWrap = workspace.querySelector(`.tcp-marker-label-wrap[data-id="${anno.id}"]`);
           if (lWrap) {
             const lx = parseFloat(lWrap.style.left) + (lWrap.offsetWidth  || 80) / 2;
@@ -7864,9 +7886,9 @@ function tcpRenderMarkers(page) {
     workspace.appendChild(dot);
 
     /* label (only if placed) */
-    if (anno.labelX >= 0 && anno.labelY >= 0) {
-      const labelX = (anno.labelX / 100) * wsRect.width;
-      const labelY = (anno.labelY / 100) * wsRect.height;
+    if (anno.labelX != null && anno.labelY != null) {
+      const labelX = f.x + f.ix + (anno.labelX / 100) * f.iw;
+      const labelY = f.y + f.iy + (anno.labelY / 100) * f.ih;
 
       const wrap = document.createElement('div');
       wrap.className = 'tcp-marker-label-wrap';
@@ -7959,9 +7981,10 @@ function tcpRenderMarkers(page) {
         pendingDrag = null;
         if (!labelDragging) return;
         labelDragging = false;
-        const wr = workspace.getBoundingClientRect();
-        anno.labelX = (parseFloat(wrap.style.left) / wr.width)  * 100;
-        anno.labelY = (parseFloat(wrap.style.top)  / wr.height) * 100;
+        // 以「相對圖框」百分比儲存（與紅點同座標系，不隨視窗大小飄移）
+        anno.labelX = (parseFloat(wrap.style.left) - f.x - f.ix) / f.iw * 100;
+        anno.labelY = (parseFloat(wrap.style.top)  - f.y - f.iy) / f.ih * 100;
+        anno.lc = 1;
         tcpRenderMarkers(page);
       };
 
