@@ -4092,6 +4092,22 @@
   @keyframes ub-flow  { from { background-position: 0 0; } to { background-position: 200% 0; } }
   @keyframes ub-glow  { 0%,100% { box-shadow: 0 4px 18px rgba(255,45,0,.5); } 50% { box-shadow: 0 6px 34px rgba(255,45,0,.95); } }
   @keyframes ub-spin  { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+  /* ── 頂端版本徽章 ─────────────────────────────────────── */
+  #version-badge {
+    position: absolute; top: 0; right: 0;
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: .72rem; color: #5a6b85;
+    background: #eef2f8; border: 1px solid #d6deea; border-radius: 999px;
+    padding: 4px 11px; line-height: 1.2; user-select: none;
+  }
+  #version-badge .vb-ver { font-weight: 700; letter-spacing: .2px; }
+  #version-badge .vb-latest {
+    display: none; align-items: center; gap: 3px; white-space: nowrap;
+    color: #fff; background: #2e9e5b; border-radius: 999px;
+    padding: 2px 8px; font-weight: 700;
+  }
+  #version-badge.is-latest .vb-latest { display: inline-flex; }
 </style>
 </head>
 <body>
@@ -4162,6 +4178,10 @@
 <div class="container">
 
   <div class="header">
+    <div id="version-badge" title="軟體版本">
+      <span class="vb-ver" id="vb-ver">—</span>
+      <span class="vb-latest">&#10003; 最新</span>
+    </div>
     <h1>Thermal & Component Spec Management Tool</h1>
     <p>散熱與元件規格管理工具</p>
     <div class="header-db-bar">
@@ -5352,9 +5372,18 @@ window.APP_VERSION = '__APP_VERSION__';
   const BUILT = window.APP_VERSION;
   // 注意：此佔位符刻意以字串相接寫成，避免被 CI 的 sed 替換掉而誤判
   const PLACEHOLDER = '__APP_' + 'VERSION__';
-  if (!BUILT || BUILT === PLACEHOLDER) return;   // 未戳版本（本機/開發）不啟用
+  const isDev = (!BUILT || BUILT === PLACEHOLDER);
+
+  // 頂端版本徽章：永遠顯示目前載入的版本號（開發版例外）
+  const badge = document.getElementById('version-badge');
+  const verEl = document.getElementById('vb-ver');
+  if (verEl) verEl.textContent = isDev ? '開發版' : ('v' + BUILT);
+
+  if (isDev) return;   // 未戳版本（本機/開發）不啟用偵測，也不打「最新」
+
   let prompted = false;
   let timer = null;
+  function markLatest(yes) { if (badge) badge.classList.toggle('is-latest', !!yes); }
 
   async function fetchLiveVersion() {
     try {
@@ -5368,7 +5397,10 @@ window.APP_VERSION = '__APP_VERSION__';
   async function check() {
     if (prompted) return;
     const live = await fetchLiveVersion();
-    if (live && live !== BUILT) showUpdateBanner(live);
+    if (!live) return;                       // 抓不到：維持現狀，不亂打「最新」
+    if (live === BUILT) { markLatest(true); return; }   // 已是最新 → 打勾
+    markLatest(false);
+    showUpdateBanner(live);
   }
 
   function showUpdateBanner(live) {
@@ -5401,7 +5433,7 @@ window.APP_VERSION = '__APP_VERSION__';
     location.replace(location.pathname + '?v=' + encodeURIComponent(live));
   }
 
-  setTimeout(check, 15000);                 // 啟動後延遲首檢
+  setTimeout(check, 3000);                  // 啟動後稍候首檢（讓徽章盡快顯示「最新」）
   timer = setInterval(check, 5 * 60 * 1000); // 之後每 5 分鐘
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') check();   // 切回分頁時即時檢查
