@@ -369,6 +369,11 @@ const dbAdapter = {
     return await graphDb.deleteTcpImage(spPath);
   },
 
+  async listTcpImages(projectId) {
+    if (DB_MODE !== 'sharepoint') return [];
+    return await graphDb.listTcpImages(projectId);
+  },
+
   /* ─── dual-write log（Phase 2 dev panel 用）──────────────────── */
   getDualWriteLog() {
     return _fbLog.slice();
