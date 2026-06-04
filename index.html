@@ -4093,13 +4093,13 @@
   @keyframes ub-glow  { 0%,100% { box-shadow: 0 4px 18px rgba(255,45,0,.5); } 50% { box-shadow: 0 6px 34px rgba(255,45,0,.95); } }
   @keyframes ub-spin  { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
-  /* ── 頂端版本徽章 ─────────────────────────────────────── */
+  /* ── 頂端版本徽章（流動於 header bar，不用絕對定位，避免蓋住 email）── */
   #version-badge {
-    position: absolute; top: 0; right: 0;
     display: inline-flex; align-items: center; gap: 7px;
     font-size: .72rem; color: #5a6b85;
     background: #eef2f8; border: 1px solid #d6deea; border-radius: 999px;
     padding: 4px 11px; line-height: 1.2; user-select: none;
+    white-space: nowrap; flex-shrink: 0;
   }
   #version-badge .vb-ver { font-weight: 700; letter-spacing: .2px; }
   #version-badge .vb-latest {
@@ -4178,10 +4178,6 @@
 <div class="container">
 
   <div class="header">
-    <div id="version-badge" title="軟體版本">
-      <span class="vb-ver" id="vb-ver">—</span>
-      <span class="vb-latest">&#10003; 最新</span>
-    </div>
     <h1>Thermal & Component Spec Management Tool</h1>
     <p>散熱與元件規格管理工具</p>
     <div class="header-db-bar">
@@ -4191,6 +4187,10 @@
       <button id="btn-sp-login" onclick="handleSpLogin()" style="display:none">&#128273; 登入 SharePoint</button>
       <button id="btn-sp-logout" onclick="handleSpLogout()" style="display:none">&#128682; 登出</button>
       <span id="sp-user-info" style="display:none"></span>
+      <span id="version-badge" title="軟體版本">
+        <span class="vb-ver" id="vb-ver">—</span>
+        <span class="vb-latest">&#10003; 最新</span>
+      </span>
     </div>
   </div>
 
