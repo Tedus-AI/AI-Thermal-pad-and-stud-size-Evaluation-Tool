@@ -4064,9 +4064,44 @@
     transition: border-color 0.2s;
   }
   .tc-msg-preview:focus { border-color: #6264a7; }
+
+  /* ── 軟體更新橫幅（刻意做得非常醒目）─────────────────────── */
+  #update-banner {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100000;
+    padding: 14px 18px;
+    color: #fff;
+    background: linear-gradient(90deg,#ff7a00,#ff2d00,#ff7a00);
+    background-size: 200% 100%;
+    border-bottom: 3px solid rgba(255,255,255,.55);
+    animation: ub-slide .35s ease-out, ub-flow 3s linear infinite, ub-glow 1.4s ease-in-out infinite;
+  }
+  #update-banner.active { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; }
+  #update-banner .ub-text {
+    font-size: 1.05rem; font-weight: 800; letter-spacing: .3px;
+    display: flex; align-items: center; gap: 9px; text-shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+  #update-banner .ub-spin { display: inline-block; font-size: 1.3rem; animation: ub-spin 2.2s linear infinite; }
+  #update-banner .ub-actions { display: flex; gap: 10px; }
+  #update-banner button { border: none; border-radius: 9px; padding: 9px 20px; font-size: .92rem; font-weight: 800; cursor: pointer; transition: background .15s; }
+  #update-banner .ub-now { background: #fff; color: #d8340a; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
+  #update-banner .ub-now:hover { background: #fff1e8; }
+  #update-banner .ub-later { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.7); }
+  #update-banner .ub-later:hover { background: rgba(255,255,255,.32); }
+  @keyframes ub-slide { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+  @keyframes ub-flow  { from { background-position: 0 0; } to { background-position: 200% 0; } }
+  @keyframes ub-glow  { 0%,100% { box-shadow: 0 4px 18px rgba(255,45,0,.5); } 50% { box-shadow: 0 6px 34px rgba(255,45,0,.95); } }
+  @keyframes ub-spin  { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
+<div id="update-banner" role="alert" aria-live="assertive">
+  <div class="ub-text"><span class="ub-spin">&#128260;</span>&#9888;&#65039; 工具已更新！請先儲存您的編輯，再點「立即更新」載入最新版本</div>
+  <div class="ub-actions">
+    <button type="button" class="ub-now">立即更新</button>
+    <button type="button" class="ub-later">稍後</button>
+  </div>
+</div>
 <div id="conflict-toast" class="conflict-toast">
   <button class="conflict-close" onclick="this.parentElement.classList.remove('visible')">&times;</button>
   <div class="conflict-title">&#9888;&#65039; 儲存失敗：版本衝突</div>
@@ -4738,12 +4773,12 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <!-- Database layer: config → local → sharepoint → lists → adapter -->
-<script src="config.js"></script>
-<script src="fileDb.js"></script>
-<script src="graphDb.js"></script>
-<script src="graphListsDb.js"></script>
-<script src="dbAdapter.js"></script>
-<script src="teamsContact.js"></script>
+<script src="config.js?v=__APP_VERSION__"></script>
+<script src="fileDb.js?v=__APP_VERSION__"></script>
+<script src="graphDb.js?v=__APP_VERSION__"></script>
+<script src="graphListsDb.js?v=__APP_VERSION__"></script>
+<script src="dbAdapter.js?v=__APP_VERSION__"></script>
+<script src="teamsContact.js?v=__APP_VERSION__"></script>
 
 <!-- SheetJS for Excel export -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
@@ -5304,6 +5339,74 @@ window.addEventListener('beforeunload', (event) => {
     return '';
   }
 });
+
+/* ============================
+   軟體更新偵測
+   版本號由 CI 於部署時把佔位符戳成實際值（commit + 時間）。
+   本機/未經 CI 戳版本時 APP_VERSION 仍為佔位符，會自動停用偵測，避免誤判。
+   作法：比對「載入這份 HTML 當下烙印的 APP_VERSION」與線上 version.json，
+   不同 = 已有新部署 → 跳出醒目橫幅。
+   ============================ */
+window.APP_VERSION = '__APP_VERSION__';
+(function setupUpdateChecker() {
+  const BUILT = window.APP_VERSION;
+  // 注意：此佔位符刻意以字串相接寫成，避免被 CI 的 sed 替換掉而誤判
+  const PLACEHOLDER = '__APP_' + 'VERSION__';
+  if (!BUILT || BUILT === PLACEHOLDER) return;   // 未戳版本（本機/開發）不啟用
+  let prompted = false;
+  let timer = null;
+
+  async function fetchLiveVersion() {
+    try {
+      const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return (j && j.version) ? String(j.version) : null;
+    } catch (e) { return null; }   // 離線/失敗：安靜略過
+  }
+
+  async function check() {
+    if (prompted) return;
+    const live = await fetchLiveVersion();
+    if (live && live !== BUILT) showUpdateBanner(live);
+  }
+
+  function showUpdateBanner(live) {
+    if (prompted) return;
+    prompted = true;
+    if (timer) { clearInterval(timer); timer = null; }
+    const bar = document.getElementById('update-banner');
+    if (!bar) return;
+    bar.classList.add('active');
+    bar.querySelector('.ub-now').onclick = () => doUpdate(live);
+    bar.querySelector('.ub-later').onclick = () => {
+      bar.classList.remove('active');
+      // 稍後再提醒：10 分鐘後重新檢查
+      setTimeout(() => { prompted = false; check(); }, 10 * 60 * 1000);
+    };
+  }
+
+  async function doUpdate(live) {
+    // 有未儲存變更 → 先詢問 儲存/放棄/取消（沿用上鎖前的對話框）
+    if (typeof hasUnsavedEdits === 'function' && hasUnsavedEdits()) {
+      let choice = 'save';
+      if (typeof askUnsavedBeforeLock === 'function') choice = await askUnsavedBeforeLock();
+      if (choice === 'cancel') return;
+      if (choice === 'save' && typeof saveAllTabs === 'function') {
+        try { await saveAllTabs(); }
+        catch (e) { alert('儲存失敗，已取消更新。請手動確認後再更新。'); return; }
+      }
+    }
+    // 以新版本號當 cache-buster，強制向伺服器重新抓取最新 HTML（連帶抓新的 JS）
+    location.replace(location.pathname + '?v=' + encodeURIComponent(live));
+  }
+
+  setTimeout(check, 15000);                 // 啟動後延遲首檢
+  timer = setInterval(check, 5 * 60 * 1000); // 之後每 5 分鐘
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') check();   // 切回分頁時即時檢查
+  });
+})();
 
 /* ============================
    Tab Switching
