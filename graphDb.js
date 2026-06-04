@@ -405,6 +405,30 @@ const graphDb = {
     );
   },
 
+  /* 列出某專案在 tcp_images 資料夾下實際存在的圖檔路徑（供對帳/垃圾回收用）。
+     檔名格式為 `${projectId}_${catKey}_${ts}.jpg`，以 projectId 前綴過濾。 */
+  async listTcpImages(projectId) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const folder = SHAREPOINT_CONFIG.filePath.replace(/[^/]+$/, '') + 'tcp_images';
+    const token = await this._getAccessToken(true);
+    const out = [];
+    let url = `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${folder}:/children?$select=name&$top=200`;
+    while (url) {
+      const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!resp.ok) {
+        if (resp.status === 404) return [];   // 資料夾尚未建立 → 視為無檔案
+        throw new Error('圖片列舉失敗 ' + resp.status);
+      }
+      const data = await resp.json();
+      for (const it of (data.value || [])) {
+        if (it.folder) continue;
+        if (!projectId || it.name.startsWith(projectId + '_')) out.push(`${folder}/${it.name}`);
+      }
+      url = data['@odata.nextLink'] || null;
+    }
+    return out;
+  },
+
   exportBackup() {
     const blob = new Blob([JSON.stringify(dbCache, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');

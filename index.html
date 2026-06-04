@@ -8265,6 +8265,12 @@ async function saveAllTabs() {
       relock();
     }
 
+    // 寫入成功後對帳清理孤兒圖片（已刪卻殘留、或衝突/失敗上傳遺留的檔案）。
+    // 此時記憶體引用 = 剛持久化內容，故為權威來源；fire-and-forget 不阻塞存檔 UX。
+    if (hasSg && dbAdapter.isSharePointMode()) {
+      tcpAuditImages({ deleteOrphans: true, log: false }).catch(() => {});
+    }
+
     // 重新繪製有載入的頁
     if (hasSg && typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
     if (hasCl && typeof renderAllCategories === 'function') renderAllCategories();
@@ -8340,6 +8346,66 @@ async function tcpNormalizeSPImages() {
     }
   }
 }
+
+/* 蒐集目前 tcPlacement 仍在引用的所有 SP 圖片路徑（跨全部分類/頁面） */
+function tcpCollectUsedImagePaths() {
+  const used = new Set();
+  const tp = sgProjectData?.tcPlacement;
+  if (!tp) return used;
+  for (const catData of Object.values(tp)) {
+    for (const page of (catData?.pages || [])) {
+      if (typeof page?.imageData === 'string' && page.imageData.startsWith('sp:')) {
+        used.add(page.imageData.slice(3));
+      }
+    }
+  }
+  return used;
+}
+
+/* 對帳：比對「SP 實際存在的圖檔」與「tcPlacement 仍在引用的圖檔」。
+   - 回傳一致性報告（引用數 / 實際檔案數 / 孤兒清單）。
+   - deleteOrphans=true 時順手清除孤兒（已刪卻殘留的檔案）。
+   只在 SharePoint 模式有意義（其他模式圖片以 base64 內嵌，無孤兒問題）。
+   可在 console 手動呼叫：await tcpAuditImages()  或  await tcpAuditImages({deleteOrphans:false}) 先看不刪。 */
+async function tcpAuditImages({ deleteOrphans = true, log = true } = {}) {
+  if (!dbAdapter.isSharePointMode?.() || !dbAdapter.isSignedIn?.()) {
+    if (log) console.info('[tcp-audit] 非 SharePoint 模式：圖片以 base64 內嵌於 DB，不會有孤兒檔案。');
+    return { mode: 'inline', used: 0, files: 0, orphans: 0, consistent: true, orphanPaths: [] };
+  }
+  if (!sgProjectId) return { used: 0, files: 0, orphans: 0, consistent: true, orphanPaths: [] };
+  const used = tcpCollectUsedImagePaths();
+  let files;
+  try {
+    files = await dbAdapter.listTcpImages(sgProjectId);
+  } catch (e) {
+    console.warn('[tcp-audit] 列舉 SP 圖檔失敗：', e);
+    return { error: e.message };
+  }
+  const orphanPaths = files.filter(p => !used.has(p));
+  if (deleteOrphans) {
+    for (const p of orphanPaths) {
+      try { await dbAdapter.deleteTcpImage(p); }
+      catch (e) { console.warn('[tcp-audit] 刪除孤兒失敗：', p, e); }
+    }
+  }
+  const report = {
+    used: used.size,
+    files: files.length,
+    orphans: orphanPaths.length,
+    consistent: orphanPaths.length === 0,
+    orphanPaths,
+  };
+  if (log) {
+    console.info(
+      `[tcp-audit] 引用 ${report.used} 張、SP 實際 ${report.files} 張、孤兒 ${report.orphans} 張` +
+      (deleteOrphans && report.orphans ? '（已清除）' : '') +
+      (report.consistent ? ' ✓ 一致' : ''),
+      report
+    );
+  }
+  return report;
+}
+window.tcpAuditImages = tcpAuditImages;
 
 async function sgSaveProjectComponents() { return saveAllTabs(); }
 
