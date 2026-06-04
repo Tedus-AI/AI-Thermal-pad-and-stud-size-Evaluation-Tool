@@ -1652,6 +1652,40 @@
     text-decoration: line-through;
   }
 
+  /* ── 散熱提示（連動 Tab2 / TH/ME 清單的隱藏狀態）── */
+  .tcp-marker-label-wrap.needs-thermal .tcp-marker-label {
+    background: #fde2e2;
+    border-color: #dc2626;
+    box-shadow: 0 0 0 1px rgba(220,38,38,0.35), 0 1px 4px rgba(0,0,0,0.12);
+  }
+  .tcp-thermal-note {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 12px;
+    font-size: 0.74rem; font-weight: 600;
+    color: #b91c1c;
+    background: #fff5f5;
+    border-bottom: 1px solid var(--gm-border, #e2e8f0);
+    flex-shrink: 0;
+  }
+  .tcp-thermal-note .swatch {
+    display: inline-block; width: 22px; height: 13px;
+    background: #fde2e2; border: 1.5px solid #dc2626; border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .tcp-thermal-warn {
+    position: absolute; left: 10px; bottom: 10px; z-index: 30;
+    max-width: 260px; max-height: 42%;
+    overflow-y: auto;
+    padding: 8px 10px;
+    background: rgba(254, 242, 242, 0.96);
+    border: 1.5px solid #dc2626; border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    font-size: 0.76rem; color: #7f1d1d;
+  }
+  .tcp-thermal-warn .warn-title { font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+  .tcp-thermal-warn ul { margin: 0; padding-left: 16px; }
+  .tcp-thermal-warn li { margin: 1px 0; word-break: break-all; }
+
   /* ── 圖片工具列 ── */
   .tcp-img-toolbar { display:flex; gap:6px; align-items:center; padding:5px 10px; background:#f5f7fa; border-bottom:1px solid #dde3ec; flex-shrink:0; }
   .tcp-img-toolbar button { padding:3px 9px; border:1px solid #bcc5d3; border-radius:4px; background:#fff; cursor:pointer; font-size:0.8rem; white-space:nowrap; }
@@ -7073,6 +7107,7 @@ function tcpRenderEditor() {
           <input class="tcp-title-input" id="tcp-title-input" type="text" value="${titleVal.replace(/"/g,'&quot;')}" placeholder="標題">
         </div>
         <div class="tcp-comp-bar" id="tcp-comp-bar"></div>
+        <div class="tcp-thermal-note"><span class="swatch"></span>若標註點背景為淡紅色（長方框）即表示該元件需做散熱處理（長凸台 / 加 TIM）</div>
         ${hasPhoto ? `<div class="tcp-img-toolbar" id="tcp-img-toolbar">
           <button onclick="tcpRotateImg(-90)" title="逆時針旋轉 90°">↺ 左轉</button>
           <button onclick="tcpRotateImg(90)"  title="順時針旋轉 90°">↻ 右轉</button>
@@ -7158,6 +7193,7 @@ function tcpRenderEditor() {
       if (outer) { outer.style.display = 'block'; if (_tcpMoveMode && !tcpViewOnly) outer.classList.add('move-mode'); }
       if (!tcpViewOnly) tcpSetupImgInteraction(page);
       if (page.annotations.length > 0) tcpRenderMarkers(page);
+      else tcpRenderThermalWarn(page);   // 零標註時仍提示哪些元件需散熱卻未標註
       tcpUpdateHistoryBtns(page);
     };
     const resolveAndLaunch = async () => {
@@ -7862,6 +7898,12 @@ function tcpRenderMarkers(page) {
     anno.lc = 1;
   });
 
+  // 散熱提示用：當前分類元件清單（Set）+ 隱藏集合（與 Tab2 連動）
+  const compListSet = new Set(
+    (sgProjectData?.[SG_CAT_MAP[_tcpCategory]?.field] || []).map(c => c.Component).filter(Boolean)
+  );
+  const hiddenSet = tcpHiddenSet();
+
   page.annotations.forEach((anno, idx) => {
     // Dot position in workspace coords (image-relative % → absolute px)
     const dotX = f.x + f.ix + (anno.x / 100) * f.iw;
@@ -7931,6 +7973,8 @@ function tcpRenderMarkers(page) {
       wrap.style.left = labelX + 'px';
       wrap.style.top  = labelY + 'px';
       wrap.dataset.id = anno.id;
+      // 需散熱（未隱藏且在清單中）→ 淡紅長方框
+      wrap.classList.toggle('needs-thermal', tcpNeedsThermal(anno.componentRef, compListSet, hiddenSet));
 
       const label = document.createElement('select');
       label.className = 'tcp-marker-label';
@@ -7965,7 +8009,9 @@ function tcpRenderMarkers(page) {
       label.addEventListener('change', () => {
         anno.componentRef = label.value;
         dot.title = label.value || `標記 ${idx + 1}`;
+        wrap.classList.toggle('needs-thermal', tcpNeedsThermal(label.value, compListSet, hiddenSet));
         tcpRenderCompBar();
+        tcpRenderThermalWarn(page);
       });
 
       const delBtn = document.createElement('button');
@@ -8041,6 +8087,7 @@ function tcpRenderMarkers(page) {
   });
 
   tcpRenderCompBar();
+  tcpRenderThermalWarn(page);
 }
 
 /* ── component status bar (shows which components have/haven't been placed) ── */
@@ -8069,6 +8116,54 @@ function tcpRenderCompBar() {
   }).join('');
 
   barEl.innerHTML = `<span class="tcp-comp-bar-label">元件：</span>${chips}`;
+}
+
+/* ── 散熱提示：與 Tab2（TH/ME 清單）的「隱藏」狀態連動 ──
+   隱藏 = 不需特別散熱處理；未隱藏（仍在清單中）= 需散熱。
+   全部為算繪當下從既有資料即時推導，不新增/寫入任何 DB 欄位。 */
+function tcpSpecKey(name) {
+  // 與 Tab2 renderComponentRow 的 specKey 正規化規則保持一致
+  return String(name || '').replace(/ /g, '_').replace(/\//g, '-');
+}
+
+/* 取得「標註工具當前專案（sgProjectData）」的隱藏元件集合（key = specKey）。
+   若 Tab2 剛好載入同一專案，採用其編輯中的即時值，避免未存檔時讀到舊值。 */
+function tcpHiddenSet() {
+  if (sgProjectId && currentProjectId === sgProjectId && hiddenComponents) return hiddenComponents;
+  return sgProjectData?.hidden_components || {};
+}
+
+/* 某 componentRef 是否「需散熱」：在當前分類清單中（非已刪/陳舊引用）且未被隱藏。 */
+function tcpNeedsThermal(componentRef, compListSet, hiddenSet) {
+  if (!componentRef || !compListSet.has(componentRef)) return false;
+  return !hiddenSet[tcpSpecKey(componentRef)];
+}
+
+/* 在工作區左下角列出「需散熱但尚未標註位置」的元件；全部標完即自動移除。 */
+function tcpRenderThermalWarn(page) {
+  const workspace = document.getElementById('tcp-workspace');
+  if (!workspace || !_tcpCategory || !sgProjectData) return;
+  const catKey = _tcpCategory.toLowerCase();
+  const compList = (sgProjectData[SG_CAT_MAP[_tcpCategory]?.field] || [])
+    .map(c => c.Component).filter(Boolean);
+  const hiddenSet = tcpHiddenSet();
+  const pages = sgProjectData.tcPlacement?.[catKey]?.pages || [];
+  const annotated = new Set(
+    pages.flatMap(p => (p.annotations || []).map(a => a.componentRef)).filter(Boolean)
+  );
+  // 需散熱（未隱藏、在清單）但全部頁面皆未標註
+  const missing = compList.filter(name => !hiddenSet[tcpSpecKey(name)] && !annotated.has(name));
+
+  let box = document.getElementById('tcp-thermal-warn');
+  if (missing.length === 0) { if (box) box.remove(); return; }
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'tcp-thermal-warn';
+    box.id = 'tcp-thermal-warn';
+    workspace.appendChild(box);
+  }
+  const items = missing.map(n => `<li>${escapeHtml(n)}</li>`).join('');
+  box.innerHTML = `<div class="warn-title">⚠ 需散熱但未標註位置（${missing.length}）</div><ul>${items}</ul>`;
 }
 
 function tcpDrawLine(svg, annoId, x1, y1, x2, y2) {
