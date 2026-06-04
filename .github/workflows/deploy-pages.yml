@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+# 每次 push 到 main（或手動）都會自動戳一個全新版本號並部署。
+# 版本號由 CI 產生，不靠任何人手動維護 —— 換 session / 換人都不會漏戳。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一時間只跑一個部署；新的 push 進來會取消還在排隊的舊部署。
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute version
+        id: ver
+        # 人看得懂（UTC 時間）＋ 機器唯一（短 SHA），每次 push 必不同
+        run: echo "value=$(date -u +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version into build
+        run: |
+          set -e
+          VER='${{ steps.ver.outputs.value }}'
+          echo "Stamping APP_VERSION = $VER"
+          # 替換 index.html 內所有 __APP_VERSION__（APP_VERSION 常數 + 各 JS 的 ?v= 戳記）
+          sed -i "s/__APP_VERSION__/${VER}/g" index.html
+          # 產生線上版本旗標（前端輪詢比對的依據）
+          printf '{ "version": "%s" }\n' "$VER" > version.json
+          # 確認沒有殘留佔位符
+          ! grep -q "__APP_VERSION__" index.html version.json
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
