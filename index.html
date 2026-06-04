@@ -7152,6 +7152,7 @@ function tcpRenderEditor() {
     const launchInteraction = (imgSrc) => {
       const imgEl = document.getElementById('tcp-photo-img');
       if (imgEl && imgSrc) imgEl.src = imgSrc;
+      tcpFitFrameToWorkspace(page);
       tcpRenderImgFrame(page);
       const outer = document.getElementById('tcp-img-outer');
       if (outer) { outer.style.display = 'block'; if (_tcpMoveMode && !tcpViewOnly) outer.classList.add('move-mode'); }
@@ -7316,7 +7317,41 @@ function tcpInitImgFrame(page, natW, natH) {
     fw: iw, fh: ih,
     ix: 0,  iy: 0,
     iw,     ih,
+    wsW0: wsW, wsH0: wsH,   // 此組像素值所對應的工作區大小（供跨螢幕等比例縮放）
   };
+}
+
+/* 開啟時把持久化的圖框等比例縮放貼合「目前」的工作區，避免在較小螢幕上溢出、
+   或在較大螢幕上偏小。紅點/標籤皆為相對圖框座標，會隨之等比例連動，不需另外處理。
+   以工作區中心為基準做單一倍率縮放（不變形），並保留使用者手動 move/裁切的相對構圖。 */
+function tcpFitFrameToWorkspace(page) {
+  const ws = document.getElementById('tcp-workspace');
+  const f  = page?.imgFrame;
+  if (!ws || !f) return;
+  const { width: wsW, height: wsH } = ws.getBoundingClientRect();
+  if (!(wsW > 0) || !(wsH > 0)) return;
+
+  const hasBase = f.wsW0 > 0 && f.wsH0 > 0;
+  // 有基準：等比例縮放至相同的工作區佔比；無基準（舊資料）：僅在溢出時縮小貼合
+  let k = hasBase
+    ? Math.min(wsW / f.wsW0, wsH / f.wsH0)
+    : Math.min(1, (wsW * 0.96) / f.fw, (wsH * 0.96) / f.fh);
+  if (!(k > 0)) k = 1;
+
+  if (k !== 1) {
+    const bw = hasBase ? f.wsW0 : wsW;
+    const bh = hasBase ? f.wsH0 : wsH;
+    const fcx0 = f.x + f.fw / 2;   // 舊框中心（舊基準座標系）
+    const fcy0 = f.y + f.fh / 2;
+    const newFcx = wsW / 2 + (fcx0 - bw / 2) * k;   // 以目前工作區中心重新定位
+    const newFcy = wsH / 2 + (fcy0 - bh / 2) * k;
+    f.fw = Math.round(f.fw * k); f.fh = Math.round(f.fh * k);
+    f.ix = Math.round(f.ix * k); f.iy = Math.round(f.iy * k);
+    f.iw = Math.round(f.iw * k); f.ih = Math.round(f.ih * k);
+    f.x  = Math.round(newFcx - f.fw / 2);
+    f.y  = Math.round(newFcy - f.fh / 2);
+  }
+  f.wsW0 = wsW; f.wsH0 = wsH;   // 基準更新為目前工作區
 }
 
 function tcpRenderImgFrame(page) {
@@ -7642,6 +7677,7 @@ function tcpApplyCrop() {
     ix: imgAbsX - newX,  // image offset from new frame (can be negative)
     iy: imgAbsY - newY,
     iw: f.iw,  ih: f.ih, // full image size unchanged
+    wsW0: wr.width, wsH0: wr.height,   // 新框像素值對應目前工作區
   };
   _tcpCropOrigFrame = null;
   const overlay = document.getElementById('tcp-crop-overlay');
