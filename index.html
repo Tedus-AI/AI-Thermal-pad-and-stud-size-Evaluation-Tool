@@ -6862,7 +6862,33 @@ function sgOnCompEdit(el) {
   let val = el.value;
   if (el.type === 'number' && val !== '') val = parseFloat(val);
 
+  // 元件改名 → 同步更新該分類所有「已標註」的 componentRef，
+  // 否則標註會因名稱對不上而顯示「名稱已遺失」⚠。先取舊名再寫入新值。
+  if (field === 'Component') {
+    const oldName = sgProjectData[fieldKey][idx].Component;
+    const newName = val;
+    if (oldName && oldName !== newName) tcpRenameComponentRef(cat, oldName, newName);
+  }
+
   sgProjectData[fieldKey][idx][field] = val;
+}
+
+/* 元件改名時，連動更新該分類所有頁面已標註的 componentRef（舊名 → 新名）。
+   標註與元件清單同存於 sgProjectData，會一併隨存檔持久化。 */
+function tcpRenameComponentRef(cat, oldName, newName) {
+  const pages = sgProjectData?.tcPlacement?.[String(cat).toLowerCase()]?.pages;
+  if (!Array.isArray(pages)) return;
+  let changed = 0;
+  pages.forEach(p => {
+    (p.annotations || []).forEach(a => {
+      if (a.componentRef === oldName) { a.componentRef = newName; changed++; }
+    });
+  });
+  // 若標註視窗正開著同一分類，即時重繪反映新名稱
+  if (changed && _tcpCategory && _tcpCategory.toLowerCase() === String(cat).toLowerCase()) {
+    if (_tcpActivePage) tcpRenderMarkers(_tcpActivePage);
+    tcpRenderCompBar();
+  }
 }
 
 /* ======================================================
