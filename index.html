@@ -4852,28 +4852,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-<!-- Add Component Modal -->
-<div id="add-comp-modal" class="modal-overlay" onclick="if(event.target===this)closeAddModal()">
-  <div class="modal-box">
-    <h3 id="modal-title">新增元件</h3>
-    <div class="modal-field">
-      <label>元件名稱 *</label>
-      <input type="text" id="modal-comp-name" placeholder="例：IC-1234">
-    </div>
-    <div class="modal-field">
-      <label>數量</label>
-      <input type="number" id="modal-comp-qty" value="1" min="1">
-    </div>
-    <div class="modal-field">
-      <label>發熱瓦數 (W)</label>
-      <input type="number" id="modal-comp-power" value="0" min="0" step="0.1">
-    </div>
-    <div class="modal-actions">
-      <button class="modal-cancel-btn" onclick="closeAddModal()">取消</button>
-      <button class="modal-confirm-btn" onclick="confirmAddComponent()">新增</button>
-    </div>
-  </div>
-</div>
 
 <script>
 /* ============================
@@ -5710,11 +5688,10 @@ async function onProjectChange() {
 /* 記錄隱藏的元件 */
 let hiddenComponents = {};
 
-/* 取得某分類的自訂元件 */
+/* 自訂元件功能已停用：一律回傳空陣列，不再算繪/匯出。
+   （既有 thermalSpecs._custom_components 資料保留於 DB，不刪除，僅不顯示。） */
 function getCustomComponents(catKey) {
-  const cc = thermalSpecs._custom_components;
-  if (!cc) return [];
-  return cc[catKey.toLowerCase()] || [];
+  return [];
 }
 
 function renderAllCategories() {
@@ -5840,29 +5817,19 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const showBossCustom = (bossSizeType === '\u81ea\u8a02');
 
     const isHidden = !!hiddenComponents[specKey];
-    const customBadge = isCustom ? '<span class="custom-badge">\u81ea\u8a02</span>' : '';
-    const deleteBtn = isCustom
-      ? `<button class="delete-comp-btn" onclick="deleteCustomComponent('${catKey}', ${customIdx})" title="\u522a\u9664\u6b64\u81ea\u8a02\u5143\u4ef6">\u2716</button>`
-      : '';
 
     let rowHtml = `
           <tr data-speckey="${escapeAttr(specKey)}" class="${isHidden ? 'row-hidden' : ''}">
             <td class="readonly-cell hide-col">
-              ${isCustom ? deleteBtn : `<input type="checkbox" class="hide-checkbox"
+              <input type="checkbox" class="hide-checkbox"
                 data-comp="${escapeAttr(specKey)}"
                 ${isHidden ? 'checked' : ''}
                 onchange="onToggleHide(this)"
-                title="\u52fe\u9078\u4ee5\u96b1\u85cf\u6b64\u5143\u4ef6\uff08\u532f\u51fa\u6642\u4e0d\u5305\u542b\uff09">`}
+                title="\u52fe\u9078\u4ee5\u96b1\u85cf\u6b64\u5143\u4ef6\uff08\u532f\u51fa\u6642\u4e0d\u5305\u542b\uff09">
             </td>
             <td class="readonly-cell">${idx + 1}</td>
             <td class="name-cell readonly-cell">
-              ${isCustom
-                ? `<input class="name-input" type="text"
-                    data-cat="${escapeAttr(catKey)}" data-custom="true" data-custom-idx="${customIdx}"
-                    data-original="${escapeAttr(compName)}" data-speckey="${escapeAttr(specKey)}"
-                    value="${escapeAttr(compName)}"
-                    onchange="onCompNameChange(this)" onblur="onCompNameChange(this)">${customBadge}`
-                : `<span class="name-text">${escapeHtml(compName)}</span>`}
+              <span class="name-text">${escapeHtml(compName)}</span>
             </td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell power-col">${power}</td>
@@ -6137,64 +6104,6 @@ function onTimTypeChange(el) {
   if (timType === 'Pad') applyPadAutoCalc(row, compKey);
 }
 
-/* ---- 元件名稱變更 ---- */
-function onCompNameChange(el) {
-  const newName = el.value.trim();
-  const originalName = el.dataset.original;
-  const specKey = el.dataset.speckey;
-  const isCustom = el.dataset.custom === 'true';
-  const customIdx = parseInt(el.dataset.customIdx);
-  const catKey = el.dataset.cat;
-
-  // 若清空或與原始名稱相同，移除 displayName
-  if (!newName || newName === originalName) {
-    el.value = originalName;
-    if (thermalSpecs[specKey]) {
-      delete thermalSpecs[specKey].displayName;
-      if (Object.keys(thermalSpecs[specKey]).length === 0) {
-        delete thermalSpecs[specKey];
-      }
-    }
-    el.classList.remove('changed');
-    return;
-  }
-
-  // 自訂元件：直接改名稱（因為自訂元件本來就在 thermalSpecs 裡管理）
-  if (isCustom && !isNaN(customIdx)) {
-    const catLower = catKey.toLowerCase();
-    if (thermalSpecs._custom_components && thermalSpecs._custom_components[catLower]) {
-      thermalSpecs._custom_components[catLower][customIdx].Component = newName;
-    }
-    // 自訂元件也需遷移 specKey
-    const newSpecKey = newName.replace(/ /g, '_').replace(/\//g, '-');
-    if (specKey !== newSpecKey && thermalSpecs[specKey]) {
-      thermalSpecs[newSpecKey] = thermalSpecs[specKey];
-      delete thermalSpecs[specKey];
-    }
-    if (hiddenComponents[specKey]) {
-      hiddenComponents[newSpecKey] = true;
-      delete hiddenComponents[specKey];
-    }
-    el.dataset.original = newName;
-    el.dataset.speckey = newSpecKey;
-    const row = el.closest('tr');
-    if (row) {
-      row.dataset.speckey = newSpecKey;
-      row.querySelectorAll('[data-comp]').forEach(input => {
-        if (input.dataset.comp === specKey) {
-          input.dataset.comp = newSpecKey;
-        }
-      });
-    }
-    return;
-  }
-
-  // 資料庫既有元件：只存 displayName，不改 specKey
-  if (!thermalSpecs[specKey]) thermalSpecs[specKey] = {};
-  thermalSpecs[specKey].displayName = newName;
-  el.classList.add('changed');
-}
-
 /* ---- 凸台大小變更 → 連動自訂輸入框 ---- */
 function onBossSizeChange(el) {
   const compKey = el.dataset.comp;
@@ -6228,75 +6137,8 @@ function onBossSizeChange(el) {
   }
 }
 
-/* ---- 新增元件 Modal ---- */
-let addModalCategory = null;
-
-function openAddModal(catKey) {
-  addModalCategory = catKey;
-  const catInfo = CATEGORIES[catKey];
-  document.getElementById('modal-title').textContent = '\u65b0\u589e\u5143\u4ef6 \u2014 ' + catInfo.label;
-  document.getElementById('modal-comp-name').value = '';
-  document.getElementById('modal-comp-qty').value = '1';
-  document.getElementById('modal-comp-power').value = '0';
-  document.getElementById('add-comp-modal').classList.add('active');
-  document.getElementById('modal-comp-name').focus();
-}
-
-function closeAddModal() {
-  document.getElementById('add-comp-modal').classList.remove('active');
-  addModalCategory = null;
-}
-
-function confirmAddComponent() {
-  const name = document.getElementById('modal-comp-name').value.trim();
-  if (!name) {
-    alert('\u8acb\u8f38\u5165\u5143\u4ef6\u540d\u7a31');
-    return;
-  }
-
-  const qty = parseInt(document.getElementById('modal-comp-qty').value) || 1;
-  const power = parseFloat(document.getElementById('modal-comp-power').value) || 0;
-
-  if (!thermalSpecs._custom_components) {
-    thermalSpecs._custom_components = {};
-  }
-  const catLower = addModalCategory.toLowerCase();
-  if (!thermalSpecs._custom_components[catLower]) {
-    thermalSpecs._custom_components[catLower] = [];
-  }
-
-  thermalSpecs._custom_components[catLower].push({
-    Component: name,
-    Qty: qty,
-    'Power(W)': power
-  });
-
-  closeAddModal();
-  renderAllCategories();
-}
-
-/* ---- 刪除自訂元件 ---- */
-function deleteCustomComponent(catKey, customIdx) {
-  if (isProtected) { alert('請先解鎖密碼保護'); return; }
-  if (!confirm('\u78ba\u5b9a\u8981\u522a\u9664\u6b64\u81ea\u8a02\u5143\u4ef6\uff1f')) return;
-
-  const catLower = catKey.toLowerCase();
-  const cc = thermalSpecs._custom_components;
-  if (!cc || !cc[catLower]) return;
-
-  // 移除對應的 thermal spec
-  const comp = cc[catLower][customIdx];
-  if (comp) {
-    const specKey = (comp.Component || '').replace(/ /g, '_').replace(/\//g, '-');
-    delete thermalSpecs[specKey];
-  }
-
-  cc[catLower].splice(customIdx, 1);
-  if (cc[catLower].length === 0) delete cc[catLower];
-  if (Object.keys(cc).length === 0) delete thermalSpecs._custom_components;
-
-  renderAllCategories();
-}
+/* 自訂元件功能（新增 / 刪除）已停用並移除。
+   TH/ME 清單一律完全鏡像 Tab1 建立的元件，名稱唯讀、不可自行新增。 */
 
 /* ---- 儲存：統一一次存 Tab1/Tab2/Tab3 三頁 ---- */
 async function saveThermalSpecs() { return saveAllTabs(); }
@@ -9061,8 +8903,7 @@ function vdToggleAddDropdown(catLower, btnEl) {
   const catInfo = VD_CAT_MAP[catKey];
   const tab1Items = (vdProjectData[catInfo.field] || []);
   const ts = vdProjectData.thermal_specs || {};
-  const customComps = (ts._custom_components && ts._custom_components[catLower]) || [];
-  const allSource = tab1Items.concat(customComps);
+  const allSource = tab1Items;   // 自訂元件功能已停用，僅以 Tab1 元件為來源
 
   const currentNames = (vdValidationData[catLower] || []).map(i => i.component);
   const available = allSource.filter(c => c.Component && !currentNames.includes(c.Component));
