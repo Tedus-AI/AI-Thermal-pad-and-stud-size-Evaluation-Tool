@@ -565,6 +565,12 @@
     background: #fff;
     cursor: text;
   }
+  .comp-table td.name-cell .name-text {
+    font-weight: 600;
+    color: #1a3a6b;
+    padding: 2px 4px;
+    display: inline-block;
+  }
   .comp-table td.readonly-cell {
     background: #fafbfc;
     color: #555;
@@ -5812,7 +5818,6 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const compName = comp.Component || '';
     const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
     const spec = thermalSpecs[specKey] || {};
-    const displayName = (!isCustom && spec.displayName) ? spec.displayName : compName;
 
     const qty = comp.Qty || '\u2014';
     const power = comp['Power(W)'] || '\u2014';
@@ -5851,11 +5856,13 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
             </td>
             <td class="readonly-cell">${idx + 1}</td>
             <td class="name-cell readonly-cell">
-              <input class="name-input${!isCustom && spec.displayName ? ' changed' : ''}" type="text"
-                data-cat="${escapeAttr(catKey)}" data-custom="${isCustom}" data-custom-idx="${isCustom ? customIdx : ''}"
-                data-original="${escapeAttr(compName)}" data-speckey="${escapeAttr(specKey)}"
-                value="${escapeAttr(displayName)}"
-                onchange="onCompNameChange(this)" onblur="onCompNameChange(this)">${customBadge}
+              ${isCustom
+                ? `<input class="name-input" type="text"
+                    data-cat="${escapeAttr(catKey)}" data-custom="true" data-custom-idx="${customIdx}"
+                    data-original="${escapeAttr(compName)}" data-speckey="${escapeAttr(specKey)}"
+                    value="${escapeAttr(compName)}"
+                    onchange="onCompNameChange(this)" onblur="onCompNameChange(this)">${customBadge}`
+                : `<span class="name-text">${escapeHtml(compName)}</span>`}
             </td>
             <td class="readonly-cell">${qty}</td>
             <td class="readonly-cell power-col">${power}</td>
@@ -6321,7 +6328,7 @@ function collectExportDataByCategory() {
       if (hiddenComponents[specKey]) return;
 
       const spec = thermalSpecs[specKey] || {};
-      const displayName = spec.displayName || compName;
+      const displayName = compName;   // 名稱一律採用 Tab1 的 Component（不再用可編輯的覆寫名）
       const bossSizeType = spec.bossSizeType || '';
       let bossSizeDisplay = '-';
       if (bossSizeType === '無凸台，刻花定位') {
@@ -6433,7 +6440,7 @@ function eeExportExcel() {
     const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
     if (hiddenComponents[specKey]) return;
     const spec = thermalSpecs[specKey] || {};
-    const displayName = spec.displayName || compName;
+    const displayName = compName;   // 名稱一律採用 Tab1 的 Component（不再用可編輯的覆寫名）
     idx++;
     wsData.push([idx, displayName, spec.heatSourceSize || '-', spec.heatSourceHeight || '-']);
   });
