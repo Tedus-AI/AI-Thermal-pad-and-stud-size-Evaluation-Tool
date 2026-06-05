@@ -8815,7 +8815,7 @@ function vdRender() {
 
     items.forEach((item, idx) => {
       const hideKey = `${catLower}|${item.component}`;
-      const isHidden = !!vdHiddenComps[hideKey];
+      const isHidden = vdIsHidden(hideKey);
       const pdVal = item.pd_source === 'rt' ? item.pd_est_rt : item.pd_est;
       const pdErr = vdCalcRelError(pdVal, item.pd_meas);
       const tempErr = vdCalcRelError(item.temp_sim_cal, item.temp_meas);
@@ -8869,12 +8869,6 @@ function vdRender() {
       </details>`;
     }
 
-    // Add component dropdown
-    html += `<div class="vd-add-dropdown" style="margin-top:6px;">
-      <button class="sg-comp-add-btn" onclick="vdToggleAddDropdown('${catLower}',this)">&#10133; 新增驗證元件</button>
-      <div class="vd-add-dropdown-content" id="vd-add-dd-${catLower}"></div>
-    </div>`;
-
     html += `</div>`;
   }
 
@@ -8882,15 +8876,20 @@ function vdRender() {
   container.innerHTML = html;
 }
 
-/* ---- Hide toggle (Tab 3 validation) ---- */
+/* ---- Hide state (Tab 3 validation) ----
+   預設「全部隱藏」：未明確標記者一律視為隱藏；唯有明確存為 false
+   （使用者取消隱藏 = 要驗證的元件）才顯示。沿用 vd_hidden_components 欄位，
+   其值現在語意為「false = 已取消隱藏要驗證」，省略 = 預設隱藏。 */
+function vdIsHidden(key) {
+  return vdHiddenComps[key] !== false;
+}
+
 function vdOnHideToggle(el) {
-  const cat = el.dataset.cat;
-  const compName = el.dataset.comp;
-  const key = `${cat}|${compName}`;
-  if (el.checked) {
-    vdHiddenComps[key] = true;
-  } else {
+  const key = `${el.dataset.cat}|${el.dataset.comp}`;
+  if (el.checked) {            // 勾選 = 隱藏（即預設）→ 移除「要驗證」標記
     delete vdHiddenComps[key];
+  } else {                     // 取消勾選 = 顯示（要驗證）→ 明確標記為 false
+    vdHiddenComps[key] = false;
   }
   vdRender();
 }
@@ -8908,70 +8907,7 @@ function vdOnEdit(el) {
   vdRender();
 }
 
-function vdDeleteItem(cat, idx) {
-  if (isProtected) { alert('請先解鎖密碼保護'); return; }
-  const item = vdValidationData[cat]?.[idx];
-  if (!item) return;
-  if (!confirm(`確定要從驗證清單移除「${item.component}」嗎？`)) return;
-  vdValidationData[cat].splice(idx, 1);
-  vdRender();
-}
-
-function vdToggleAddDropdown(catLower, btnEl) {
-  const dd = document.getElementById('vd-add-dd-' + catLower);
-  if (dd.classList.contains('open')) { dd.classList.remove('open'); return; }
-
-  // Close all other dropdowns first
-  document.querySelectorAll('.vd-add-dropdown-content.open').forEach(d => d.classList.remove('open'));
-
-  // Build options: components in Tab1/Tab2 that aren't already in the validation list
-  const catKey = catLower === 'rf' ? 'RF' : catLower === 'digital' ? 'Digital' : 'PWR';
-  const catInfo = VD_CAT_MAP[catKey];
-  const tab1Items = (vdProjectData[catInfo.field] || []);
-  const ts = vdProjectData.thermal_specs || {};
-  const allSource = tab1Items;   // 自訂元件功能已停用，僅以 Tab1 元件為來源
-
-  const currentNames = (vdValidationData[catLower] || []).map(i => i.component);
-  const available = allSource.filter(c => c.Component && !currentNames.includes(c.Component));
-
-  if (available.length === 0) {
-    dd.innerHTML = '<div style="color:#888;cursor:default;">沒有可新增的元件</div>';
-  } else {
-    dd.innerHTML = available.map(c => {
-      const name = escapeHtml(c.Component);
-      const power = parseFloat(c['Power(W)']) || 0;
-      const qty = parseInt(c.Qty) || 1;
-      return `<div onclick="vdAddItem('${catLower}','${escapeAttr(c.Component)}',${power},${qty})">${name} (${power}W)</div>`;
-    }).join('');
-  }
-
-  dd.classList.add('open');
-
-  const closeHandler = (e) => {
-    if (!dd.contains(e.target) && e.target !== btnEl) {
-      dd.classList.remove('open');
-      document.removeEventListener('click', closeHandler);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', closeHandler), 0);
-}
-
-function vdAddItem(catLower, compName, power, qty) {
-  if (isProtected) { alert('請先解鎖密碼保護'); return; }
-  if (!vdValidationData[catLower]) vdValidationData[catLower] = [];
-  vdValidationData[catLower].push({
-    component: compName,
-    qty: qty,
-    pd_est: power,
-    pd_meas: '',
-    temp_sim: '',
-    temp_meas: '',
-    temp_sim_cal: '',
-    note: ''
-  });
-  document.querySelectorAll('.vd-add-dropdown-content.open').forEach(d => d.classList.remove('open'));
-  vdRender();
-}
+/* Tab3：新增/刪除驗證元件功能已移除（元件完全引用 Tab1，預設隱藏，由使用者取消隱藏要驗證者）。 */
 
 async function vdSaveValidation() { return saveAllTabs(); }
 
@@ -8981,7 +8917,7 @@ function vdExportExcel() {
   const wb = XLSX.utils.book_new();
   for (const [catKey, catInfo] of Object.entries(VD_CAT_MAP)) {
     const catLower = catKey.toLowerCase();
-    const items = (vdValidationData[catLower] || []).filter(i => !vdHiddenComps[`${catLower}|${i.component}`]);
+    const items = (vdValidationData[catLower] || []).filter(i => !vdIsHidden(`${catLower}|${i.component}`));
     const headers = ['元件名稱','Pd估值(W)','Pd實測(W)','Pd相對誤差%','溫度初始模擬','溫度實測','溫度模擬校正','溫度相對誤差%','絕對溫差','備註'];
     const rows = items.map(i => [
       i.component||'', i.pd_est??'', i.pd_meas??'', '', i.temp_sim??'', i.temp_meas??'', i.temp_sim_cal??'', '', '', i.note||''
