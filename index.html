@@ -6892,6 +6892,68 @@ function tcpRenameComponentRef(cat, oldName, newName) {
 }
 
 /* ======================================================
+   元件 variant 聚合（從資料庫快選 — Phase 1：純讀，無 UI）
+   ------------------------------------------------------
+   掃描共用 projects collection 的「全部專案」，依「元件名稱」聚合該分類元件，
+   讓未來的「📚 從資料庫快選」可以跨專案重用任何元件。
+   去重規則：相同 (名稱, Power(W)) 收斂成一筆，來源專案取「最早建立者」
+   （依 meta.timestamp 判定）；同名不同瓦 → 各自一筆。
+   ⚠ 純讀取：只用 getCollection 讀，絕不寫入任何專案或集合。
+   ====================================================== */
+async function sgCollectComponentVariants(category) {
+  const field = SG_CAT_MAP[category]?.field;
+  if (!field) return [];
+
+  let projects;
+  try {
+    projects = await dbAdapter.getCollection('projects');   // { projectId: projectDoc }
+  } catch (e) {
+    console.warn('[variants] 讀取 projects 失敗：', e);
+    return [];
+  }
+
+  const byKey = new Map();   // key = `${name} ${power}` → variant（保留最早建立者）
+  for (const [pid, proj] of Object.entries(projects || {})) {
+    const items = Array.isArray(proj?.[field]) ? proj[field] : [];
+    const projName = proj?.project_name || pid;
+    const ts = Date.parse(proj?.meta?.timestamp || '') || Infinity;   // 無時戳 → 視為最晚，不會誤判為 origin
+    for (const comp of items) {
+      const name = String(comp?.Component || '').trim();
+      if (!name) continue;
+      const power = comp?.['Power(W)'] ?? '';
+      const key = name + ' ' + String(power);
+      const prev = byKey.get(key);
+      if (!prev || ts < prev._ts) {
+        byKey.set(key, {
+          name,
+          power,
+          power_rt: comp?.['Power_RT(W)'] ?? '',
+          qty: comp?.Qty ?? 1,
+          originProjectName: projName,
+          originProjectId: pid,
+          _ts: ts,
+        });
+      }
+    }
+  }
+
+  const out = Array.from(byKey.values()).map(({ _ts, ...v }) => v);
+  out.sort((a, b) =>
+    a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0)
+  );
+  return out;
+}
+
+/* Phase 1 驗證用：在 console 執行 await sgDebugVariants('RF' | 'Digital' | 'PWR') */
+async function sgDebugVariants(category = 'RF') {
+  const list = await sgCollectComponentVariants(category);
+  try { console.table(list); } catch (_) { console.log(list); }
+  console.info(`[variants] ${category}：跨全部專案聚合得 ${list.length} 筆`);
+  return list;
+}
+window.sgDebugVariants = sgDebugVariants;
+
+/* ======================================================
    TC Placement Modal  (tcp-*)
    ====================================================== */
 
