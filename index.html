@@ -1280,6 +1280,12 @@
     gap: 8px;
     flex-wrap: wrap;
   }
+  .sg-comp-quickadd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
+  .sg-lib-label { font-weight: 600; font-size: 0.85rem; color: #1a3a6b; white-space: nowrap; }
+  .sg-comp-quickadd select {
+    padding: 4px 8px; border: 1px solid #c5d9ee; border-radius: 6px;
+    font-size: 0.85rem; max-width: 460px; background: #fff; color: #1a3a6b;
+  }
   .tcp-placement-btn {
     display: inline-flex;
     align-items: center;
@@ -6598,6 +6604,7 @@ async function sgOnProjectChange() {
   const select = document.getElementById('sg-project-select');
   sgProjectId = select.value || null;
   sgProjectData = null;
+  sgVariantsCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
   if (!sgProjectId) {
     sgRenderProjectComponents();
     snapSgClean();
@@ -6668,6 +6675,12 @@ function sgRenderProjectComponents() {
 
   if (emptyEl) emptyEl.style.display = 'none';
 
+  // 跨專案 variant 快取：首次/失效時載入一次，完成後重繪以填入「從資料庫快選」下拉
+  if (sgVariantsCache === null && !sgVariantsLoading) {
+    sgVariantsLoading = true;
+    sgLoadVariantsCache().finally(() => { sgVariantsLoading = false; sgRenderProjectComponents(); });
+  }
+
   let totalCount = 0;
   let html = '';
   const catPower = {};
@@ -6720,7 +6733,24 @@ function sgRenderProjectComponents() {
       </tr>`;
     });
 
+    const presentNames = new Set((items || []).map(c => c.Component));
+    const vlist = (sgVariantsCache && sgVariantsCache[catKey]) || [];
+    let vopts = '';
+    vlist.forEach((v, vi) => {
+      if (presentNames.has(v.name)) return;
+      vopts += `<option value="${vi}">${escapeHtml(v.name)} - ${escapeHtml(String(v.power))}W - ${escapeHtml(v.originProjectName)}</option>`;
+    });
+    const quickAdd = (sgVariantsCache === null)
+      ? `<span class="sg-lib-label">📚 從資料庫快選：</span><select disabled><option>載入中…</option></select>`
+      : `<span class="sg-lib-label">📚 從資料庫快選：</span>
+         <select id="sg-lib-sel-${catKey}">
+           <option value="">${vopts ? '（請選擇：名稱・瓦數・來源專案）' : '（目前無可新增的元件）'}</option>
+           ${vopts}
+         </select>
+         <button class="sg-comp-add-btn" onclick="sgAddFromVariant('${catKey}')">&#10133; 加入</button>`;
+
     html += `</tbody></table>
+      <div class="sg-comp-quickadd">${quickAdd}</div>
       <div class="sg-comp-footer">
         <button class="sg-comp-add-btn" onclick="sgAddCompRow('${catKey}')">&#10133; 新增 ${catInfo.label}</button>
         <button class="tcp-placement-btn ${catInfo.css}" onclick="tcpOpenModal('${catKey}')" ${isProtected ? 'disabled' : ''} title="${catInfo.label} 元件位置標註（需解鎖才能編輯）">📍 元件位置標註</button>
@@ -6892,41 +6922,34 @@ function tcpRenameComponentRef(cat, oldName, newName) {
 }
 
 /* ======================================================
-   元件 variant 聚合（從資料庫快選 — Phase 1：純讀，無 UI）
+   元件 variant 聚合（從資料庫快選）
    ------------------------------------------------------
    掃描共用 projects collection 的「全部專案」，依「元件名稱」聚合該分類元件，
-   讓未來的「📚 從資料庫快選」可以跨專案重用任何元件。
-   去重規則：相同 (名稱, Power(W)) 收斂成一筆，來源專案取「最早建立者」
-   （依 meta.timestamp 判定）；同名不同瓦 → 各自一筆。
-   ⚠ 純讀取：只用 getCollection 讀，絕不寫入任何專案或集合。
+   讓「📚 從資料庫快選」可以跨專案重用任何元件。
+   去重：相同 (名稱, Power(W)) 收斂成一筆，來源專案取「最早建立者」（meta.timestamp）；
+   同名不同瓦 → 各自一筆。⚠ 純讀取：只用 getCollection，絕不寫入任何專案或集合。
    ====================================================== */
-async function sgCollectComponentVariants(category) {
+let sgVariantsCache = null;      // { RF:[...], Digital:[...], PWR:[...] } 或 null（未載入）
+let sgVariantsLoading = false;
+
+/* 純函式：用一份 projects 物件聚合出某分類的 variant 陣列 */
+function sgAggregateVariants(projects, category) {
   const field = SG_CAT_MAP[category]?.field;
   if (!field) return [];
-
-  let projects;
-  try {
-    projects = await dbAdapter.getCollection('projects');   // { projectId: projectDoc }
-  } catch (e) {
-    console.warn('[variants] 讀取 projects 失敗：', e);
-    return [];
-  }
-
-  const byKey = new Map();   // key = `${name} ${power}` → variant（保留最早建立者）
+  const byKey = new Map();   // key = `${name} ${power}` -> variant（保留最早建立者）
   for (const [pid, proj] of Object.entries(projects || {})) {
     const items = Array.isArray(proj?.[field]) ? proj[field] : [];
     const projName = proj?.project_name || pid;
-    const ts = Date.parse(proj?.meta?.timestamp || '') || Infinity;   // 無時戳 → 視為最晚，不會誤判為 origin
+    const ts = Date.parse(proj?.meta?.timestamp || '') || Infinity;   // 無時戳 -> 最晚，不誤判為 origin
     for (const comp of items) {
       const name = String(comp?.Component || '').trim();
       if (!name) continue;
       const power = comp?.['Power(W)'] ?? '';
-      const key = name + ' ' + String(power);
+      const key = name + ' ' + String(power);
       const prev = byKey.get(key);
       if (!prev || ts < prev._ts) {
         byKey.set(key, {
-          name,
-          power,
+          name, power,
           power_rt: comp?.['Power_RT(W)'] ?? '',
           qty: comp?.Qty ?? 1,
           originProjectName: projName,
@@ -6936,15 +6959,35 @@ async function sgCollectComponentVariants(category) {
       }
     }
   }
-
-  const out = Array.from(byKey.values()).map(({ _ts, ...v }) => v);
-  out.sort((a, b) =>
-    a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0)
-  );
-  return out;
+  return Array.from(byKey.values()).map(({ _ts, ...v }) => v)
+    .sort((a, b) => a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0));
 }
 
-/* Phase 1 驗證用：在 console 執行 await sgDebugVariants('RF' | 'Digital' | 'PWR') */
+/* 讀一次 projects，聚合三個分類並快取到 sgVariantsCache */
+async function sgLoadVariantsCache() {
+  let projects;
+  try {
+    projects = await dbAdapter.getCollection('projects');
+  } catch (e) {
+    console.warn('[variants] 讀取 projects 失敗：', e);
+    sgVariantsCache = { RF: [], Digital: [], PWR: [] };
+    return sgVariantsCache;
+  }
+  sgVariantsCache = {
+    RF:      sgAggregateVariants(projects, 'RF'),
+    Digital: sgAggregateVariants(projects, 'Digital'),
+    PWR:     sgAggregateVariants(projects, 'PWR'),
+  };
+  return sgVariantsCache;
+}
+
+/* 單一分類（console 驗證用）：await sgDebugVariants('RF' | 'Digital' | 'PWR') */
+async function sgCollectComponentVariants(category) {
+  let projects;
+  try { projects = await dbAdapter.getCollection('projects'); }
+  catch (e) { console.warn('[variants] 讀取 projects 失敗：', e); return []; }
+  return sgAggregateVariants(projects, category);
+}
 async function sgDebugVariants(category = 'RF') {
   const list = await sgCollectComponentVariants(category);
   try { console.table(list); } catch (_) { console.log(list); }
@@ -6952,6 +6995,36 @@ async function sgDebugVariants(category = 'RF') {
   return list;
 }
 window.sgDebugVariants = sgDebugVariants;
+
+/* 依分類預設建立一顆元件物件（可帶 overrides），供新增空白列 / 從資料庫快選共用 */
+function sgMakeComp(cat, overrides) {
+  const d = SG_DEFAULTS[cat];
+  return Object.assign({
+    Component: '', Type: '', Qty: 1, 'Power(W)': '', 'Power_RT(W)': '',
+    TV_ID_mil: 'N/A', TV_Qty: 'N/A',
+    'Height(mm)': d.height, Pad_L: d.padL, Pad_W: d.padW, 'Thick(mm)': d.thick,
+    Board_Type: d.boardType, 'Limit(C)': d.limit, R_jc: d.rjc, TIM_Type: d.timType,
+    Temp_Sensor: 'N', Local_Qty: '', Remote_Qty: '',
+  }, overrides || {});
+}
+
+/* 從資料庫快選新增一顆元件到目前專案（Phase 2：先不鎖瓦數、可編輯） */
+function sgAddFromVariant(cat) {
+  if (!sgProjectData) return;
+  const sel = document.getElementById('sg-lib-sel-' + cat);
+  if (!sel || sel.value === '') return;
+  const v = (sgVariantsCache?.[cat] || [])[parseInt(sel.value, 10)];
+  if (!v) return;
+  const fieldKey = SG_CAT_MAP[cat].field;
+  if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
+  sgProjectData[fieldKey].push(sgMakeComp(cat, {
+    Component: v.name,
+    Qty: v.qty ?? 1,
+    'Power(W)': v.power,
+    'Power_RT(W)': v.power_rt ?? '',
+  }));
+  sgRenderProjectComponents();
+}
 
 /* ======================================================
    TC Placement Modal  (tcp-*)
@@ -8176,27 +8249,7 @@ function sgAddCompRow(cat) {
   if (!sgProjectData) return;
   if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
 
-  const d = SG_DEFAULTS[cat];
-  sgProjectData[fieldKey].push({
-    Component: '',
-    Type: '',
-    Qty: 1,
-    'Power(W)': '',
-    'Power_RT(W)': '',
-    TV_ID_mil: 'N/A',
-    TV_Qty: 'N/A',
-    'Height(mm)': d.height,
-    Pad_L: d.padL,
-    Pad_W: d.padW,
-    'Thick(mm)': d.thick,
-    Board_Type: d.boardType,
-    'Limit(C)': d.limit,
-    R_jc: d.rjc,
-    TIM_Type: d.timType,
-    Temp_Sensor: 'N',
-    Local_Qty:   '',
-    Remote_Qty:  ''
-  });
+  sgProjectData[fieldKey].push(sgMakeComp(cat));
 
   sgRenderProjectComponents();
 
