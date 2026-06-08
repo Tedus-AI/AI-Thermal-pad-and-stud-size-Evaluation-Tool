@@ -6932,6 +6932,9 @@ function tcpRenameComponentRef(cat, oldName, newName) {
 let sgVariantsCache = null;      // { RF:[...], Digital:[...], PWR:[...] } 或 null（未載入）
 let sgVariantsLoading = false;
 
+/* 從資料庫快選複製元件時，要一併帶過去的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等） */
+const SG_VARIANT_CARRY = ['Type','Qty','Power(W)','Power_RT(W)','TV_ID_mil','TV_Qty','Temp_Sensor','Local_Qty','Remote_Qty','note'];
+
 /* 純函式：用一份 projects 物件聚合出某分類的 variant 陣列 */
 function sgAggregateVariants(projects, category) {
   const field = SG_CAT_MAP[category]?.field;
@@ -6948,12 +6951,15 @@ function sgAggregateVariants(projects, category) {
       const key = name + ' ' + String(power);
       const prev = byKey.get(key);
       if (!prev || ts < prev._ts) {
+        const src = {};
+        SG_VARIANT_CARRY.forEach(k => { if (comp[k] !== undefined) src[k] = comp[k]; });
         byKey.set(key, {
           name, power,
           power_rt: comp?.['Power_RT(W)'] ?? '',
           qty: comp?.Qty ?? 1,
           originProjectName: projName,
           originProjectId: pid,
+          src,
           _ts: ts,
         });
       }
@@ -7017,12 +7023,8 @@ function sgAddFromVariant(cat) {
   if (!v) return;
   const fieldKey = SG_CAT_MAP[cat].field;
   if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
-  sgProjectData[fieldKey].push(sgMakeComp(cat, {
-    Component: v.name,
-    Qty: v.qty ?? 1,
-    'Power(W)': v.power,
-    'Power_RT(W)': v.power_rt ?? '',
-  }));
+  // 帶齊來源元件的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等）
+  sgProjectData[fieldKey].push(sgMakeComp(cat, { Component: v.name, ...(v.src || {}) }));
   sgRenderProjectComponents();
 }
 
