@@ -8362,15 +8362,9 @@ async function saveAllTabs() {
         param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
         tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
       } });
-      for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
-        const items = sgProjectData[catInfo.field] || [];
-        for (const comp of items) {
-          if (!comp.Component || comp.Component.trim() === '') continue;
-          // 寫入共用 *_library 時剝掉暫態的參照註記，避免污染跨工具共用目錄
-          const { _ref_origin_project, _ref_origin_id, _ref_locked, ...libData } = comp;
-          ops.push({ type: 'set', col: catInfo.collection, id: toDocId(comp.Component), data: libData });
-        }
-      }
+      // 註：本工具不再「存檔時自動 upsert 元件到共用 *_library」。
+      // 「📚 從資料庫快選」改為即時掃所有專案聚合，不依賴 *_library；
+      // 停掉自動 upsert 可避免累積孤兒、也不再無聲覆寫共用目錄。
     }
     if (hasCl) {
       ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: {
