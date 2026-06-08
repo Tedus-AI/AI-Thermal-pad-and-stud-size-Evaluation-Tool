@@ -3920,6 +3920,27 @@
   }
   .rail-lock-popover button:hover { background: #50529a; }
 
+  /* 刪除專案浮動密碼框 */
+  .sg-del-popover {
+    position: fixed; z-index: 1400;
+    display: flex; flex-direction: column; gap: 6px;
+    background: #fff; border: 1.5px solid #f5b5b5; border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.2); padding: 10px 12px; width: max-content;
+  }
+  .sg-del-popover .sg-del-hint { font-size: 0.74rem; color: #b91c1c; font-weight: 700; }
+  .sg-del-popover .sg-del-row { display: flex; align-items: center; gap: 6px; }
+  .sg-del-popover input {
+    width: 130px; padding: 6px 9px; border: 1.5px solid #d0d8e0;
+    border-radius: 7px; font-size: 0.85rem; outline: none;
+  }
+  .sg-del-popover input:focus { border-color: #dc2626; }
+  .sg-del-popover button {
+    padding: 6px 12px; border: none; border-radius: 7px;
+    background: #dc2626; color: #fff; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+  }
+  .sg-del-popover button:hover { background: #b91c1c; }
+
   /* 上鎖前未儲存變更確認對話框 */
   .unsaved-lock-overlay {
     display: none; position: fixed; inset: 0;
@@ -4484,6 +4505,7 @@
           </div>
           <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
           <button class="btn" id="sg-new-project-btn" style="background:#217346;color:#fff;" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
+          <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
         </div>
         <div id="sg-new-project-form" class="sg-new-project-form">
           <div class="field">
@@ -8628,6 +8650,76 @@ async function sgCreateProject() {
   }
 }
 
+/* ---- 刪除專案（Tab1）：密碼 0420 → Enter 即刪 ----
+   刪除整個專案文件(含其元件/設定)＋清掉它在 SharePoint 的標註圖片。
+   ⚠ projects 為與 5G-RRU 共用，刪除後兩個工具都會看不到。需先解鎖(寫入權限)。 */
+function sgAskDeleteProject() {
+  if (!sgProjectId) { alert('請先在上方下拉選擇要刪除的專案'); return; }
+  if (isProtected) { alert('請先解鎖資料庫保護後才能刪除專案'); return; }
+  const pop = document.getElementById('sg-del-popover');
+  const btn = document.getElementById('sg-del-project-btn');
+  if (!pop || !btn) return;
+  const sel = document.getElementById('sg-project-select');
+  const name = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].textContent : sgProjectId;
+  const hint = document.getElementById('sg-del-hint');
+  if (hint) hint.textContent = `刪除「${name}」？輸入密碼後按 Enter`;
+  const r = btn.getBoundingClientRect();
+  pop.style.top  = (r.bottom + 6) + 'px';
+  pop.style.left = Math.max(8, r.right - 230) + 'px';
+  pop.style.display = 'flex';
+  const inp = document.getElementById('sg-del-pwd');
+  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 0); }
+  setTimeout(() => document.addEventListener('mousedown', sgDelOutsideClose), 0);
+}
+function sgDelOutsideClose(e) {
+  const pop = document.getElementById('sg-del-popover');
+  const btn = document.getElementById('sg-del-project-btn');
+  if (!pop) return;
+  if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+  sgHideDelPopover();
+}
+function sgHideDelPopover() {
+  const pop = document.getElementById('sg-del-popover');
+  if (pop) pop.style.display = 'none';
+  const inp = document.getElementById('sg-del-pwd');
+  if (inp) inp.value = '';
+  document.removeEventListener('mousedown', sgDelOutsideClose);
+}
+async function sgConfirmDeleteProject() {
+  const inp = document.getElementById('sg-del-pwd');
+  if (!inp || inp.disabled) return;
+  if (inp.value !== '0420') { alert('密碼錯誤'); inp.value = ''; inp.focus(); return; }
+  if (!sgProjectId) { sgHideDelPopover(); return; }
+  if (isProtected) { alert('請先解鎖資料庫保護'); sgHideDelPopover(); return; }
+  const delId = sgProjectId;
+  const sel = document.getElementById('sg-project-select');
+  const delName = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].textContent : delId;
+  inp.disabled = true;
+  try { await sgDeleteProject(delId, delName); }
+  finally { inp.disabled = false; }
+  sgHideDelPopover();
+}
+async function sgDeleteProject(projectId, projectName) {
+  try {
+    // 先清掉該專案在 SharePoint 的標註圖片(否則變孤兒)
+    if (dbAdapter.isSharePointMode && dbAdapter.isSharePointMode()) {
+      try {
+        const imgs = await dbAdapter.listTcpImages(projectId);
+        for (const p of imgs) { try { await dbAdapter.deleteTcpImage(p); } catch (_) {} }
+      } catch (e) { console.warn('[del] 清理 tcp_images 失敗：', e); }
+    }
+    // 刪除整個專案文件(元件/設定皆內嵌其中一併刪除)
+    await dbAdapter.deleteDoc('projects', projectId);
+    if (sgProjectId === projectId) { sgProjectId = null; sgProjectData = null; }
+    sgVariantsCache = null;          // 專案集合改變 → 失效快選快取
+    await sgLoadProjects();          // 重讀並刷新下拉(刪到當前專案會自動清空顯示)
+    sgShowStatus(`已刪除專案「${projectName}」`, 'success');
+  } catch (e) {
+    if (e instanceof ConflictError) { showConflictWarning(); sgShowStatus('版本衝突，請重新整理後再試', 'error'); }
+    else alert('刪除專案失敗：' + e.message);
+  }
+}
+
 /* ---- Helper: show status ---- */
 function sgShowStatus(msg, type) {
   const el = document.getElementById('sg-project-status');
@@ -9903,6 +9995,16 @@ function fbShowShadowReadReport() {
     <input type="password" id="rail-lock-pwd" placeholder="輸入密碼"
            onkeydown="if(event.key==='Enter')railConfirmUnlock()">
     <button type="button" onclick="railConfirmUnlock()">解鎖</button>
+  </div>
+</div>
+
+<!-- 刪除專案：浮動密碼框（位置由 JS 依刪除鈕動態定位） -->
+<div id="sg-del-popover" class="sg-del-popover" style="display:none;">
+  <div class="sg-del-hint" id="sg-del-hint">刪除專案？輸入密碼</div>
+  <div class="sg-del-row">
+    <input type="password" id="sg-del-pwd" placeholder="輸入密碼"
+           onkeydown="if(event.key==='Enter')sgConfirmDeleteProject()">
+    <button type="button" onclick="sgConfirmDeleteProject()">刪除</button>
   </div>
 </div>
 
