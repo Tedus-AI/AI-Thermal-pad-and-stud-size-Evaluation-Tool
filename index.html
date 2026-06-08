@@ -1286,6 +1286,18 @@
     padding: 4px 8px; border: 1px solid #c5d9ee; border-radius: 6px;
     font-size: 0.85rem; max-width: 460px; background: #fff; color: #1a3a6b;
   }
+  /* 從資料庫快選 — 參照徽章 / 解除鈕 / 瓦數鎖定 */
+  .sg-ref-badge { margin-top: 3px; font-size: 0.7rem; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; line-height: 1.3; }
+  .sg-ref-badge.locked { color: #b45309; font-weight: 600; }
+  .sg-ref-badge.faded  { color: #9ca3af; }
+  .sg-ref-detach-btn {
+    font-size: 0.68rem; padding: 1px 6px; border: 1px solid #d1d5db; border-radius: 4px;
+    background: #fff; color: #b45309; cursor: pointer; white-space: nowrap;
+  }
+  .sg-ref-detach-btn:hover { background: #fef3c7; border-color: #f59e0b; }
+  .sg-comp-list-table input.sg-cell-input:disabled {
+    background: #f3f4f6; color: #9ca3af; cursor: not-allowed;
+  }
   .tcp-placement-btn {
     display: inline-flex;
     align-items: center;
@@ -6710,12 +6722,18 @@ function sgRenderProjectComponents() {
       const selectVal = isPredefined ? typeVal : (typeVal ? '其他' : '');
       const customVal = (!isPredefined && typeVal) ? typeVal : '';
       const customVisible = selectVal === '其他' ? ' visible' : '';
+      const refLocked = !!comp._ref_locked;
+      const refOrigin = comp._ref_origin_project || '';
+      const refBadge = refLocked
+        ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button></div>`
+        : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}</div>` : '');
+      const pwLock = refLocked ? ' disabled' : '';
       html += `<tr>
-        <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power_RT(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power_RT(W)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)"${pwLock} title="${refLocked ? '參照元件的瓦數已鎖定，請按「解除參照」後再修改' : ''}" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power_RT(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power_RT(W)"${pwLock} title="${refLocked ? '參照元件的瓦數已鎖定，請按「解除參照」後再修改' : ''}" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-ts-cell">
@@ -7023,8 +7041,24 @@ function sgAddFromVariant(cat) {
   if (!v) return;
   const fieldKey = SG_CAT_MAP[cat].field;
   if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
-  // 帶齊來源元件的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等）
-  sgProjectData[fieldKey].push(sgMakeComp(cat, { Component: v.name, ...(v.src || {}) }));
+  // 帶齊來源元件的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等），
+  // 並標記為「參照」：瓦數鎖定、記錄來源專案，避免改到舊案已驗證的值。
+  sgProjectData[fieldKey].push(sgMakeComp(cat, {
+    Component: v.name,
+    ...(v.src || {}),
+    _ref_origin_project: v.originProjectName,
+    _ref_origin_id: v.originProjectId,
+    _ref_locked: true,
+  }));
+  sgRenderProjectComponents();
+}
+
+/* 解除參照：解鎖瓦數使其可編輯；保留 _ref_origin_* 以淡灰「曾參照自 X」追溯。 */
+function sgDetachRef(cat, idx) {
+  const fieldKey = SG_CAT_MAP[cat]?.field;
+  const comp = sgProjectData?.[fieldKey]?.[idx];
+  if (!comp) return;
+  comp._ref_locked = false;
   sgRenderProjectComponents();
 }
 
