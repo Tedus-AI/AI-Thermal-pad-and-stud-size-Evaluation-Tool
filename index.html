@@ -5779,9 +5779,9 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="readonly-col power-col">發熱瓦數<br>(W)</th>
           <th class="editable-col heat-source-col">元件大小<br>(mm)</th>
           <th class="editable-col heat-source-height-col">元件高度(max)<br>(mm)</th>
+          <th class="editable-col tim-type-col">TIM Type</th>
           <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
           <th class="editable-col boss-surface-col">凸台表面處理</th>
-          <th class="editable-col tim-type-col">TIM Type</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
           <th class="editable-col heat-dir-col">散熱方向</th>
@@ -5888,6 +5888,16 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 value="${escapeAttr(heatSrcHeight)}"
                 placeholder="H" onchange="onCellChange(this)">
             </td>
+            <td class="editable-cell tim-type-col">
+              <select class="cell-select"
+                data-comp="${escapeAttr(specKey)}" data-field="timType"
+                onchange="onTimTypeChange(this)">
+                <option value="">\u2014</option>
+                ${TIM_TYPE_OPTIONS.map(o =>
+                  `<option value="${o}" ${timType === o ? 'selected' : ''}>${o}</option>`
+                ).join('')}
+              </select>
+            </td>
             <td class="editable-cell boss-size-col">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="bossSizeType"
@@ -5912,16 +5922,6 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 <option value="">\u2014</option>
                 ${BOSS_SURFACE_OPTIONS.map(o =>
                   `<option value="${o}" ${bossSurface === o ? 'selected' : ''}>${o}</option>`
-                ).join('')}
-              </select>
-            </td>
-            <td class="editable-cell tim-type-col">
-              <select class="cell-select"
-                data-comp="${escapeAttr(specKey)}" data-field="timType"
-                onchange="onTimTypeChange(this)">
-                <option value="">\u2014</option>
-                ${TIM_TYPE_OPTIONS.map(o =>
-                  `<option value="${o}" ${timType === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
               </select>
             </td>
