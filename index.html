@@ -8366,7 +8366,9 @@ async function saveAllTabs() {
         const items = sgProjectData[catInfo.field] || [];
         for (const comp of items) {
           if (!comp.Component || comp.Component.trim() === '') continue;
-          ops.push({ type: 'set', col: catInfo.collection, id: toDocId(comp.Component), data: { ...comp } });
+          // 寫入共用 *_library 時剝掉暫態的參照註記，避免污染跨工具共用目錄
+          const { _ref_origin_project, _ref_origin_id, _ref_locked, ...libData } = comp;
+          ops.push({ type: 'set', col: catInfo.collection, id: toDocId(comp.Component), data: libData });
         }
       }
     }
