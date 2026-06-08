@@ -1295,8 +1295,11 @@
     background: #fff; color: #b45309; cursor: pointer; white-space: nowrap;
   }
   .sg-ref-detach-btn:hover { background: #fef3c7; border-color: #f59e0b; }
-  .sg-comp-list-table input.sg-cell-input:disabled {
-    background: #f3f4f6; color: #9ca3af; cursor: not-allowed;
+  /* 參照鎖定的瓦數：白底黑字純文字、不可編輯、無輸入框 */
+  .sg-locked-val {
+    display: inline-block; padding: 2px 4px; min-width: 40px;
+    color: #111; background: transparent; font-size: inherit;
+    cursor: default;
   }
   .tcp-placement-btn {
     display: inline-flex;
@@ -6727,13 +6730,15 @@ function sgRenderProjectComponents() {
       const refBadge = refLocked
         ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button></div>`
         : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}</div>` : '');
-      const pwLock = refLocked ? ' disabled' : '';
+      const pwCell = (fieldName, val) => refLocked
+        ? `<span class="sg-locked-val" title="瓦數已鎖定，請先按「解除參照」">${escapeHtml(String(val ?? ''))}</span>`
+        : `<input class="sg-cell-input" type="number" step="any" value="${val ?? ''}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power(W)"${pwLock} title="${refLocked ? '參照元件的瓦數已鎖定，請按「解除參照」後再修改' : ''}" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" step="any" value="${comp['Power_RT(W)'] ?? ''}" data-cat="${c}" data-idx="${i}" data-field="Power_RT(W)"${pwLock} title="${refLocked ? '參照元件的瓦數已鎖定，請按「解除參照」後再修改' : ''}" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}</td>
+        <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}</td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-ts-cell">
