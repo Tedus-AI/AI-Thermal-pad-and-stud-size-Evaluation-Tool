@@ -571,6 +571,17 @@
     padding: 2px 4px;
     display: inline-block;
   }
+  /* Pad 自動帶入鎖定欄：白底黑字、無框、不可編輯 + ✂ 解鎖鈕 */
+  .comp-table .tim-locked-val {
+    display: inline-block; padding: 2px 4px; color: #111;
+    background: transparent; font-size: inherit; cursor: default;
+  }
+  .comp-table .tim-unlock-btn {
+    margin-left: 4px; padding: 0 5px; font-size: 0.72rem; line-height: 1.5;
+    border: 1px solid #d1d5db; border-radius: 4px; background: #fff;
+    color: #b45309; cursor: pointer; vertical-align: middle;
+  }
+  .comp-table .tim-unlock-btn:hover { background: #fef3c7; border-color: #f59e0b; }
   .comp-table td.readonly-cell {
     background: #fafbfc;
     color: #555;
@@ -5859,6 +5870,33 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const showTimSize  = (timType === 'Pad');
     const showBossCustom = (bossSizeType === '\u81ea\u8a02');
 
+    // \u2500\u2500 Pad \u81ea\u52d5\u5e36\u5165\u9396\u5b9a\u72c0\u614b\uff08padAuto \u65d7\u6a19\uff1a\u820a\u8cc7\u6599\u7121 \u2192 \u7dad\u6301\u53ef\u7de8\u8f2f\uff0c\u53ea\u6709\u91cd\u65b0\u9078 Pad \u624d\u5957\u65b0\u884c\u70ba\uff09\u2500\u2500
+    const isPad = (timType === 'Pad');
+    const padUnlock = spec.padUnlock || {};
+    const padAuto = isPad && spec.padAuto === true;
+    const _szm = String(heatSrcSize).match(/(\d+\.?\d*)[\u00d7x*](\d+\.?\d*)/i);
+    const _pw = parseFloat(comp['Power(W)']) || 0;
+    const canAutoSize = padAuto && !!_szm && parseFloat(_szm[1]) > 0 && parseFloat(_szm[2]) > 0 && _pw <= 5;
+    const lockThick   = padAuto && !padUnlock.timThickness;     // \u4e0d\u4f9d\u8cf4\u5c3a\u5bf8 \u2192 \u9078 Pad \u5373\u9396
+    const lockSurface = padAuto && !padUnlock.bossSurface;      // \u540c\u4e0a
+    const lockTimSize = canAutoSize && !padUnlock.timSize;      // \u9700\u53ef\u81ea\u52d5\u7b97\u624d\u9396
+    const lockBoss    = (bossSizeType === '\u81ea\u52d5\u5e36\u5165');           // \u51f8\u53f0\u300c\u81ea\u52d5\u5e36\u5165\u300d\u6a21\u5f0f
+    const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" onclick="sgPadUnlock('${escapeAttr(specKey)}','${f}')">\u2702</button>`;
+    const timThickInner = lockThick
+      ? `<span class="tim-locked-val">${escapeHtml(timThickness || '\u2014')}</span>${unlockBtn('timThickness')}`
+      : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="timThickness" onchange="onCellChange(this)"><option value="">\u2014</option>${TIM_THICKNESS_OPTIONS.map(o=>`<option value="${o}" ${timThickness===o?'selected':''}>${o}</option>`).join('')}</select>`;
+    const bossSurfaceInner = lockSurface
+      ? `<span class="tim-locked-val">${escapeHtml(bossSurface || '\u2014')}</span>${unlockBtn('bossSurface')}`
+      : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="bossSurface" onchange="onCellChange(this)"><option value="">\u2014</option>${BOSS_SURFACE_OPTIONS.map(o=>`<option value="${o}" ${bossSurface===o?'selected':''}>${o}</option>`).join('')}</select>`;
+    const timSizeInner = lockTimSize
+      ? `<span class="tim-locked-val">${escapeHtml(timSize || '\u2014')}</span>${unlockBtn('timSize')}`
+      : `<input class="cell-input tim-size-input" type="text" data-comp="${escapeAttr(specKey)}" data-field="timSize" value="${escapeAttr(timSize)}" placeholder="L\u00d7W" ${showTimSize ? '' : 'disabled style="background:#f0f0f0;color:#ccc;"'} onchange="onCellChange(this)">`;
+    const bossSizeOpts = ['\u81ea\u52d5\u5e36\u5165', '\u7121\u51f8\u53f0\uff0c\u523b\u82b1\u5b9a\u4f4d', '\u81ea\u8a02'];
+    const bossSizeValInner = lockBoss
+      ? `<span class="tim-locked-val">${escapeHtml(bossSize || '\u2014')}</span>`
+      : `<input class="cell-input" type="text" data-comp="${escapeAttr(specKey)}" data-field="bossSize" value="${escapeAttr(bossSize)}" placeholder="L\u00d7W" ${showBossCustom ? 'style="margin-top:2px;"' : 'disabled style="background:#f0f0f0;color:#ccc;margin-top:2px;"'} onchange="onCellChange(this)">`;
+    const bossSizeCell = `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="bossSizeType" onchange="onBossSizeChange(this)"><option value="">\u2014</option>${bossSizeOpts.map(o=>`<option value="${o}" ${bossSizeType===o?'selected':''}>${o}</option>`).join('')}</select>${bossSizeValInner}`;
+
     const isHidden = !!hiddenComponents[specKey];
 
     let rowHtml = `
@@ -5898,51 +5936,10 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 ).join('')}
               </select>
             </td>
-            <td class="editable-cell boss-size-col">
-              <select class="cell-select"
-                data-comp="${escapeAttr(specKey)}" data-field="bossSizeType"
-                onchange="onBossSizeChange(this)">
-                <option value="">\u2014</option>
-                ${BOSS_SIZE_OPTIONS.map(o =>
-                  `<option value="${o}" ${bossSizeType === o ? 'selected' : ''}>${o}</option>`
-                ).join('')}
-              </select>
-              <input class="cell-input" type="text"
-                data-comp="${escapeAttr(specKey)}" data-field="bossSize"
-                value="${escapeAttr(bossSize)}"
-                placeholder="L\u00d7W"
-                ${showBossCustom ? '' : 'disabled style="background:#f0f0f0;color:#ccc;margin-top:2px;"'}
-                ${showBossCustom ? 'style="margin-top:2px;"' : ''}
-                onchange="onCellChange(this)">
-            </td>
-            <td class="editable-cell boss-surface-col">
-              <select class="cell-select"
-                data-comp="${escapeAttr(specKey)}" data-field="bossSurface"
-                onchange="onCellChange(this)">
-                <option value="">\u2014</option>
-                ${BOSS_SURFACE_OPTIONS.map(o =>
-                  `<option value="${o}" ${bossSurface === o ? 'selected' : ''}>${o}</option>`
-                ).join('')}
-              </select>
-            </td>
-            <td class="editable-cell tim-thickness-col">
-              <select class="cell-select"
-                data-comp="${escapeAttr(specKey)}" data-field="timThickness"
-                onchange="onCellChange(this)">
-                <option value="">\u2014</option>
-                ${TIM_THICKNESS_OPTIONS.map(o =>
-                  `<option value="${o}" ${timThickness === o ? 'selected' : ''}>${o}</option>`
-                ).join('')}
-              </select>
-            </td>
-            <td class="editable-cell tim-size-col">
-              <input class="cell-input tim-size-input" type="text"
-                data-comp="${escapeAttr(specKey)}" data-field="timSize"
-                value="${escapeAttr(timSize)}"
-                placeholder="L\u00d7W"
-                ${showTimSize ? '' : 'disabled style="background:#f0f0f0;color:#ccc;"'}
-                onchange="onCellChange(this)">
-            </td>
+            <td class="editable-cell boss-size-col">${bossSizeCell}</td>
+            <td class="editable-cell boss-surface-col">${bossSurfaceInner}</td>
+            <td class="editable-cell tim-thickness-col">${timThickInner}</td>
+            <td class="editable-cell tim-size-col">${timSizeInner}</td>
             <td class="editable-cell heat-dir-col">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
@@ -5996,12 +5993,12 @@ function onCellChange(el) {
 
   el.classList.toggle('changed', !!value);
 
-  // 若修改的是元件大小，且該行 TIM Type 已是 Pad，重新套用自動計算
+  // 若修改的是元件大小，且該行為 Pad 自動模式 → 重算凸台/TIM Size 並重繪
   if (field === 'heatSourceSize') {
-    const row = el.closest('tr');
-    if (row) {
-      const timSel = row.querySelector('[data-field="timType"]');
-      if (timSel && timSel.value === 'Pad') applyPadAutoCalc(row, compKey);
+    const spec = thermalSpecs[compKey];
+    if (spec && spec.timType === 'Pad' && spec.padAuto) {
+      if (spec.bossSizeType !== '自訂') applyPadAutoCalcData(compKey);  // 自訂=使用者手動，不覆蓋
+      renderAllCategories();
     }
   }
 }
@@ -6049,11 +6046,13 @@ function onIcToHskCustomInput(el) {
 
 /* ---- TIM 種類變更 → 連動預設 TIM厚度 / IC距離HSK / TIM Size 啟用 ---- */
 /* ── 選 Pad 時自動套用凸台/TIM尺寸公式（P ≤ 5W 才自動計算） ── */
-function applyPadAutoCalc(row, compKey) {
-  // 解析元件大小 L×W
-  const heatInput = row.querySelector('[data-field="heatSourceSize"]');
-  if (!heatInput || !heatInput.value) return;
-  const m = heatInput.value.match(/(\d+\.?\d*)[×x*](\d+\.?\d*)/i);
+/* Pad 自動帶入(資料版)：把凸台大小/TIM Size 算好寫進 thermal_specs。
+   條件:元件大小可解析 + 功率 ≤5W。尊重鎖定:凸台已被切成「自訂」、或 timSize 已解鎖，皆不覆寫。
+   呼叫端負責 renderAllCategories() 重繪。 */
+function applyPadAutoCalcData(compKey) {
+  const spec = thermalSpecs[compKey];
+  if (!spec) return;
+  const m = String(spec.heatSourceSize || '').match(/(\d+\.?\d*)[×x*](\d+\.?\d*)/i);
   if (!m) return;
   const L = parseFloat(m[1]), W = parseFloat(m[2]);
   if (!L || !W) return;
@@ -6068,116 +6067,69 @@ function applyPadAutoCalc(row, compKey) {
       if (found) { P = parseFloat(found['Power(W)']) || 0; break; }
     }
   }
-  if (P > 5) return; // 高功率由使用者自行填寫
+  if (P > 5) return; // 高功率由使用者自行填寫(不自動算)
 
   const { bossSize, timSize } = calcBossResult(L, W);
+  const unlock = spec.padUnlock || {};
 
-  // 設定 bossSizeType → '自訂'，啟用 bossSize 輸入框
-  const bossSizeTypeEl = row.querySelector('[data-field="bossSizeType"]');
-  if (bossSizeTypeEl && bossSizeTypeEl.value !== '自訂') {
-    bossSizeTypeEl.value = '自訂';
-    onBossSizeChange(bossSizeTypeEl);
+  // 凸台大小：使用者未切成「自訂」時 → 設為「自動帶入」並填值
+  if (spec.bossSizeType !== '自訂') {
+    spec.bossSizeType = '自動帶入';
+    spec.bossSize = bossSize;
   }
-
-  // 填入 bossSize
-  const bossSizeEl = row.querySelector('[data-field="bossSize"]');
-  if (bossSizeEl) {
-    bossSizeEl.value = bossSize;
-    bossSizeEl.disabled = false;
-    if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
-    thermalSpecs[compKey].bossSize = bossSize;
-    bossSizeEl.classList.add('changed', 'auto-calc-hint');
-    bossSizeEl.addEventListener('input', () => bossSizeEl.classList.remove('auto-calc-hint'), { once: true });
-  }
-
-  // 填入 timSize（若非空白）
-  if (timSize) {
-    const timSizeEl = row.querySelector('[data-field="timSize"]');
-    if (timSizeEl && !timSizeEl.disabled) {
-      timSizeEl.value = timSize;
-      if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
-      thermalSpecs[compKey].timSize = timSize;
-      timSizeEl.classList.add('changed', 'auto-calc-hint');
-      timSizeEl.addEventListener('input', () => timSizeEl.classList.remove('auto-calc-hint'), { once: true });
-    }
-  }
+  // TIM Size：未解鎖才覆寫
+  if (timSize && !unlock.timSize) spec.timSize = timSize;
 }
 
 function onTimTypeChange(el) {
   const compKey = el.dataset.comp;
   const timType = el.value;
-  const row = el.closest('tr');
-
-  // 先儲存 TIM 種類
-  onCellChange(el);
+  if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
+  const spec = thermalSpecs[compKey];
+  spec.timType = timType;
+  spec.padUnlock = {};                 // 切換 TIM 種類 → 重置解鎖狀態
 
   const preset = TIM_PRESETS[timType];
+  if (preset) { spec.timThickness = preset.timThickness; spec.icToHSK = preset.icToHSK; }
 
-  // TIM 厚度預設
-  const thicknessSelect = row.querySelector('[data-field="timThickness"]');
-  if (preset && thicknessSelect) {
-    thicknessSelect.value = preset.timThickness;
-    onCellChange(thicknessSelect);
+  if (timType === 'Pad') {
+    spec.padAuto = true;               // 標記已套用新 Pad 行為(供鎖定判斷)
+    spec.bossSurface = '表面光滑';      // 不依賴尺寸 → 一律自動帶入
+    applyPadAutoCalcData(compKey);     // 凸台大小/TIM Size(需元件大小 + P≤5W)
+  } else {
+    spec.padAuto = false;
+    delete spec.timSize;
+    if (spec.bossSizeType === '自動帶入') spec.bossSizeType = '自訂';  // 解鎖凸台、保留值可編輯
   }
-
-  // IC 距離 HSK 預設
-  const hskSelect = row.querySelector('[data-field="icToHSK"]');
-  if (preset && hskSelect) {
-    hskSelect.value = preset.icToHSK;
-    onIcToHskChange(hskSelect);
-  }
-
-  // TIM Size 欄位：僅 Pad 時啟用
-  const timSizeInput = row.querySelector('[data-field="timSize"]');
-  if (timSizeInput) {
-    const isPad = (timType === 'Pad');
-    timSizeInput.disabled = !isPad;
-    timSizeInput.style.background = isPad ? '#fff' : '#f0f0f0';
-    timSizeInput.style.color = isPad ? '#333' : '#ccc';
-    if (!isPad) {
-      timSizeInput.value = '';
-      // 清除 thermal_specs 中的 timSize
-      if (thermalSpecs[compKey]) {
-        delete thermalSpecs[compKey].timSize;
-      }
-    }
-  }
-
-  // 自動套用凸台/TIM尺寸公式（P ≤ 5W）
-  if (timType === 'Pad') applyPadAutoCalc(row, compKey);
+  renderAllCategories();               // 重繪以切換鎖定/可編輯控制元件
 }
 
-/* ---- 凸台大小變更 → 連動自訂輸入框 ---- */
+/* ---- 凸台大小類型變更 ---- */
 function onBossSizeChange(el) {
   const compKey = el.dataset.comp;
   const bossSizeType = el.value;
-  const row = el.closest('tr');
+  if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
+  const spec = thermalSpecs[compKey];
+  spec.bossSizeType = bossSizeType;
 
-  // 儲存凸台大小類型
-  onCellChange(el);
-
-  // 自訂輸入框：僅「自訂」時啟用
-  const bossSizeInput = row.querySelector('[data-field="bossSize"]');
-  if (bossSizeInput) {
-    const isCustom = (bossSizeType === '自訂');
-    bossSizeInput.disabled = !isCustom;
-    bossSizeInput.style.background = isCustom ? '#fff' : '#f0f0f0';
-    bossSizeInput.style.color = isCustom ? '#333' : '#ccc';
-    if (isCustom) {
-      // 自動填入熱源大小的值
-      const heatSrcInput = row.querySelector('[data-field="heatSourceSize"]');
-      if (heatSrcInput && heatSrcInput.value && !bossSizeInput.value) {
-        bossSizeInput.value = heatSrcInput.value;
-        if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
-        thermalSpecs[compKey].bossSize = heatSrcInput.value;
-      }
-    } else {
-      bossSizeInput.value = '';
-      if (thermalSpecs[compKey]) {
-        delete thermalSpecs[compKey].bossSize;
-      }
-    }
+  if (bossSizeType === '自動帶入') {
+    // 使用者手動選「自動帶入」→ 觸發自動算(需 Pad + 元件大小 + P≤5W)
+    applyPadAutoCalcData(compKey);
+  } else if (bossSizeType === '自訂') {
+    // 自訂：保留現值;若空白則以元件大小帶入起始值
+    if (!spec.bossSize && spec.heatSourceSize) spec.bossSize = spec.heatSourceSize;
+  } else {
+    delete spec.bossSize;              // 無凸台/空 → 清值
   }
+  renderAllCategories();               // 重繪以切換鎖定純文字/可編輯輸入
+}
+
+/* ---- Pad 鎖定欄位的「✂ 解鎖」：標記該欄已解鎖 → 變回可編輯 ---- */
+function sgPadUnlock(compKey, field) {
+  if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
+  if (!thermalSpecs[compKey].padUnlock) thermalSpecs[compKey].padUnlock = {};
+  thermalSpecs[compKey].padUnlock[field] = true;
+  renderAllCategories();
 }
 
 /* 自訂元件功能（新增 / 刪除）已停用並移除。
@@ -6218,7 +6170,7 @@ function collectExportDataByCategory() {
       let bossSizeDisplay = '-';
       if (bossSizeType === '無凸台，刻花定位') {
         bossSizeDisplay = '無凸台，刻花定位';
-      } else if (bossSizeType === '自訂' && spec.bossSize) {
+      } else if ((bossSizeType === '自訂' || bossSizeType === '自動帶入') && spec.bossSize) {
         bossSizeDisplay = spec.bossSize;
       }
       catRows.push({
