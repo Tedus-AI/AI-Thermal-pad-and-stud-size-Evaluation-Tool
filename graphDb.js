@@ -183,12 +183,22 @@ const graphDb = {
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/items/${driveItemId}/content`
     );
     const text = await resp.text();
+    let parsed;
     try {
-      dbCache = JSON.parse(text);
+      parsed = JSON.parse(text);
     } catch {
-      dbCache = { rf_library: {}, digital_library: {}, pwr_library: {}, projects: {} };
+      parsed = { rf_library: {}, digital_library: {}, pwr_library: {}, projects: {} };
     }
-    if (!dbCache.version) dbCache.version = Date.now();
+    if (!parsed.version) parsed.version = Date.now();
+    // 防版本回退：SharePoint 在「剛寫入後立即重讀」偶爾會回傳寫入前的舊內容
+    // (服務端 read-after-write 延遲)。若伺服器版本比我們手上的還舊，保留記憶體
+    // 較新的 dbCache，避免剛存好的變更在重載時看起來「消失」。
+    if (currentVersion && parsed.version < currentVersion &&
+        dbCache && Object.keys(dbCache).length) {
+      console.warn(`[graphDb] 忽略較舊的讀取結果 (server v${parsed.version} < local v${currentVersion})，保留本地較新版本`);
+      return;
+    }
+    dbCache = parsed;
     currentVersion = dbCache.version;
   },
 
@@ -205,7 +215,9 @@ const graphDb = {
       let latest;
       try { latest = JSON.parse(chkText); } catch { latest = {}; }
       const diskVersion = latest.version ?? 0;
-      if (diskVersion !== currentVersion) {
+      // 只有「伺服器版本比我們更新」才算真衝突(別人寫了新資料)。若伺服器版本
+      // 較舊(SharePoint 寫後立即讀的延遲)不該誤判為衝突，否則會把記憶體改動丟掉。
+      if (diskVersion > currentVersion) {
         dbCache = latest;
         currentVersion = diskVersion;
         throw new ConflictError('版本衝突：資料已被他人更新');
