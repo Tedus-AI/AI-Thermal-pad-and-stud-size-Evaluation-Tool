@@ -5325,8 +5325,8 @@ const TIM_PRESETS = {
 // TIM 厚度一律取 TIM_PRESETS[timType].timThickness 並鎖定。
 const TIM_AUTO = {
   Pad:    { surface: '表面光滑', boss: 'calc'   },
-  Putty:  { surface: '表面刻花', boss: 'elem'   },
-  Grease: { surface: '表面光滑', boss: 'custom' },
+  Putty:  { surface: '表面刻花', boss: 'elem',   timSizeEqualsBoss: true, lockIc: true },
+  Grease: { surface: '表面光滑', boss: 'custom', timSizeEqualsBoss: true, lockIc: true },
 };
 
 async function initDatabase() {
@@ -5878,19 +5878,22 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const icHskIsCustom = icToHSK && !icHskPresets.includes(icToHSK);
     const icHskSelVal = icHskIsCustom ? '\u81ea\u8a02' : icToHSK;
     const note         = spec.note           || '';
-    const showTimSize  = (timType === 'Pad');
+    const showTimSize  = !!TIM_AUTO[timType];   // Pad/Putty/Grease 皆有 TIM Size 欄
     const showBossCustom = (bossSizeType === '\u81ea\u8a02');
 
     // \u2500\u2500 Pad \u81ea\u52d5\u5e36\u5165\u9396\u5b9a\u72c0\u614b\uff08padAuto \u65d7\u6a19\uff1a\u820a\u8cc7\u6599\u7121 \u2192 \u7dad\u6301\u53ef\u7de8\u8f2f\uff0c\u53ea\u6709\u91cd\u65b0\u9078 Pad \u624d\u5957\u65b0\u884c\u70ba\uff09\u2500\u2500
     const isPad = (timType === 'Pad');
     const padUnlock = spec.padUnlock || {};
+    const timAutoCfg = TIM_AUTO[timType] || {};
     const autoApplied = !!TIM_AUTO[timType] && spec.padAuto === true;   // \u65b0\u9396\u5b9a\u884c\u70ba\u5df2\u5957\u7528(Pad/Putty/Grease)
     const _szm = String(heatSrcSize).match(/(\d+\.?\d*)[\u00d7x*](\d+\.?\d*)/i);
     const _pw = parseFloat(comp['Power(W)']) || 0;
     const canAutoSize = isPad && autoApplied && !!_szm && parseFloat(_szm[1]) > 0 && parseFloat(_szm[2]) > 0 && _pw <= 5;
+    const eqBossTimSize = autoApplied && !!timAutoCfg.timSizeEqualsBoss;  // Putty/Grease\uff1aTIM Size = \u51f8\u53f0\u5927\u5c0f
     const lockThick   = autoApplied && !padUnlock.timThickness;  // \u4e09\u7a2e TIM \u7686\u9396 TIM \u539a\u5ea6
     const lockSurface = autoApplied && !padUnlock.bossSurface;   // \u4e09\u7a2e TIM \u7686\u9396\u51f8\u53f0\u8868\u9762\u8655\u7406
-    const lockTimSize = canAutoSize && !padUnlock.timSize;       // \u50c5 Pad \u6709 TIM Size \u81ea\u52d5
+    const lockTimSize = (canAutoSize || eqBossTimSize) && !padUnlock.timSize;  // Pad \u516c\u5f0f / Putty,Grease \u540c\u51f8\u53f0
+    const lockIc      = autoApplied && !!timAutoCfg.lockIc && !padUnlock.icToHSK;  // Putty,Grease \u9396 IC \u8ddd\u96e2 HSK
     const lockBoss    = (bossSizeType === '\u81ea\u52d5\u5e36\u5165');            // \u51f8\u53f0\u300c\u81ea\u52d5\u5e36\u5165\u300d\u6a21\u5f0f(Pad/Putty)
     const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" onclick="sgPadUnlock('${escapeAttr(specKey)}','${f}')">\u2702</button>`;
     const timThickInner = lockThick
@@ -5907,6 +5910,9 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
       ? `<span class="tim-locked-val">${escapeHtml(bossSize || '\u2014')}</span>`
       : `<input class="cell-input" type="text" data-comp="${escapeAttr(specKey)}" data-field="bossSize" value="${escapeAttr(bossSize)}" placeholder="L\u00d7W" ${showBossCustom ? 'style="margin-top:2px;"' : 'disabled style="background:#f0f0f0;color:#ccc;margin-top:2px;"'} onchange="onCellChange(this)">`;
     const bossSizeCell = `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="bossSizeType" onchange="onBossSizeChange(this)"><option value="">\u2014</option>${bossSizeOpts.map(o=>`<option value="${o}" ${bossSizeType===o?'selected':''}>${o}</option>`).join('')}</select>${bossSizeValInner}`;
+    const icCellInner = lockIc
+      ? `<span class="tim-locked-val">${escapeHtml(icToHSK || '\u2014')}</span>${unlockBtn('icToHSK')}`
+      : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="icToHSK" onchange="onIcToHskChange(this)"><option value="">\u2014</option>${IC_TO_HSK_OPTIONS.map(o=>`<option value="${o}" ${icHskSelVal===o?'selected':''}>${o}</option>`).join('')}</select><input class="cell-input" type="text" style="width:60px;margin-top:2px;display:${icHskIsCustom ? '' : 'none'};" data-comp="${escapeAttr(specKey)}" data-field="icToHSK_custom" value="${escapeAttr(icHskIsCustom ? icToHSK : '')}" placeholder="\u8f38\u5165\u503c" onchange="onIcToHskCustomInput(this)">`;
 
     const isHidden = !!hiddenComponents[specKey];
 
@@ -5961,20 +5967,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 ).join('')}
               </select>
             </td>
-            <td class="editable-cell ic-hsk-col">
-              <select class="cell-select"
-                data-comp="${escapeAttr(specKey)}" data-field="icToHSK"
-                onchange="onIcToHskChange(this)">
-                <option value="">\u2014</option>
-                ${IC_TO_HSK_OPTIONS.map(o =>
-                  `<option value="${o}" ${icHskSelVal === o ? 'selected' : ''}>${o}</option>`
-                ).join('')}
-              </select>
-              <input class="cell-input" type="text" style="width:60px;margin-top:2px;display:${icHskIsCustom ? '' : 'none'};"
-                data-comp="${escapeAttr(specKey)}" data-field="icToHSK_custom"
-                value="${escapeAttr(icHskIsCustom ? icToHSK : '')}"
-                placeholder="\u8f38\u5165\u503c" onchange="onIcToHskCustomInput(this)">
-            </td>
+            <td class="editable-cell ic-hsk-col">${icCellInner}</td>
             <td class="editable-cell note-col">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="note"
@@ -6013,8 +6006,19 @@ function onCellChange(el) {
         renderAllCategories();
       } else if (spec.timType === 'Putty' && spec.bossSizeType === '自動帶入') {
         spec.bossSize = spec.heatSourceSize || '';     // Putty:凸台同步元件大小
+        syncTimSizeToBoss(compKey);                    // TIM Size 跟隨凸台
         renderAllCategories();
       }
+    }
+  }
+
+  // 手改凸台大小(如 Grease 自訂)→ TIM Size 跟隨凸台
+  if (field === 'bossSize') {
+    const spec = thermalSpecs[compKey];
+    if (spec && spec.padAuto && TIM_AUTO[spec.timType] && TIM_AUTO[spec.timType].timSizeEqualsBoss
+        && !(spec.padUnlock || {}).timSize) {
+      syncTimSizeToBoss(compKey);
+      renderAllCategories();
     }
   }
 }
@@ -6097,6 +6101,16 @@ function applyPadAutoCalcData(compKey) {
   if (timSize && !unlock.timSize) spec.timSize = timSize;
 }
 
+/* Putty/Grease：TIM Size 跟隨凸台大小(未解鎖才同步) */
+function syncTimSizeToBoss(compKey) {
+  const spec = thermalSpecs[compKey];
+  if (!spec) return;
+  const cfg = TIM_AUTO[spec.timType];
+  if (cfg && cfg.timSizeEqualsBoss && !(spec.padUnlock || {}).timSize) {
+    spec.timSize = spec.bossSize || '';
+  }
+}
+
 function onTimTypeChange(el) {
   const compKey = el.dataset.comp;
   const timType = el.value;
@@ -6115,13 +6129,12 @@ function onTimTypeChange(el) {
     if (cfg.boss === 'calc') {            // Pad:公式(需元件大小 + P≤5W)
       applyPadAutoCalcData(compKey);
     } else if (cfg.boss === 'elem') {     // Putty:凸台 = 元件大小，自動帶入鎖定
-      delete spec.timSize;
       spec.bossSizeType = '自動帶入';
       spec.bossSize = spec.heatSourceSize || '';
     } else {                              // 'custom' → Grease:預設放自訂(可編輯)
-      delete spec.timSize;
       if (spec.bossSizeType === '自動帶入' || !spec.bossSizeType) spec.bossSizeType = '自訂';
     }
+    syncTimSizeToBoss(compKey);           // Putty/Grease:TIM Size = 凸台大小
   } else {                                // None / 空
     spec.padAuto = false;
     delete spec.timSize;
@@ -6148,6 +6161,7 @@ function onBossSizeChange(el) {
   } else {
     delete spec.bossSize;              // 無凸台/空 → 清值
   }
+  syncTimSizeToBoss(compKey);          // Putty/Grease:TIM Size 跟隨凸台大小
   renderAllCategories();               // 重繪以切換鎖定純文字/可編輯輸入
 }
 
