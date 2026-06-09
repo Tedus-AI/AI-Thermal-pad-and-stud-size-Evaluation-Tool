@@ -5318,6 +5318,17 @@ const TIM_PRESETS = {
   Pad:    { timThickness: '2.5',        icToHSK: '1.7' }
 };
 
+// 各 TIM 種類「自動帶入並鎖定」設定：凸台表面處理 + 凸台大小模式。
+//   boss: 'calc'   → 公式計算(需元件大小 + P≤5W)，進「自動帶入」鎖定
+//         'elem'   → = 元件大小，進「自動帶入」鎖定
+//         'custom' → 預設放「自訂」(可編輯、不鎖)
+// TIM 厚度一律取 TIM_PRESETS[timType].timThickness 並鎖定。
+const TIM_AUTO = {
+  Pad:    { surface: '表面光滑', boss: 'calc'   },
+  Putty:  { surface: '表面刻花', boss: 'elem'   },
+  Grease: { surface: '表面光滑', boss: 'custom' },
+};
+
 async function initDatabase() {
   // SharePoint 模式：切換 header 按鈕顯示
   if (DB_MODE === 'sharepoint') {
@@ -5873,14 +5884,14 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     // \u2500\u2500 Pad \u81ea\u52d5\u5e36\u5165\u9396\u5b9a\u72c0\u614b\uff08padAuto \u65d7\u6a19\uff1a\u820a\u8cc7\u6599\u7121 \u2192 \u7dad\u6301\u53ef\u7de8\u8f2f\uff0c\u53ea\u6709\u91cd\u65b0\u9078 Pad \u624d\u5957\u65b0\u884c\u70ba\uff09\u2500\u2500
     const isPad = (timType === 'Pad');
     const padUnlock = spec.padUnlock || {};
-    const padAuto = isPad && spec.padAuto === true;
+    const autoApplied = !!TIM_AUTO[timType] && spec.padAuto === true;   // \u65b0\u9396\u5b9a\u884c\u70ba\u5df2\u5957\u7528(Pad/Putty/Grease)
     const _szm = String(heatSrcSize).match(/(\d+\.?\d*)[\u00d7x*](\d+\.?\d*)/i);
     const _pw = parseFloat(comp['Power(W)']) || 0;
-    const canAutoSize = padAuto && !!_szm && parseFloat(_szm[1]) > 0 && parseFloat(_szm[2]) > 0 && _pw <= 5;
-    const lockThick   = padAuto && !padUnlock.timThickness;     // \u4e0d\u4f9d\u8cf4\u5c3a\u5bf8 \u2192 \u9078 Pad \u5373\u9396
-    const lockSurface = padAuto && !padUnlock.bossSurface;      // \u540c\u4e0a
-    const lockTimSize = canAutoSize && !padUnlock.timSize;      // \u9700\u53ef\u81ea\u52d5\u7b97\u624d\u9396
-    const lockBoss    = (bossSizeType === '\u81ea\u52d5\u5e36\u5165');           // \u51f8\u53f0\u300c\u81ea\u52d5\u5e36\u5165\u300d\u6a21\u5f0f
+    const canAutoSize = isPad && autoApplied && !!_szm && parseFloat(_szm[1]) > 0 && parseFloat(_szm[2]) > 0 && _pw <= 5;
+    const lockThick   = autoApplied && !padUnlock.timThickness;  // \u4e09\u7a2e TIM \u7686\u9396 TIM \u539a\u5ea6
+    const lockSurface = autoApplied && !padUnlock.bossSurface;   // \u4e09\u7a2e TIM \u7686\u9396\u51f8\u53f0\u8868\u9762\u8655\u7406
+    const lockTimSize = canAutoSize && !padUnlock.timSize;       // \u50c5 Pad \u6709 TIM Size \u81ea\u52d5
+    const lockBoss    = (bossSizeType === '\u81ea\u52d5\u5e36\u5165');            // \u51f8\u53f0\u300c\u81ea\u52d5\u5e36\u5165\u300d\u6a21\u5f0f(Pad/Putty)
     const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" onclick="sgPadUnlock('${escapeAttr(specKey)}','${f}')">\u2702</button>`;
     const timThickInner = lockThick
       ? `<span class="tim-locked-val">${escapeHtml(timThickness || '\u2014')}</span>${unlockBtn('timThickness')}`
@@ -5993,12 +6004,17 @@ function onCellChange(el) {
 
   el.classList.toggle('changed', !!value);
 
-  // 若修改的是元件大小，且該行為 Pad 自動模式 → 重算凸台/TIM Size 並重繪
+  // 若修改的是元件大小，且該行為自動模式 → 重算凸台/TIM Size 並重繪
   if (field === 'heatSourceSize') {
     const spec = thermalSpecs[compKey];
-    if (spec && spec.timType === 'Pad' && spec.padAuto) {
-      if (spec.bossSizeType !== '自訂') applyPadAutoCalcData(compKey);  // 自訂=使用者手動，不覆蓋
-      renderAllCategories();
+    if (spec && spec.padAuto) {
+      if (spec.timType === 'Pad') {
+        applyPadAutoCalcData(compKey);                 // 內部尊重「自訂」/解鎖不覆蓋
+        renderAllCategories();
+      } else if (spec.timType === 'Putty' && spec.bossSizeType === '自動帶入') {
+        spec.bossSize = spec.heatSourceSize || '';     // Putty:凸台同步元件大小
+        renderAllCategories();
+      }
     }
   }
 }
@@ -6092,11 +6108,21 @@ function onTimTypeChange(el) {
   const preset = TIM_PRESETS[timType];
   if (preset) { spec.timThickness = preset.timThickness; spec.icToHSK = preset.icToHSK; }
 
-  if (timType === 'Pad') {
-    spec.padAuto = true;               // 標記已套用新 Pad 行為(供鎖定判斷)
-    spec.bossSurface = '表面光滑';      // 不依賴尺寸 → 一律自動帶入
-    applyPadAutoCalcData(compKey);     // 凸台大小/TIM Size(需元件大小 + P≤5W)
-  } else {
+  const cfg = TIM_AUTO[timType];
+  if (cfg) {
+    spec.padAuto = true;                  // 標記已套用新自動帶入行為(供鎖定判斷)
+    spec.bossSurface = cfg.surface;       // 凸台表面處理:一律自動帶入並鎖定
+    if (cfg.boss === 'calc') {            // Pad:公式(需元件大小 + P≤5W)
+      applyPadAutoCalcData(compKey);
+    } else if (cfg.boss === 'elem') {     // Putty:凸台 = 元件大小，自動帶入鎖定
+      delete spec.timSize;
+      spec.bossSizeType = '自動帶入';
+      spec.bossSize = spec.heatSourceSize || '';
+    } else {                              // 'custom' → Grease:預設放自訂(可編輯)
+      delete spec.timSize;
+      if (spec.bossSizeType === '自動帶入' || !spec.bossSizeType) spec.bossSizeType = '自訂';
+    }
+  } else {                                // None / 空
     spec.padAuto = false;
     delete spec.timSize;
     if (spec.bossSizeType === '自動帶入') spec.bossSizeType = '自訂';  // 解鎖凸台、保留值可編輯
@@ -6113,8 +6139,9 @@ function onBossSizeChange(el) {
   spec.bossSizeType = bossSizeType;
 
   if (bossSizeType === '自動帶入') {
-    // 使用者手動選「自動帶入」→ 觸發自動算(需 Pad + 元件大小 + P≤5W)
-    applyPadAutoCalcData(compKey);
+    // 使用者手動選「自動帶入」：Putty = 元件大小;其餘(Pad)走公式計算
+    if (spec.timType === 'Putty') spec.bossSize = spec.heatSourceSize || '';
+    else applyPadAutoCalcData(compKey);
   } else if (bossSizeType === '自訂') {
     // 自訂：保留現值;若空白則以元件大小帶入起始值
     if (!spec.bossSize && spec.heatSourceSize) spec.bossSize = spec.heatSourceSize;
