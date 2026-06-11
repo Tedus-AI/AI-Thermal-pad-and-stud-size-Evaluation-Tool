@@ -212,6 +212,12 @@ const dbAdapter = {
     return this._backend().isReady();
   },
 
+  /* 壞檔唯讀保護模式中？（資料庫檔案解析失敗時為 true，所有寫入會被擋下） */
+  isCorrupted() {
+    const b = this._backend();
+    return typeof b.isCorrupted === 'function' ? b.isCorrupted() : false;
+  },
+
   getDbInfo() {
     if (DB_MODE === 'sharepoint') {
       const acct = graphDb.getAccountInfo();
