@@ -20,6 +20,8 @@ let driveItemId = null;
 let _siteId = null;
 let currentLock = null;
 let currentVersion = null;
+let dbCorrupted = false;     // 壞檔唯讀保護：JSON 解析失敗時禁止一切寫入
+let maxProjectsSeen = 0;     // 本 session 看過的 projects 筆數高水位（歸零保險絲用）
 
 const graphDb = {
   /* ─── MSAL Initialization ─────────────────────────────── */
@@ -88,6 +90,7 @@ const graphDb = {
     driveItemId = null;
     _siteId = null;
     currentLock = null;
+    dbCorrupted = false;
   },
 
   isSignedIn() {
@@ -184,10 +187,21 @@ const graphDb = {
     );
     const text = await resp.text();
     let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
+    if (text.trim() === '') {
+      // 全新空檔（首次建庫）才允許 bootstrap 空骨架
       parsed = { rf_library: {}, digital_library: {}, pwr_library: {}, projects: {} };
+      dbCorrupted = false;
+    } else {
+      try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        dbCorrupted = false;
+      } else {
+        // 壞檔（非法 JSON / 非物件）→ 保留舊快取、進入唯讀保護。
+        // 絕不可 fallback 成空骨架，否則下一次寫入會把整份共用 DB 抹掉。
+        dbCorrupted = true;
+        console.error('[graphDb] thermal_db.json 解析失敗 → 唯讀保護模式（保留先前快取，禁止寫入）');
+        return;
+      }
     }
     if (!parsed.version) parsed.version = Date.now();
     // 防版本回退：SharePoint 在「剛寫入後立即重讀」偶爾會回傳寫入前的舊內容
@@ -200,20 +214,43 @@ const graphDb = {
     }
     dbCache = parsed;
     currentVersion = dbCache.version;
+    const n = Object.keys((dbCache && dbCache.projects) || {}).length;
+    if (n > maxProjectsSeen) maxProjectsSeen = n;
   },
 
-  async _writeFile(skipVersionCheck) {
+  /* 寫入前安全檢查：壞檔唯讀 + projects 突然歸零保險絲 */
+  _assertWritable(allowEmptyProjects) {
+    if (dbCorrupted) {
+      throw new Error('資料庫檔案損毀（JSON 解析失敗），已進入唯讀保護模式，本次寫入已擋下以免覆蓋共用資料庫。請至 SharePoint 檢查 thermal_db.json（文件庫「版本歷史」可還原），修復後重新整理頁面。');
+    }
+    if (!allowEmptyProjects) {
+      const n = Object.keys((dbCache && dbCache.projects) || {}).length;
+      if (n === 0 && maxProjectsSeen > 0) {
+        throw new Error('安全保護：projects 集合由 ' + maxProjectsSeen + ' 筆突然變成 0 筆，寫入已擋下以免抹除共用資料庫。請先至 SharePoint 檢查 thermal_db.json（可用版本歷史還原）；若確認為正常狀態，重新整理頁面即可解除。');
+      }
+    }
+  },
+
+  async _writeFile(opts) {
+    this._assertWritable(!!(opts && opts.allowEmptyProjects));
     await this._resolveDriveItemId();
 
-    if (!skipVersionCheck) {
+    if (!(opts && opts.skipVersionCheck)) {
       // Re-fetch latest file and compare version (optimistic locking)
       const chkResp = await this._graphGet(
         `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/items/${driveItemId}/content`,
         false
       );
       const chkText = await chkResp.text();
-      let latest;
-      try { latest = JSON.parse(chkText); } catch { latest = {}; }
+      let latest = {};
+      if (chkText.trim() !== '') {
+        try { latest = JSON.parse(chkText); } catch (e) { latest = null; }
+        if (!latest || typeof latest !== 'object' || Array.isArray(latest)) {
+          // 寫入前發現檔案已損毀 → 進入唯讀保護（保留快取），本次寫入擋下
+          dbCorrupted = true;
+          throw new Error('資料庫檔案損毀（JSON 解析失敗），已進入唯讀保護模式，本次寫入已擋下以免覆蓋共用資料庫。請至 SharePoint 檢查 thermal_db.json（文件庫「版本歷史」可還原），修復後重新整理頁面。');
+        }
+      }
       const diskVersion = latest.version ?? 0;
       // 只有「伺服器版本比我們更新」才算真衝突(別人寫了新資料)。若伺服器版本
       // 較舊(SharePoint 寫後立即讀的延遲)不該誤判為衝突，否則會把記憶體改動丟掉。
@@ -262,7 +299,7 @@ const graphDb = {
       lockedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString()
     };
-    await this._writeFile(true);
+    await this._writeFile({ skipVersionCheck: true });
     currentLock = dbCache.lock;
     return currentLock;
   },
@@ -278,7 +315,7 @@ const graphDb = {
       // that still contains the lock, causing it to persist.
       if (dbCache.lock && dbCache.lock.lockedByEmail === msalAccount.username) {
         delete dbCache.lock;
-        await this._writeFile(true);
+        await this._writeFile({ skipVersionCheck: true });
       }
     } catch (e) {
       console.warn('[graphDb] releaseLock failed:', e);
@@ -318,6 +355,11 @@ const graphDb = {
     return msalAccount !== null && Object.keys(dbCache).length > 0;
   },
 
+  /* 壞檔唯讀保護模式中？（UI 健康橫幅用） */
+  isCorrupted() {
+    return dbCorrupted;
+  },
+
   getFilename() {
     return 'thermal_db.json (SharePoint)';
   },
@@ -337,7 +379,8 @@ const graphDb = {
   },
 
   async updateDoc(colName, docId, fields) {
-    const existing = dbCache[colName]?.[docId] ?? {};
+    if (!dbCache[colName]) dbCache[colName] = {};
+    const existing = dbCache[colName][docId] ?? {};
     dbCache[colName][docId] = { ...existing, ...fields };
     await this._writeFile();
   },
@@ -366,7 +409,11 @@ const graphDb = {
   async deleteDoc(colName, docId) {
     if (dbCache[colName]) {
       delete dbCache[colName][docId];
-      await this._writeFile();
+      // 使用者刻意刪除專案（含最後一筆）是合法操作 → 放行並同步保險絲基準
+      await this._writeFile({ allowEmptyProjects: colName === 'projects' });
+      if (colName === 'projects') {
+        maxProjectsSeen = Object.keys(dbCache.projects || {}).length;
+      }
     }
   },
 

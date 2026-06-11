@@ -39,6 +39,14 @@
 3. **新加欄位前先想：這個欄位該掛在 `projects[id]` 底下，還是另開一個頂層 collection？**
    頂層 collection（像 `feedback_items`）天然就跟其他工具的寫入隔離；放進 `projects[id]` 就要遵守上面兩條。
 4. **跨工具共用 schema 變更時，兩個 repo 的 CLAUDE.md 都要同步更新本段表格。**
+5. **壞檔唯讀保護（兩個 repo 的 DB backend 都必須具備）**：`_readFile` 解析失敗時
+   **絕不可** fallback 成空骨架（否則下一次寫入會把整份共用 DB 抹掉），必須保留舊快取、
+   設 `dbCorrupted = true` 進入唯讀；`_writeFile` 開頭一律過 `_assertWritable`：
+   (a) `dbCorrupted` → 拒寫；(b) `projects` 筆數從本 session 高水位（非零）突然歸零
+   且非刻意刪除（`deleteDoc('projects', …)` 例外放行並下修基準）→ 拒寫。
+   只有「內容為空字串的全新檔案」才允許 bootstrap 空骨架。
+   參考實作：本 repo 的 `fileDb.js` / `graphDb.js`（`_assertWritable`、`maxProjectsSeen`），
+   對應 5G-RRU PR #64。
 
 ### 反例（造成 Bug 的寫法）
 

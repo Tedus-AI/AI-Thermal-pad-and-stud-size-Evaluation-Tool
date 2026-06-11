@@ -310,6 +310,23 @@
     white-space: nowrap;
   }
   #lock-status-bar .lock-status-teams:hover { background: #4f5197; }
+
+  /* ── 資料庫健康橫幅（檔案損毀進入唯讀保護時置頂顯示）── */
+  #db-corrupt-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #fef2f2;
+    border: 1px solid #ef4444;
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 16px;
+    font-size: 0.88rem;
+    color: #7f1d1d;
+  }
+  #db-corrupt-bar strong { color: #b91c1c; }
+  #db-corrupt-bar .lock-status-meta { color: #b91c1c; font-size: 0.82rem; }
   .protect-lock-btn {
     background: #e0e0e0;
     color: #555;
@@ -4295,6 +4312,15 @@
       <div class="lock-status-meta">鎖定於 <span id="lock-status-time"></span>，預計 <span id="lock-status-expires"></span> 自動解鎖</div>
     </div>
     <a id="lock-status-teams-btn" class="lock-status-teams" href="#" target="_blank" rel="noopener">📩 傳送 Teams 訊息</a>
+  </div>
+
+  <!-- 資料庫健康橫幅：thermal_db.json 解析失敗時置頂警告（唯讀保護，所有寫入被擋下） -->
+  <div id="db-corrupt-bar">
+    <span class="lock-status-icon">🛑</span>
+    <div>
+      <strong>資料庫檔案損毀，已進入唯讀保護模式</strong>
+      <div class="lock-status-meta">thermal_db.json 無法解析，所有寫入已被擋下以免覆蓋共用資料。請檢查／還原資料庫檔案（SharePoint 模式可用文件庫「版本歷史」還原），修復後重新整理本頁。</div>
+    </div>
   </div>
 
   <!-- Tab Navigation -->
@@ -8775,7 +8801,17 @@ function closeLockWarning() {
   if (modal) modal.style.display = 'none';
 }
 
+// 資料庫健康橫幅：壞檔唯讀保護時置頂警告（updateLockStatusBar 的所有呼叫點會一併刷新）
+function updateDbHealthBanner() {
+  const bar = document.getElementById('db-corrupt-bar');
+  if (!bar) return;
+  const corrupt = !!(dbAdapter.isCorrupted && dbAdapter.isCorrupted());
+  bar.style.display = corrupt ? 'flex' : 'none';
+  if (corrupt) updateDbStatusText('🛑 資料庫檔案損毀（唯讀保護中）', 'err');
+}
+
 function updateLockStatusBar() {
+  updateDbHealthBanner();
   const bar = document.getElementById('lock-status-bar');
   if (!bar) return;
   const lock = dbAdapter.getLockInfo ? dbAdapter.getLockInfo() : null;
@@ -8811,6 +8847,7 @@ async function handlePickDb() {
     await loadProjects();
     await sgLoadProjects();
     await vdLoadProjects();
+    updateDbHealthBanner();
   }
 }
 
@@ -8824,6 +8861,7 @@ async function handleLoadOfflineDb() {
     await loadProjects();
     if (typeof sgLoadProjects === 'function') await sgLoadProjects();
     if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+    updateDbHealthBanner();
   } catch (e) {
     console.error('[handleLoadOfflineDb]', e);
     alert('載入離線資料庫失敗：' + (e.message || e));
