@@ -5921,7 +5921,8 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const lockTimSize = (canAutoSize || eqBossTimSize) && !padUnlock.timSize;  // Pad \u516c\u5f0f / Putty,Grease \u540c\u51f8\u53f0
     const lockIc      = autoApplied && !!timAutoCfg.lockIc && !padUnlock.icToHSK;  // Putty,Grease \u9396 IC \u8ddd\u96e2 HSK
     const lockBoss    = (bossSizeType === '\u81ea\u52d5\u5e36\u5165');            // \u51f8\u53f0\u300c\u81ea\u52d5\u5e36\u5165\u300d\u6a21\u5f0f(Pad/Putty)
-    const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" onclick="sgPadUnlock('${escapeAttr(specKey)}','${f}')">\u2702</button>`;
+    // \u540d\u7a31/key \u4e00\u5f8b\u4e0d\u62fc\u9032 onclick \u5c6c\u6027\uff08\u9632 XSS \u8207\u5f15\u865f\u7834\u58de\uff09\uff1a\u7528 data-* + \u4e8b\u4ef6\u59d4\u6d3e
+    const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" data-comp="${escapeAttr(specKey)}" data-unlock-field="${f}">\u2702</button>`;
     const timThickInner = lockThick
       ? `<span class="tim-locked-val">${escapeHtml(timThickness || '\u2014')}</span>${unlockBtn('timThickness')}`
       : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="timThickness" onchange="onCellChange(this)"><option value="">\u2014</option>${TIM_THICKNESS_OPTIONS.map(o=>`<option value="${o}" ${timThickness===o?'selected':''}>${o}</option>`).join('')}</select>`;
@@ -5955,8 +5956,8 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
             <td class="name-cell readonly-cell">
               <span class="name-text">${escapeHtml(compName)}</span>
             </td>
-            <td class="readonly-cell">${qty}</td>
-            <td class="readonly-cell power-col">${power}</td>
+            <td class="readonly-cell">${escapeHtml(qty)}</td>
+            <td class="readonly-cell power-col">${escapeHtml(power)}</td>
             <td class="editable-cell heat-source-col">
               <input class="cell-input" type="text"
                 data-comp="${escapeAttr(specKey)}" data-field="heatSourceSize"
@@ -6198,6 +6199,12 @@ function sgPadUnlock(compKey, field) {
   thermalSpecs[compKey].padUnlock[field] = true;
   renderAllCategories();
 }
+
+// 解鎖按鈕用事件委派（容器固定、innerHTML 重繪不掉監聽；元件名不進 onclick 屬性）
+document.getElementById('comp-container')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tim-unlock-btn');
+  if (btn) sgPadUnlock(btn.dataset.comp, btn.dataset.unlockField);
+});
 
 /* 自訂元件功能（新增 / 刪除）已停用並移除。
    TH/ME 清單一律完全鏡像 Tab1 建立的元件，名稱唯讀、不可自行新增。 */
@@ -6489,8 +6496,8 @@ function buildPdfHtml(categories) {
             <tr>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${r.index}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:left;font-weight:600;color:#1a3a6b;background:#fafbfc;">${escapeHtml(r.component)}</td>
-              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${r.qty}</td>
-              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${r.power}</td>
+              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${escapeHtml(r.qty)}</td>
+              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${escapeHtml(r.power)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatSourceSize)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatSourceHeight)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.bossSize)}</td>
@@ -6756,7 +6763,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${tempLabel}°C(W)</th><th>Pd@25°C(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th>Temp Sensor</th><th>備註</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th>Temp Sensor</th><th>備註</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -6773,23 +6780,23 @@ function sgRenderProjectComponents() {
         : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}</div>` : '');
       const pwCell = (fieldName, val) => refLocked
         ? `<span class="sg-locked-val" title="瓦數已鎖定，請先按「解除參照」">${escapeHtml(String(val ?? ''))}</span>`
-        : `<input class="sg-cell-input" type="number" step="any" value="${val ?? ''}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
+        : `<input class="sg-cell-input" type="number" step="any" value="${escapeAttr(val ?? '')}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${comp.Qty ?? 1}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}</td>
         <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}</td>
-        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
-        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : ''}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
+        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
+        <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-ts-cell">
           <select data-cat="${c}" data-idx="${i}" data-field="Temp_Sensor" onchange="sgOnTempSensorChange(this)">
             <option value="N"${(comp.Temp_Sensor || 'N') !== 'Y' ? ' selected' : ''}>N</option>
             <option value="Y"${comp.Temp_Sensor === 'Y' ? ' selected' : ''}>Y</option>
           </select>
           <div class="sg-ts-qtys${comp.Temp_Sensor === 'Y' ? ' visible' : ''}">
-            <label>Local<input type="number" min="0" value="${comp.Local_Qty ?? ''}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Local_Qty" onchange="sgOnCompEdit(this)"></label>
-            <label>Remote<input type="number" min="0" value="${comp.Remote_Qty ?? ''}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Remote_Qty" onchange="sgOnCompEdit(this)"></label>
+            <label>Local<input type="number" min="0" value="${escapeAttr(comp.Local_Qty ?? '')}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Local_Qty" onchange="sgOnCompEdit(this)"></label>
+            <label>Remote<input type="number" min="0" value="${escapeAttr(comp.Remote_Qty ?? '')}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Remote_Qty" onchange="sgOnCompEdit(this)"></label>
           </div>
         </div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
@@ -6854,8 +6861,8 @@ function sgRenderProjectComponents() {
         `<option value="45"${pTemp === '45' ? ' selected' : ''}>45°C</option>` +
         `<option value="55"${pTemp === '55' ? ' selected' : ''}>55°C</option>` +
         `<option value="custom"${pTemp === 'custom' ? ' selected' : ''}>自訂</option>` +
-      `</select><input type="number" class="sg-temp-custom${pTemp === 'custom' ? ' visible' : ''}" id="sg-temp-custom" value="${pTempCustom}" placeholder="℃" onchange="sgOnParamChange()"></div>` +
-      `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff" value="${pBackoff}" placeholder="0"> dB</div>` +
+      `</select><input type="number" class="sg-temp-custom${pTemp === 'custom' ? ' visible' : ''}" id="sg-temp-custom" value="${escapeAttr(pTempCustom)}" placeholder="℃" onchange="sgOnParamChange()"></div>` +
+      `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff" value="${escapeAttr(pBackoff)}" placeholder="0"> dB</div>` +
       `<div class="sg-param-chip">Duplex Mode <select id="sg-sel-duplex" onchange="sgOnParamChange()">` +
         `<option value="TDD 75%"${pDuplex === 'TDD 75%' ? ' selected' : ''}>TDD 75%</option>` +
         `<option value="FDD 100%"${pDuplex === 'FDD 100%' ? ' selected' : ''}>FDD 100%</option>` +
@@ -6867,7 +6874,7 @@ function sgRenderProjectComponents() {
 
     if (rtRow) rtRow.innerHTML =
       `<div class="sg-param-chip">環溫(°C) <select disabled><option>25°C</option></select></div>` +
-      `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff-rt" value="${pBackoffRT || '0'}" placeholder="0"> dB</div>` +
+      `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff-rt" value="${escapeAttr(pBackoffRT || '0')}" placeholder="0"> dB</div>` +
       `<div class="sg-param-chip">Duplex Mode <select id="sg-sel-duplex-rt" onchange="sgOnParamChange()">` +
         `<option value="TDD 75%"${pDuplexRT === 'TDD 75%' ? ' selected' : ''}>TDD 75%</option>` +
         `<option value="FDD 100%"${pDuplexRT === 'FDD 100%' ? ' selected' : ''}>FDD 100%</option>` +
@@ -7196,7 +7203,7 @@ function tcpRenderEditor() {
       </div>
       <div class="tcp-editor-main">
         <div class="tcp-title-bar">
-          <input class="tcp-title-input" id="tcp-title-input" type="text" value="${titleVal.replace(/"/g,'&quot;')}" placeholder="標題">
+          <input class="tcp-title-input" id="tcp-title-input" type="text" value="${escapeAttr(titleVal)}" placeholder="標題">
         </div>
         <div class="tcp-comp-bar" id="tcp-comp-bar"></div>
         <div class="tcp-thermal-note"><span class="swatch"></span>若標註點背景為淡紅色（長方框）即表示該元件需做散熱處理（長凸台 / 加 TIM）</div>
@@ -7325,7 +7332,7 @@ function tcpRenderPageList() {
     const label = p.isCustomTitle && p.title ? p.title : `頁面 ${i + 1}`;
     const activeClass = i === _tcpActivePageIdx ? ' active' : '';
     html += `<div class="tcp-page-item${activeClass}" onclick="tcpSelectPage(${i})">
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(label)}</span>
       <button class="tcp-page-del-btn" onclick="event.stopPropagation();tcpDeletePage(${i})" title="刪除此頁">×</button>
     </div>`;
   });
@@ -8204,7 +8211,7 @@ function tcpRenderCompBar() {
 
   const chips = allComps.map(name => {
     const done = annotated.has(name);
-    return `<span class="tcp-comp-chip${done ? ' annotated' : ''}" title="${done ? '已標註' : '未標註'}">${name}</span>`;
+    return `<span class="tcp-comp-chip${done ? ' annotated' : ''}" title="${done ? '已標註' : '未標註'}">${escapeHtml(name)}</span>`;
   }).join('');
 
   barEl.innerHTML = `<span class="tcp-comp-bar-label">元件：</span>${chips}`;
@@ -8751,16 +8758,18 @@ function sgShowStatus(msg, type) {
 }
 
 /* ---- Utilities ---- */
+/* HTML 逸出（& < > " ' 五字元，與 5G-RRU _vEsc 同規格）：
+   一律轉成 entity，文字節點與「雙/單引號屬性值」都安全。 */
 function escapeHtml(str) {
   if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function escapeAttr(str) {
   if (str === null || str === undefined) return '';
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
 }
 
 function showConflictWarning() {
@@ -9098,18 +9107,18 @@ function vdRender() {
       const pdSrc = item.pd_source || 'hot';
       const pdCell = item.pd_est_rt
         ? `<select class="vd-pd-sel" data-cat="${catLower}" data-idx="${idx}" onchange="vdOnPdSourceChange(this)">` +
-          `<option value="hot"${pdSrc === 'hot' ? ' selected' : ''}>${item.pd_est} (高溫)</option>` +
-          `<option value="rt"${pdSrc === 'rt' ? ' selected' : ''}>${item.pd_est_rt} (常溫)</option></select>`
-        : (item.pd_est || '-');
+          `<option value="hot"${pdSrc === 'hot' ? ' selected' : ''}>${escapeHtml(item.pd_est)} (高溫)</option>` +
+          `<option value="rt"${pdSrc === 'rt' ? ' selected' : ''}>${escapeHtml(item.pd_est_rt)} (常溫)</option></select>`
+        : escapeHtml(item.pd_est || '-');
 
       const rowHtml = `<tr${isHidden ? ' class="vd-row-hidden"' : ''}>
         <td class="comp-name-cell readonly-cell">${escapeHtml(item.component)}</td>
         <td class="readonly-cell">${pdCell}</td>
-        <td><input type="number" step="any" value="${item.pd_meas !== '' && item.pd_meas !== undefined ? item.pd_meas : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="pd_meas" onchange="vdOnEdit(this)"></td>
+        <td><input type="number" step="any" value="${escapeAttr(item.pd_meas !== '' && item.pd_meas !== undefined ? item.pd_meas : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="pd_meas" onchange="vdOnEdit(this)"></td>
         <td class="${vdErrorClass(pdErr)}">${vdFmtError(pdErr)}</td>
-        <td><input type="number" step="any" value="${item.temp_sim !== '' && item.temp_sim !== undefined ? item.temp_sim : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim" onchange="vdOnEdit(this)"></td>
-        <td><input type="number" step="any" value="${item.temp_meas !== '' && item.temp_meas !== undefined ? item.temp_meas : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_meas" onchange="vdOnEdit(this)"></td>
-        <td><input type="number" step="any" value="${item.temp_sim_cal !== '' && item.temp_sim_cal !== undefined ? item.temp_sim_cal : ''}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim_cal" onchange="vdOnEdit(this)"></td>
+        <td><input type="number" step="any" value="${escapeAttr(item.temp_sim !== '' && item.temp_sim !== undefined ? item.temp_sim : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim" onchange="vdOnEdit(this)"></td>
+        <td><input type="number" step="any" value="${escapeAttr(item.temp_meas !== '' && item.temp_meas !== undefined ? item.temp_meas : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_meas" onchange="vdOnEdit(this)"></td>
+        <td><input type="number" step="any" value="${escapeAttr(item.temp_sim_cal !== '' && item.temp_sim_cal !== undefined ? item.temp_sim_cal : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim_cal" onchange="vdOnEdit(this)"></td>
         <td class="${vdErrorClass(tempErr)}">${vdFmtError(tempErr)}</td>
         <td class="${vdTempDiffClass(tempDiff)}">${vdFmtDiff(tempDiff)}</td>
         <td class="note-cell"><textarea data-cat="${catLower}" data-idx="${idx}" data-field="note" onchange="vdOnEdit(this)">${escapeHtml(item.note || '')}</textarea></td>
@@ -9428,37 +9437,59 @@ function fbRenderTable() {
   }
   filtered.sort((a, b) => new Date(b[1].created_at) - new Date(a[1].created_at));
   const canEdit = !fbIsProtected;
+  // id / 使用者輸入一律不拼進 onclick/onchange 屬性（防 XSS 與引號破壞）：
+  // 用 data-* 屬性 + 下方一次性的事件委派
   tbody.innerHTML = filtered.map(([id, item]) => {
     const statusCell = canEdit
-      ? `<select class="fb-status-sel" onchange="fbUpdateStatus('${id}',this.value)">${
+      ? `<select class="fb-status-sel" data-id="${escapeAttr(id)}">${
           ['待處理','評估中','修正中','已完成','不採用'].map(s =>
             `<option${item.status===s?' selected':''}>${s}</option>`).join('')
         }</select>`
-      : `<span class="fb-badge ${fbGetStatusClass(item.status)}">${item.status}</span>`;
+      : `<span class="fb-badge ${fbGetStatusClass(item.status)}">${escapeHtml(item.status)}</span>`;
     const noteCell = canEdit
-      ? `<input class="fb-admin-note-inp" type="text" value="${(item.admin_note||'').replace(/"/g,'&quot;')}" onchange="fbUpdateAdminNote('${id}',this.value)">`
-      : (item.admin_note || '—');
+      ? `<input class="fb-admin-note-inp" type="text" value="${escapeAttr(item.admin_note||'')}" data-id="${escapeAttr(id)}">`
+      : escapeHtml(item.admin_note || '—');
     return `<tr>
-      <td style="white-space:nowrap;font-size:0.8rem;color:#666;">${fbFormatDate(item.created_at)}</td>
-      <td><span class="fb-badge ${fbGetTypeClass(item.type)}">${item.type}</span></td>
-      <td style="font-size:0.82rem;white-space:nowrap;">${item.tab||'—'}</td>
-      <td style="max-width:200px;word-break:break-word;">${item.title||''}</td>
-      <td style="white-space:nowrap;">${item.reporter||'—'}</td>
-      <td><span class="fb-badge ${fbGetPriorityClass(item.priority)}">${item.priority||'—'}</span></td>
+      <td style="white-space:nowrap;font-size:0.8rem;color:#666;">${escapeHtml(fbFormatDate(item.created_at))}</td>
+      <td><span class="fb-badge ${fbGetTypeClass(item.type)}">${escapeHtml(item.type)}</span></td>
+      <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(item.tab||'—')}</td>
+      <td style="max-width:200px;word-break:break-word;">${escapeHtml(item.title||'')}</td>
+      <td style="white-space:nowrap;">${escapeHtml(item.reporter||'—')}</td>
+      <td><span class="fb-badge ${fbGetPriorityClass(item.priority)}">${escapeHtml(item.priority||'—')}</span></td>
       <td>${statusCell}</td>
-      <td style="white-space:nowrap;font-size:0.8rem;color:#666;">${item.closed_at?fbFormatDate(item.closed_at):'—'}</td>
+      <td style="white-space:nowrap;font-size:0.8rem;color:#666;">${item.closed_at?escapeHtml(fbFormatDate(item.closed_at)):'—'}</td>
       <td style="min-width:140px;">${noteCell}</td>
       <td>
         <div class="fb-action-btns">
-          <button class="fb-action-btn" title="閱讀" onclick="fbShowDetail('${id}')">&#128065;</button>
-          <button class="fb-action-btn" title="修改" onclick="fbEditItem('${id}')">&#9999;&#65039;</button>
-          <button class="fb-action-btn" title="刪除" onclick="fbDeleteItem('${id}')">&#128465;</button>
-          <button class="fb-action-btn fb-teams-btn" title="Teams 聯絡提出人" onclick="fbOpenTeams('${id}')"><svg width="16" height="16" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="28" rx="6" fill="#6264A7"/><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="white" font-family="Arial">T</text></svg></button>
+          <button class="fb-action-btn" title="閱讀" data-act="detail" data-id="${escapeAttr(id)}">&#128065;</button>
+          <button class="fb-action-btn" title="修改" data-act="edit" data-id="${escapeAttr(id)}">&#9999;&#65039;</button>
+          <button class="fb-action-btn" title="刪除" data-act="del" data-id="${escapeAttr(id)}">&#128465;</button>
+          <button class="fb-action-btn fb-teams-btn" title="Teams 聯絡提出人" data-act="teams" data-id="${escapeAttr(id)}"><svg width="16" height="16" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="28" height="28" rx="6" fill="#6264A7"/><text x="14" y="20" text-anchor="middle" font-size="16" font-weight="bold" fill="white" font-family="Arial">T</text></svg></button>
         </div>
       </td>
     </tr>`;
   }).join('');
 }
+
+// 回饋列表的事件委派（tbody 固定、innerHTML 重繪不掉監聽；SVG 內點擊用 closest 撈回按鈕）
+(function () {
+  const tbody = document.getElementById('fb-table-body');
+  if (!tbody) return;
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('.fb-action-btn');
+    if (!btn || !btn.dataset.id) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.act === 'detail')      fbShowDetail(id);
+    else if (btn.dataset.act === 'edit')   fbEditItem(id);
+    else if (btn.dataset.act === 'del')    fbDeleteItem(id);
+    else if (btn.dataset.act === 'teams')  fbOpenTeams(id);
+  });
+  tbody.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.classList.contains('fb-status-sel'))           fbUpdateStatus(t.dataset.id, t.value);
+    else if (t.classList.contains('fb-admin-note-inp'))  fbUpdateAdminNote(t.dataset.id, t.value);
+  });
+})();
 
 async function fbUpdateStatus(id, newStatus) {
   if (!fbItems[id]) return;
@@ -9566,13 +9597,28 @@ function fbRemoveAttachment(idx) {
 function fbRenderAttachments() {
   const el = document.getElementById('fb-att-previews');
   if (!el) return;
+  // 附件 data/name 可能來自共用 DB（修改既有回饋時），一律逸出且不拼進 onclick
   el.innerHTML = fbAttachments.map((att, i) => `
-    <div class="fb-att-thumb" onclick="fbOpenImage('${att.data}')">
-      <img src="${att.data}" alt="${att.name}">
-      <button class="fb-att-remove" type="button"
-        onclick="event.stopPropagation();fbRemoveAttachment(${i})">&#215;</button>
+    <div class="fb-att-thumb" data-idx="${i}">
+      <img src="${escapeAttr(att.data)}" alt="${escapeAttr(att.name)}">
+      <button class="fb-att-remove" type="button" data-idx="${i}">&#215;</button>
     </div>`).join('');
 }
+
+// 附件縮圖的事件委派（容器固定、innerHTML 重繪不掉監聽）
+(function () {
+  const el = document.getElementById('fb-att-previews');
+  if (!el) return;
+  el.addEventListener('click', (e) => {
+    const rm = e.target.closest('.fb-att-remove');
+    if (rm) { e.stopPropagation(); fbRemoveAttachment(parseInt(rm.dataset.idx, 10)); return; }
+    const thumb = e.target.closest('.fb-att-thumb');
+    if (thumb) {
+      const att = fbAttachments[parseInt(thumb.dataset.idx, 10)];
+      if (att) fbOpenImage(att.data);
+    }
+  });
+})();
 
 function fbOpenImage(src) {
   const lb = document.getElementById('fb-img-lightbox');
@@ -9610,7 +9656,7 @@ function fbShowDetail(id) {
   window._currentFbItemId = id;
   const item = fbItems[id];
   if (!item) return;
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const esc = escapeHtml;   // 統一用全域 5 字元逸出（& < > " '）
   const row = (label, val) => val
     ? `<tr><th>${label}</th><td>${val}</td></tr>` : '';
   document.getElementById('fb-detail-body').innerHTML = `
@@ -9622,8 +9668,8 @@ function fbShowDetail(id) {
       ${row('狀態',  `<span class="fb-badge ${fbGetStatusClass(item.status)}">${esc(item.status)}</span>`)}
       ${row('提出人', esc(item.reporter))}
       ${row('聯絡方式', esc(item.contact))}
-      ${row('提出日期', fbFormatDate(item.created_at))}
-      ${item.closed_at ? row('完成日期', fbFormatDate(item.closed_at)) : ''}
+      ${row('提出日期', esc(fbFormatDate(item.created_at)))}
+      ${item.closed_at ? row('完成日期', esc(fbFormatDate(item.closed_at))) : ''}
       ${row('詳細說明', `<span style="white-space:pre-wrap">${esc(item.description)}</span>`)}
       ${item.current_behavior ? row('目前狀況', `<span style="white-space:pre-wrap">${esc(item.current_behavior)}</span>`) : ''}
       ${item.expected_behavior ? row('期望結果', `<span style="white-space:pre-wrap">${esc(item.expected_behavior)}</span>`) : ''}
@@ -9633,7 +9679,7 @@ function fbShowDetail(id) {
     ${(item.attachments && item.attachments.length) ? `
       <div class="fb-dtl-att-lbl">截圖/附件（${item.attachments.length} 張）</div>
       <div class="fb-dtl-att-grid">
-        ${item.attachments.map(a => `<img src="${a.data}" alt="${esc(a.name)}" class="fb-dtl-att-img" onclick="fbOpenImage('${a.data}')">`).join('')}
+        ${item.attachments.map((a, ai) => `<img src="${escapeAttr(a.data)}" alt="${esc(a.name)}" class="fb-dtl-att-img" data-att-idx="${ai}">`).join('')}
       </div>` : ''}`;
   if (window.FEATURE_FLAGS?.SHOW_DEV_PANEL) {
     document.getElementById('fb-detail-body').insertAdjacentHTML('beforeend', `
@@ -9655,6 +9701,19 @@ function fbCloseDetail() {
   window._currentFbItemId = null;
   document.getElementById('fb-detail-modal').classList.remove('open');
 }
+
+// 詳細視窗附件圖的事件委派（附件 data 不拼進 onclick，以 idx 查回原始資料）
+(function () {
+  const body = document.getElementById('fb-detail-body');
+  if (!body) return;
+  body.addEventListener('click', (e) => {
+    const img = e.target.closest('.fb-dtl-att-img');
+    if (!img) return;
+    const item = fbItems[window._currentFbItemId];
+    const att = item?.attachments?.[parseInt(img.dataset.attIdx, 10)];
+    if (att) fbOpenImage(att.data);
+  });
+})();
 
 function fbEditItem(id) {
   const item = fbItems[id];

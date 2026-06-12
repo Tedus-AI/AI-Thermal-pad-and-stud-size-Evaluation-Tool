@@ -124,9 +124,17 @@
     if (spinner) spinner.style.display = on ? 'flex' : 'none';
   }
 
+  /* HTML 逸出（& < > " ' 五字元）：成員名單來自 SharePoint List（多人可編輯），
+     插入 innerHTML 前一律過這層 */
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function _showError(msg) {
     const body = document.getElementById('tc-modal-body');
-    if (body) body.innerHTML = `<div class="tc-empty">${msg}</div>`;
+    if (body) body.innerHTML = `<div class="tc-empty">${_esc(msg)}</div>`;
     const tabs = document.getElementById('tc-tabs');
     if (tabs) tabs.innerHTML = '';
   }
@@ -136,8 +144,8 @@
     card.className = 'tc-member-card';
     card.innerHTML = `
       <div class="tc-member-info">
-        <span class="tc-member-name">\u{1F464} ${member.name}</span>
-        <span class="tc-member-email">${member.email}</span>
+        <span class="tc-member-name">\u{1F464} ${_esc(member.name)}</span>
+        <span class="tc-member-email">${_esc(member.email)}</span>
       </div>
       <button class="tc-send-btn" type="button">\u{1F4E8} 傳訊息</button>
     `;
