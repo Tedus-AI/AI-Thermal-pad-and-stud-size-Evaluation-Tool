@@ -11,7 +11,8 @@ let fileHandle = null;
 let dbCache = {};
 let currentVersion = 0;
 let dbCorrupted = false;     // 壞檔唯讀保護：JSON 解析失敗時禁止一切寫入
-let maxProjectsSeen = 0;     // 本 session 看過的 projects 筆數高水位（歸零保險絲用）
+let lastReadProjects = 0;    // 上次成功讀檔時的 projects 筆數（歸零保險絲基準）
+let sawRealData = false;     // 本 session 是否曾持有實際資料（區分「全新空庫」vs「截斷成空檔」）
 
 const fileDb = {
   async openFile() {
@@ -53,7 +54,8 @@ const fileDb = {
       dbCache = { version: Date.now(), rf_library: {}, digital_library: {}, pwr_library: {}, projects: {} };
       currentVersion = dbCache.version;
       dbCorrupted = false;
-      maxProjectsSeen = 0;   // 全新檔案 → 重設保險絲基準
+      lastReadProjects = 0;   // 全新檔案 → 重設保險絲基準
+      sawRealData = false;
       await this._writeFileRaw();
       await this._saveHandle(fileHandle);
       return { success: true, filename: fileHandle.name, isNew: true };
@@ -126,7 +128,7 @@ const fileDb = {
       // 使用者刻意刪除專案（含最後一筆）是合法操作 → 放行並同步保險絲基準
       await this._writeFile({ allowEmptyProjects: colName === 'projects' });
       if (colName === 'projects') {
-        maxProjectsSeen = Object.keys(dbCache.projects || {}).length;
+        lastReadProjects = Object.keys(dbCache.projects || {}).length;   // 刪除後磁碟即此筆數
       }
     }
   },
@@ -156,7 +158,14 @@ const fileDb = {
     const file = await fileHandle.getFile();
     const text = await file.text();
     if (text.trim() === '') {
-      // 全新空檔（首次建庫）才允許 bootstrap 空骨架
+      if (sawRealData) {
+        // 先前已持有實際資料、現在卻讀到空檔 → 截斷異常，保留舊快取進唯讀，
+        // 不可 bootstrap 空骨架後寫回（否則把整份共用 DB 抹掉），也不可跑 migration。
+        dbCorrupted = true;
+        console.error('[fileDb] 讀到空檔但先前已有資料 → 截斷疑慮，進入唯讀保護');
+        return;
+      }
+      // 真正的全新空檔（首次建庫）→ bootstrap 空骨架
       dbCache = { rf_library: {}, digital_library: {}, pwr_library: {}, projects: {} };
       dbCorrupted = false;
     } else {
@@ -174,8 +183,9 @@ const fileDb = {
         return;
       }
     }
-    const n = Object.keys((dbCache && dbCache.projects) || {}).length;
-    if (n > maxProjectsSeen) maxProjectsSeen = n;
+    // 記錄這次讀到的 projects 筆數作為歸零保險絲基準（反映磁碟現況，非 session 高水位）。
+    lastReadProjects = Object.keys((dbCache && dbCache.projects) || {}).length;
+    if (lastReadProjects > 0) sawRealData = true;
 
     // Migration: add version if missing
     if (!dbCache.version) {
@@ -192,8 +202,9 @@ const fileDb = {
     }
     if (!allowEmptyProjects) {
       const n = Object.keys((dbCache && dbCache.projects) || {}).length;
-      if (n === 0 && maxProjectsSeen > 0) {
-        throw new Error('安全保護：projects 集合由 ' + maxProjectsSeen + ' 筆突然變成 0 筆，寫入已擋下以免抹除共用資料庫。請先檢查資料庫檔案；若確認為正常狀態，重新整理頁面即可解除。');
+      // 上次讀檔有 projects、現在卻要寫入 0 筆 → 記憶體異常丟失，擋下。
+      if (n === 0 && lastReadProjects > 0) {
+        throw new Error('安全保護：projects 集合由 ' + lastReadProjects + ' 筆突然變成 0 筆，寫入已擋下以免抹除共用資料庫。請先檢查資料庫檔案；若確認為正常狀態，重新整理頁面即可解除。');
       }
     }
   },
@@ -231,6 +242,8 @@ const fileDb = {
     dbCache.version = Math.max(Date.now(), currentVersion + 1);
     currentVersion = dbCache.version;
     await this._writeFileRaw();
+    // 已成功持久化含 projects 的資料 → 標記本 session 曾有實際資料（截斷偵測用）
+    if (Object.keys((dbCache && dbCache.projects) || {}).length > 0) sawRealData = true;
   },
 
   /** Raw write without version check (used for migration and createFile) */

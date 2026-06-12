@@ -42,11 +42,19 @@
 5. **壞檔唯讀保護（兩個 repo 的 DB backend 都必須具備）**：`_readFile` 解析失敗時
    **絕不可** fallback 成空骨架（否則下一次寫入會把整份共用 DB 抹掉），必須保留舊快取、
    設 `dbCorrupted = true` 進入唯讀；`_writeFile` 開頭一律過 `_assertWritable`：
-   (a) `dbCorrupted` → 拒寫；(b) `projects` 筆數從本 session 高水位（非零）突然歸零
-   且非刻意刪除（`deleteDoc('projects', …)` 例外放行並下修基準）→ 拒寫。
-   只有「內容為空字串的全新檔案」才允許 bootstrap 空骨架。
-   參考實作：本 repo 的 `fileDb.js` / `graphDb.js`（`_assertWritable`、`maxProjectsSeen`），
-   對應 5G-RRU PR #64。
+   (a) `dbCorrupted` → 拒寫；(b) `projects` 由「上次讀檔筆數」(`lastReadProjects`，反映磁碟現況、
+   非 session 高水位) 非零突然歸零、且非刻意刪除（`deleteDoc('projects', …)` 例外放行並下修基準）→ 拒寫。
+   **空檔判斷**：只有「從未持有過實際資料（`sawRealData=false`）的全新空檔」才允許 bootstrap 空骨架；
+   若先前已有資料卻讀到 0-byte（截斷）→ 比照壞檔進唯讀。
+   參考實作：本 repo 的 `fileDb.js` / `graphDb.js`（`_assertWritable`、`lastReadProjects`、`sawRealData`），
+   對應 5G-RRU PR #64/#66。
+6. **檔案級樂觀並發（SharePoint backend）**：整檔 PUT 必帶 `If-Match: <eTag>`；`_readFile` 取
+   DriveItem metadata 的 `eTag` 為基準（content GET 經 302 轉址後的 ETag 不可靠），`_writeFile`
+   成功後由 PUT 回應更新 `eTag`。寫入走 `_withOptimisticWrite(mutateFn)`：412 時重讀最新內容＋新
+   eTag，於最新狀態上重跑 mutateFn 後重試（上限 4 次）。如此 (a) 取鎖 read-check-write 成為原子
+   CAS（兩人不會同時取得鎖）、(b) 他人對其他 doc/collection 的寫入不會被我們的整檔 PUT 回滾、
+   (c) releaseLock 衝突時只刪自己的鎖。**兩個 repo 要同步實作**（共用同一份檔案，並發保護取決於最弱的寫入者）。
+   參考實作：本 repo 的 `graphDb.js`（`_withOptimisticWrite`、`currentEtag`），對應 5G-RRU PR #66。
 
 ### 反例（造成 Bug 的寫法）
 
