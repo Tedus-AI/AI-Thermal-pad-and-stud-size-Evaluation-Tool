@@ -5455,22 +5455,93 @@ initDatabase();
 // 啟動時同步工具列鎖頭圖示（預設為鎖定 = 閉合掛鎖）
 if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 
-// Poll lock status every 60 s (re-reads SharePoint file for freshness)
+// ── 編輯鎖生命週期：活動追蹤 + 自動續約 + 逾時/遺失偵測（H-4）──
+let _lastActivityTs = Date.now();
+['pointerdown', 'keydown'].forEach(ev =>
+  window.addEventListener(ev, () => { _lastActivityTs = Date.now(); }, { passive: true, capture: true }));
+
+// 我方是否「自認持有有效編輯鎖」（SharePoint 模式 + 本地 currentLock 存在）
+function _iHoldLock() {
+  return dbAdapter.isSharePointMode && dbAdapter.isSharePointMode()
+      && dbAdapter.hasLock && dbAdapter.hasLock();
+}
+
+// 鎖遺失（逾時被接手 / 被清除 / 閒置釋放）→ 兩個解鎖範圍的 UI 都退回鎖定並通知。
+// releaseLock 只清本地 currentLock，鎖非自己時靠 #66 的樂觀寫入 skipWrite，不會誤刪他人鎖。
+async function _onLockLost(msg) {
+  try { await dbAdapter.releaseLock(); } catch (e) {}
+  if (!isProtected) relock();           // Tab1~3 範圍若解鎖中 → 退回
+  if (!fbIsProtected) _fbRelockUI();    // Tab5 開發者範圍若解鎖中 → 退回
+  updateLockStatusBar();
+  alert(msg);
+}
+
+// 由 60 秒輪詢呼叫：閒置自動釋放、偵測鎖被接手、接近過期則續約
+async function _maintainLock() {
+  if (!_iHoldLock()) return;
+  const TTL_MS = ((window.SHAREPOINT_CONFIG && SHAREPOINT_CONFIG.lockTimeoutMinutes) || 10) * 60000;
+  // (1) 閒置過久 → 主動釋放，避免鎖被無限續約佔住、別人永遠拿不到
+  if (Date.now() - _lastActivityTs > TTL_MS) {
+    await _onLockLost('🔓 因閒置超過 ' + Math.round(TTL_MS / 60000) + ' 分鐘，編輯鎖已自動釋放。需要時請重新解鎖以取得鎖。');
+    return;
+  }
+  // (2) 確認鎖仍屬於自己（peekLock 已在輪詢中更新 dbCache.lock）
+  const lk = dbAdapter.getLockInfo ? dbAdapter.getLockInfo() : null;
+  const acct = dbAdapter.getAccountInfo ? dbAdapter.getAccountInfo() : null;
+  const mine = lk && acct && lk.lockedByEmail === acct.email && new Date(lk.expiresAt) > new Date();
+  if (!mine) {
+    await _onLockLost('⚠️ 你的編輯鎖已逾時並被釋放或被他人接手，已退出編輯狀態。需要時請重新解鎖以取得鎖。');
+    return;
+  }
+  // (3) 剩不到半個 TTL → 續約（再次 acquireLock 會延長自己的 expiresAt；被接手時丟 LockError）
+  if (new Date(lk.expiresAt).getTime() - Date.now() < TTL_MS / 2) {
+    try { await dbAdapter.acquireLock(); }
+    catch (e) {
+      if (e instanceof LockError) await _onLockLost('⚠️ 編輯鎖續約失敗（已被他人接手），已退出編輯狀態。');
+      else console.warn('[lock] renew failed:', e);
+    }
+  }
+}
+
+// 寫入前驗鎖：去伺服器確認鎖仍屬於自己且未過期，否則擋下並退回 UI（H-4）。
+// 各寫入入口原有的密碼鎖檢查（isProtected / fbIsProtected）保留，此處只補「伺服器鎖仍在我手上」。
+async function _ensureLockBeforeWrite(action) {
+  // 本機模式無共用鎖 → 解鎖即可寫
+  if (!(dbAdapter.isSharePointMode && dbAdapter.isSharePointMode())) return true;
+  let lk = null;
+  try { lk = await dbAdapter.peekLock(); }
+  catch (e) { alert('⚠️ 無法確認編輯鎖狀態（網路或登入問題），' + action + '已取消，請稍後再試。'); return false; }
+  const acct = dbAdapter.getAccountInfo ? dbAdapter.getAccountInfo() : null;
+  const mine = lk && acct && lk.lockedByEmail === acct.email && new Date(lk.expiresAt) > new Date();
+  if (!mine) {
+    await _onLockLost('⚠️ 你的編輯鎖已逾時或被他人接手，' + action + '已取消。請重新解鎖以取得鎖後再試。');
+    return false;
+  }
+  _lastActivityTs = Date.now();   // 存檔/刪除是明確活動
+  return true;
+}
+
+// Poll lock status every 60 s (re-reads SharePoint file for freshness) + 維護自己的鎖
 setInterval(async () => {
   if (DB_MODE === 'sharepoint' && dbAdapter.isSignedIn && dbAdapter.isSignedIn()) {
     try { await dbAdapter.peekLock(); } catch (e) { return; }
     updateLockStatusBar();
+    try { await _maintainLock(); } catch (e) { console.warn('[lock] maintain error:', e); }
   }
 }, 60000);
 
-// Warn user before leaving if they hold an editing lock
+// 持鎖時離開 → 只提醒（H-5：不在 beforeunload 釋放鎖，否則按「留下」後會變成無鎖裸寫）
 window.addEventListener('beforeunload', (event) => {
   if (dbAdapter.isSharePointMode && dbAdapter.isSharePointMode() && dbAdapter.hasLock && dbAdapter.hasLock()) {
-    // Best-effort lock release (fire-and-forget; Graph API needs auth header so sendBeacon won't work)
-    try { dbAdapter.releaseLock(); } catch (e) {}
     event.preventDefault();
     event.returnValue = '';
     return '';
+  }
+});
+// 頁面確實卸載了才釋放鎖（fire-and-forget；送不出去靠 TTL 兜底）。按「留下」不會觸發 pagehide → 鎖保留。
+window.addEventListener('pagehide', () => {
+  if (dbAdapter.isSharePointMode && dbAdapter.isSharePointMode() && dbAdapter.hasLock && dbAdapter.hasLock()) {
+    try { dbAdapter.releaseLock(); } catch (e) {}
   }
 });
 
@@ -8364,6 +8435,8 @@ async function saveAllTabs() {
     return;
   }
   if (!dbAdapter.isReady()) return;
+  // 寫入前驗鎖：鎖已逾時/被接手 → 擋下並退回鎖定 UI（H-4）
+  if (!(await _ensureLockBeforeWrite('儲存'))) return;
 
   // 哪幾頁有載入專案(沒選專案的頁直接跳過,避免用空資料覆寫)
   const hasSg = !!(sgProjectId && sgProjectData);
@@ -8633,6 +8706,7 @@ async function sgCreateProject() {
   const name = document.getElementById('sg-new-project-name').value.trim();
   if (!id) { alert('請輸入專案 ID'); return; }
   if (!name) { alert('請輸入專案名稱'); return; }
+  if (!(await _ensureLockBeforeWrite('建立專案'))) return;   // 寫入前驗鎖（H-4）
 
   try {
     const existing = await dbAdapter.getDoc('projects', id);
@@ -8717,6 +8791,7 @@ async function sgConfirmDeleteProject() {
   if (inp.value !== '0420') { alert('密碼錯誤'); inp.value = ''; inp.focus(); return; }
   if (!sgProjectId) { sgHideDelPopover(); return; }
   if (isProtected) { alert('請先解鎖資料庫保護'); sgHideDelPopover(); return; }
+  if (!(await _ensureLockBeforeWrite('刪除專案'))) { sgHideDelPopover(); return; }   // 寫入前驗鎖（H-4）
   const delId = sgProjectId;
   const sel = document.getElementById('sg-project-select');
   const delName = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].textContent : delId;
@@ -9493,6 +9568,7 @@ function fbRenderTable() {
 
 async function fbUpdateStatus(id, newStatus) {
   if (!fbItems[id]) return;
+  if (!(await _ensureLockBeforeWrite('更新狀態'))) return;   // 寫入前驗鎖（H-4）
   const now = new Date().toISOString();
   fbItems[id].status = newStatus;
   fbItems[id].updated_at = now;
@@ -9507,6 +9583,7 @@ async function fbUpdateStatus(id, newStatus) {
 
 async function fbUpdateAdminNote(id, note) {
   if (!fbItems[id]) return;
+  if (!(await _ensureLockBeforeWrite('更新處理備註'))) return;   // 寫入前驗鎖（H-4）
   fbItems[id].admin_note = note;
   fbItems[id].updated_at = new Date().toISOString();
   try { await fbSaveItem(id, fbItems[id]); }
@@ -9756,6 +9833,7 @@ async function fbConfirmDelete() {
   fbDeleteTargetId = null;
   document.getElementById('fb-delete-modal').classList.remove('open');
   if (!id || !fbItems[id]) return;
+  if (!(await _ensureLockBeforeWrite('刪除回饋'))) return;   // 寫入前驗鎖（H-4）
   const backup = fbItems[id];
   try {
     delete fbItems[id];
