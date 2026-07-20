@@ -4962,6 +4962,7 @@ function _applyUnlockedUI() {
   if (sgNewProjBtn) { sgNewProjBtn.disabled = false; sgNewProjBtn.title = '新增專案'; }
   if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
+  applyReadonlyLock();
 }
 
 function relock() {
@@ -4987,6 +4988,34 @@ function relock() {
   if (sgNewProjBtn) { sgNewProjBtn.disabled = true; sgNewProjBtn.title = '需先解鎖密碼保護才能新增專案'; }
   if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
+  applyReadonlyLock();
+}
+
+/* ---- 未解鎖 = 全域唯讀 ----
+   同事反映：未解鎖就編輯，改完才發現無法儲存、白做一場。
+   因此未解鎖(isProtected)時，直接把三個專案頁籤（EE/RF/PWR 清單、TH/ME 清單、
+   模擬與實驗驗證）內所有可輸入/新增的控制項禁用，讓使用者只能閱讀。
+   規則：
+   - 只鎖三個編輯容器內的 input / select / textarea / button。
+   - 密碼保護條（.protect-bar）永遠保持可用，否則無法解鎖。
+   - 匯出按鈕（.btn-export）保持可用，唯讀者也能匯出。
+   - 用 __roLocked 標記「本函式鎖的」，解鎖時只還原這些，
+     不會誤動各欄位因自身邏輯而 disabled 的狀態（例如非 Pad 時的 TIM Size）。 */
+function applyReadonlyLock() {
+  const ids = ['comp-container', 'sg-project-components', 'vd-container'];
+  ids.forEach(id => {
+    const root = document.getElementById(id);
+    if (!root) return;
+    root.querySelectorAll('input, select, textarea, button').forEach(el => {
+      if (el.closest('.protect-bar')) return;           // 密碼保護條本身
+      if (el.classList.contains('btn-export')) return;  // 匯出保持可用
+      if (isProtected) {
+        if (!el.disabled) { el.__roLocked = true; el.disabled = true; }
+      } else if (el.__roLocked) {
+        el.disabled = false; el.__roLocked = false;
+      }
+    });
+  });
 }
 
 async function toggleProtection() {
@@ -5786,6 +5815,7 @@ function renderAllCategories() {
   </div>`;
   container.innerHTML = html;
   exportToolbar.style.display = 'flex';
+  applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
 }
 
 /* ---- 渲染單一分類表格 ---- */
@@ -6859,6 +6889,7 @@ function sgRenderProjectComponents() {
   }
 
   tcpRefreshDropdowns();
+  applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入（含參數 chip）
 }
 
 /* ---- Type dropdown change handler ---- */
@@ -9111,6 +9142,7 @@ function vdRender() {
 
   ['vd-export-excel-btn','vd-export-pdf-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
   container.innerHTML = html;
+  applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
 }
 
 /* ---- Hide state (Tab 3 validation) ----
