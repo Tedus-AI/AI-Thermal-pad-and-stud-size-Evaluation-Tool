@@ -5069,6 +5069,7 @@ function applyReadonlyLock() {
     root.querySelectorAll('input, select, textarea, button').forEach(el => {
       if (el.closest('.protect-bar')) return;           // 密碼保護條本身
       if (el.classList.contains('btn-export')) return;  // 匯出保持可用
+      if (el.classList.contains('tcp-view-btn')) return; // 👁 檢視：免解鎖唯讀檢視元件標註
       if (isProtected) {
         if (!el.disabled) { el.__roLocked = true; el.disabled = true; }
       } else if (el.__roLocked) {
@@ -5090,7 +5091,7 @@ function bindReadonlyHints() {
     if (!c) return;
     c.addEventListener('click', (e) => {
       if (!isProtected) return;
-      if (e.target.closest('.btn-export, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用
+      if (e.target.closest('.btn-export, .tcp-view-btn, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用
       showReadonlyHint(bid);
     }, true);
     _roHintBound = true;   // 至少綁到一個容器才算數
