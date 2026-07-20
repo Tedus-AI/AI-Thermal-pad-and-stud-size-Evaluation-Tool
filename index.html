@@ -1810,6 +1810,26 @@
   .tcp-crop-actions button:first-child { background:#dc2626; color:#fff; }
   .tcp-crop-actions button:last-child { background:#fff; border:1px solid #bcc5d3; }
 
+  /* ── 局部放大鏡（純檢視輔助；唯讀也可用）── */
+  .tcp-magnify-bar { display:flex; align-items:center; gap:10px; margin:6px 0 2px; flex-wrap:wrap; }
+  .tcp-magnify-bar button { padding:5px 12px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; cursor:pointer; font-size:0.85rem; color:#334155; }
+  .tcp-magnify-bar button:hover { background:#eef2f7; border-color:#94a3b8; }
+  .tcp-magnify-bar button.active { background:#dbeafe; border-color:#3b82f6; color:#1d4ed8; font-weight:600; }
+  .tcp-magnify-hint { font-size:0.8rem; color:#2563eb; }
+  .tcp-magnify-layer { position:absolute; inset:0; z-index:40; cursor:crosshair; pointer-events:none; }
+  .tcp-magnify-sel { position:absolute; border:2px dashed #2563eb; background:rgba(37,99,235,0.12); display:none; pointer-events:none; }
+  /* 放大層作用時，即使唯讀（工作區 pointer-events:none）也讓框選層能收事件 */
+  .tcp-workspace-wrap.magnify-on .tcp-magnify-layer,
+  .tcp-modal-box.tcp-view-only .tcp-workspace-wrap.magnify-on .tcp-magnify-layer { pointer-events:auto; }
+  /* 放大結果燈箱 */
+  .tcp-zoom-lightbox { position:fixed; inset:0; z-index:100001; background:rgba(0,0,0,0.82);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; }
+  .tcp-zoom-lightbox canvas { max-width:94vw; max-height:86vh; background:#fff;
+    box-shadow:0 12px 48px rgba(0,0,0,0.55); border-radius:6px; }
+  .tcp-zoom-close { position:absolute; top:16px; right:22px; font-size:1.7rem; line-height:1;
+    color:#fff; background:transparent; border:none; cursor:pointer; }
+  .tcp-zoom-hint { color:#e5e7eb; font-size:0.82rem; }
+
   .sg-comp-save-bar {
     display: flex;
     align-items: center;
@@ -7317,6 +7337,8 @@ let _tcpActivePageIdx = 0;   // current page index within category
 let _tcpActivePage = null;   // current page object reference
 let _tcpDragState      = null;   // { annoId, dotAbsX, dotAbsY }
 let _tcpMoveMode       = false;  // image pan mode toggle
+let _tcpMagnify        = false;  // 局部放大鏡框選模式（純檢視，不改資料）
+let _tcpMagnifyKeyHandler = null; // 放大模式時的 Esc 取消監聽
 let tcpViewOnly        = false;  // 唯讀檢視（未解鎖時用眼睛按鈕進入）
 let _tcpImgMoveDrag    = null;   // { startX, startY, origX, origY }
 let _tcpCropOrigFrame  = null;   // saved imgFrame before crop for cancel
@@ -7324,6 +7346,8 @@ let _tcpCropOrigFrame  = null;   // saved imgFrame before crop for cancel
 /* ── open / close ── */
 function tcpOpenModal(category, viewOnly) {
   if (!sgProjectData) { alert('請先選擇或建立一個專案'); return; }
+
+  tcpExitMagnify();   // 清掉上一次可能殘留的放大模式/Esc 監聽
 
   // 鎖定中一律唯讀；眼睛按鈕也以唯讀進入
   tcpViewOnly = !!viewOnly || isProtected;
@@ -7362,6 +7386,9 @@ function tcpOpenModal(category, viewOnly) {
 }
 
 function tcpCloseModal() {
+  tcpExitMagnify();   // 收掉放大模式與其 Esc 監聽
+  const lb = document.getElementById('tcp-zoom-lightbox');
+  if (lb) lb.remove();
   document.getElementById('tcp-modal-overlay').classList.remove('active');
   document.body.style.overflow = '';
   _tcpDragState = null;
@@ -7400,6 +7427,7 @@ function tcpRenderEditor() {
         </div>
         <div class="tcp-comp-bar" id="tcp-comp-bar"></div>
         <div class="tcp-thermal-note"><span class="swatch"></span>若標註點背景為淡紅色（長方框）即表示該元件需做散熱處理（長凸台 / 加 TIM）</div>
+        ${hasPhoto ? `<div class="tcp-magnify-bar"><button id="tcp-magnify-btn" onclick="tcpToggleMagnify()" title="局部放大：點我後在圖片上框選要放大的區域，可看得更清楚">🔍 局部放大</button><span class="tcp-magnify-hint" id="tcp-magnify-hint" style="display:none;">↳ 在圖片上拖曳框出要放大的區域…（Esc 取消）</span></div>` : ''}
         ${hasPhoto ? `<div class="tcp-img-toolbar" id="tcp-img-toolbar">
           <button onclick="tcpRotateImg(-90)" title="逆時針旋轉 90°">↺ 左轉</button>
           <button onclick="tcpRotateImg(90)"  title="順時針旋轉 90°">↻ 右轉</button>
@@ -7457,6 +7485,7 @@ function tcpRenderEditor() {
               <button onclick="tcpCancelCrop()">取消</button>
             </div>
           </div>
+          <div class="tcp-magnify-layer" id="tcp-magnify-layer" style="display:none"><div class="tcp-magnify-sel" id="tcp-magnify-sel"></div></div>
         </div>
       </div>
     </div>`;
@@ -7537,6 +7566,7 @@ function tcpSelectPage(idx) {
   if (!_tcpCategory) return;
   const pages = sgProjectData.tcPlacement[_tcpCategory.toLowerCase()].pages;
   if (!pages[idx]) return;
+  if (_tcpMagnify) tcpExitMagnify();   // 換頁前收掉放大模式
   _tcpActivePageIdx = idx;
   _tcpActivePage = pages[idx];
   tcpRenderEditor();
@@ -7704,6 +7734,7 @@ function tcpRenderImgFrame(page) {
 /* Toggle image pan mode */
 function tcpToggleMoveMode() {
   if (tcpViewOnly) return;
+  if (_tcpMagnify) tcpExitMagnify();   // 模式互斥
   _tcpMoveMode = !_tcpMoveMode;
   const btn   = document.getElementById('tcp-move-btn');
   const outer = document.getElementById('tcp-img-outer');
@@ -7951,9 +7982,142 @@ async function tcpFlipImg(axis) {
   tcpRenderEditor();
 }
 
+/* ── 局部放大鏡 ──
+   點「🔍 局部放大」→ 在工作區框選一塊 → 以 html2canvas 對工作區(含圖片與標註)
+   快照、裁出該框放大到燈箱檢視。純檢視輔助、不改任何資料，故唯讀模式也能用。
+   放大層(z-index 40，pointer-events 作用時才開)蓋在標註之上攔截框選，
+   因此編輯模式下框選不會誤新增標註(模式互斥)。 */
+function tcpToggleMagnify() {
+  const layer = document.getElementById('tcp-magnify-layer');
+  const btn   = document.getElementById('tcp-magnify-btn');
+  const hint  = document.getElementById('tcp-magnify-hint');
+  const ws    = document.getElementById('tcp-workspace');
+  if (!layer || !ws) return;
+  if (_tcpMagnify) { tcpExitMagnify(); return; }
+  // 進入放大模式前先關掉其他互斥模式
+  if (_tcpMoveMode) tcpToggleMoveMode();
+  const cropOv = document.getElementById('tcp-crop-overlay');
+  if (cropOv && cropOv.style.display !== 'none') tcpCancelCrop();
+
+  _tcpMagnify = true;
+  ws.classList.add('magnify-on');
+  layer.style.display = 'block';
+  tcpSetupMagnifyDrag(layer);
+  if (btn)  btn.classList.add('active');
+  if (hint) hint.style.display = '';
+  _tcpMagnifyKeyHandler = (e) => { if (e.key === 'Escape') tcpExitMagnify(); };
+  document.addEventListener('keydown', _tcpMagnifyKeyHandler);
+}
+
+function tcpExitMagnify() {
+  _tcpMagnify = false;
+  const layer = document.getElementById('tcp-magnify-layer');
+  const sel   = document.getElementById('tcp-magnify-sel');
+  const btn   = document.getElementById('tcp-magnify-btn');
+  const hint  = document.getElementById('tcp-magnify-hint');
+  const ws    = document.getElementById('tcp-workspace');
+  if (layer) layer.style.display = 'none';
+  if (sel)   sel.style.display = 'none';
+  if (ws)    ws.classList.remove('magnify-on');
+  if (btn)   btn.classList.remove('active');
+  if (hint)  hint.style.display = 'none';
+  if (_tcpMagnifyKeyHandler) { document.removeEventListener('keydown', _tcpMagnifyKeyHandler); _tcpMagnifyKeyHandler = null; }
+}
+
+function tcpSetupMagnifyDrag(layer) {
+  if (layer._magnifyBound) return;
+  layer._magnifyBound = true;
+  const sel = document.getElementById('tcp-magnify-sel');
+  let start = null;
+  const pt = (e) => { const r = layer.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  layer.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !_tcpMagnify) return;
+    start = pt(e);
+    if (sel) { sel.style.display = 'block'; sel.style.left = start.x + 'px'; sel.style.top = start.y + 'px'; sel.style.width = '0px'; sel.style.height = '0px'; }
+    e.preventDefault();
+  });
+  layer.addEventListener('mousemove', (e) => {
+    if (!start || !sel) return;
+    const p = pt(e);
+    sel.style.left = Math.min(start.x, p.x) + 'px';
+    sel.style.top  = Math.min(start.y, p.y) + 'px';
+    sel.style.width  = Math.abs(p.x - start.x) + 'px';
+    sel.style.height = Math.abs(p.y - start.y) + 'px';
+  });
+  const finish = async (e) => {
+    if (!start) return;
+    const p = pt(e);
+    const x = Math.min(start.x, p.x), y = Math.min(start.y, p.y);
+    const w = Math.abs(p.x - start.x), h = Math.abs(p.y - start.y);
+    start = null;
+    if (sel) sel.style.display = 'none';
+    if (w < 12 || h < 12) { tcpExitMagnify(); return; }   // 太小視為取消
+    await tcpShowZoom(x, y, w, h);
+    tcpExitMagnify();
+  };
+  layer.addEventListener('mouseup', finish);
+  layer.addEventListener('mouseleave', (e) => { if (start) finish(e); });
+}
+
+async function tcpShowZoom(x, y, w, h) {
+  const ws = document.getElementById('tcp-workspace');
+  if (!ws || typeof html2canvas !== 'function') return;
+  const SCALE = 3;   // 快照密度：越高放大後越清晰
+  let canvas;
+  try {
+    canvas = await html2canvas(ws, {
+      scale: SCALE, useCORS: true, backgroundColor: '#fff',
+      // 不要把編輯把手/刪除鈕/放大層本身拍進去
+      ignoreElements: (el) => el.classList && (
+        el.classList.contains('tcp-rh') ||
+        el.classList.contains('tcp-delete-photo-btn') ||
+        el.classList.contains('tcp-replace-btn') ||
+        el.classList.contains('tcp-magnify-layer') ||
+        el.classList.contains('tcp-crop-overlay')),
+    });
+  } catch (err) { console.warn('[magnify] html2canvas 失敗：', err); return; }
+  const sw = Math.max(1, Math.round(w * SCALE)), sh = Math.max(1, Math.round(h * SCALE));
+  const sub = document.createElement('canvas');
+  sub.width = sw; sub.height = sh;
+  sub.getContext('2d').drawImage(canvas, Math.round(x * SCALE), Math.round(y * SCALE), sw, sh, 0, 0, sw, sh);
+  tcpOpenZoomLightbox(sub, w / h);
+}
+
+function tcpOpenZoomLightbox(canvasEl, aspect) {
+  const old = document.getElementById('tcp-zoom-lightbox');
+  if (old) old.remove();
+  // 放大到填滿視窗（保持長寬比）
+  const vw = window.innerWidth * 0.94, vh = window.innerHeight * 0.86;
+  let dw = vw, dh = vw / aspect;
+  if (dh > vh) { dh = vh; dw = vh * aspect; }
+  canvasEl.style.width = Math.round(dw) + 'px';
+  canvasEl.style.height = Math.round(dh) + 'px';
+
+  const lb = document.createElement('div');
+  lb.className = 'tcp-zoom-lightbox';
+  lb.id = 'tcp-zoom-lightbox';
+  const close = document.createElement('button');
+  close.className = 'tcp-zoom-close';
+  close.innerHTML = '&#10005;';
+  close.title = '關閉';
+  const hint = document.createElement('div');
+  hint.className = 'tcp-zoom-hint';
+  hint.textContent = '點任意處或右上 ✕ 關閉';
+  const remove = () => { lb.remove(); document.removeEventListener('keydown', onKey); };
+  close.addEventListener('click', remove);
+  lb.addEventListener('click', (e) => { if (e.target === lb) remove(); });
+  const onKey = (e) => { if (e.key === 'Escape') remove(); };
+  document.addEventListener('keydown', onKey);
+  lb.appendChild(close);
+  lb.appendChild(canvasEl);
+  lb.appendChild(hint);
+  document.body.appendChild(lb);
+}
+
 /* Non-destructive crop: adjust the visible frame window without modifying imageData */
 function tcpStartCrop() {
   if (tcpViewOnly) return;
+  if (_tcpMagnify) tcpExitMagnify();   // 模式互斥
   const page = _tcpActivePage;
   if (!page?.imgFrame) return;
   const f = page.imgFrame;
