@@ -1313,6 +1313,20 @@
     transition: background 0.2s;
   }
   .sg-comp-del-btn:hover { background: #fdd; }
+  /* 元件排序 ▲▼（同分類內前後調動；順序會連動 Tab2/Tab3） */
+  .sg-move-btn {
+    padding: 2px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    background: #fff;
+    color: #334155;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sg-move-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
+  .sg-move-btn:disabled { opacity: 0.35; cursor: default; }
   .sg-comp-add-btn {
     display: inline-flex;
     align-items: center;
@@ -6978,7 +6992,7 @@ function sgRenderProjectComponents() {
           </div>
         </div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell" style="text-align:center;"><button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
+        <td class="sg-edit-cell" style="text-align:center; white-space:nowrap;"><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},-1)" ${i === 0 ? 'disabled' : ''} title="上移（順序連動 Tab2/Tab3）">&#9650;</button><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},1)" ${i === items.length - 1 ? 'disabled' : ''} title="下移（順序連動 Tab2/Tab3）">&#9660;</button> <button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
 
@@ -8481,6 +8495,25 @@ document.addEventListener('paste', async function(e) {
 });
 
 /* ---- Delete component from list ---- */
+/* 元件排序：在同分類陣列內把元件上/下移一格（dir = -1 上移 / +1 下移）。
+   順序的單一事實來源就是 rf_data/digital_data/pwr_data 的陣列順序，
+   Tab2(renderAllCategories)與 Tab3(vdOnProjectChange)都照此順序渲染，
+   故存檔後兩頁下次載入即同步。thermal_specs/validation_data 以元件名稱為 key，
+   不受索引影響，排序不會動到任何量測/規格資料。 */
+function sgMoveComp(cat, idx, dir) {
+  if (isProtected) return;                 // 未解鎖不可排序（按鈕已被禁用，這裡雙保險）
+  const fieldKey = SG_CAT_MAP[cat]?.field;
+  const arr = sgProjectData && sgProjectData[fieldKey];
+  if (!Array.isArray(arr)) return;
+  const to = idx + dir;
+  if (to < 0 || to >= arr.length) return;  // 已在頂/底，不動
+  const [moved] = arr.splice(idx, 1);
+  arr.splice(to, 0, moved);
+  const y = window.scrollY;                // 重繪後還原捲動位置（UX 慣例）
+  sgRenderProjectComponents();
+  window.scrollTo(0, y);
+}
+
 function sgDeleteComp(cat, idx) {
   if (isProtected) { alert('請先解鎖密碼保護'); return; }
   const fieldKey = SG_CAT_MAP[cat].field;
