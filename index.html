@@ -282,6 +282,33 @@
   }
   .protect-bar.unlocked .protect-hint { display: none; }
 
+  /* ── 唯讀點擊回饋（未解鎖時）── */
+  /* 讓被禁用欄位的點擊「穿透」落到容器，由容器監聽後跳出提示；整區顯示禁止游標 */
+  .ro-locked { cursor: not-allowed; }
+  .ro-locked input:disabled,
+  .ro-locked select:disabled,
+  .ro-locked textarea:disabled,
+  .ro-locked button:disabled { pointer-events: none; }
+  /* 解鎖列閃動導引（琥珀色，非錯誤紅） */
+  @keyframes roBarPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    30%      { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.55); }
+  }
+  .protect-bar.ro-flash { animation: roBarPulse 0.7s ease-in-out 3; }
+  /* 唯讀提示 toast（琥珀色） */
+  #ro-toast {
+    position: fixed; top: 22px; left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    z-index: 100000; background: #92400e; color: #fff;
+    padding: 11px 20px; border-radius: 10px;
+    font-size: 0.92rem; font-weight: 600; line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22); border: 1px solid #f59e0b;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    max-width: 90vw; text-align: center;
+  }
+  #ro-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
   /* ── Lock status bar ── */
   #lock-status-bar {
     display: none;
@@ -5027,11 +5054,18 @@ function relock() {
    - 匯出按鈕（.btn-export）保持可用，唯讀者也能匯出。
    - 用 __roLocked 標記「本函式鎖的」，解鎖時只還原這些，
      不會誤動各欄位因自身邏輯而 disabled 的狀態（例如非 Pad 時的 TIM Size）。 */
+/* 容器 → 對應的密碼保護條（點唯讀區時導引使用者去這條解鎖） */
+const RO_CONTAINER_BAR = {
+  'comp-container': 'protect-bar',
+  'sg-project-components': 'sg-protect-bar',
+  'vd-container': 'vd-protect-bar',
+};
+
 function applyReadonlyLock() {
-  const ids = ['comp-container', 'sg-project-components', 'vd-container'];
-  ids.forEach(id => {
+  Object.keys(RO_CONTAINER_BAR).forEach(id => {
     const root = document.getElementById(id);
     if (!root) return;
+    root.classList.toggle('ro-locked', isProtected);   // 整區禁止游標 + 點擊穿透
     root.querySelectorAll('input, select, textarea, button').forEach(el => {
       if (el.closest('.protect-bar')) return;           // 密碼保護條本身
       if (el.classList.contains('btn-export')) return;  // 匯出保持可用
@@ -5042,6 +5076,48 @@ function applyReadonlyLock() {
       }
     });
   });
+  bindReadonlyHints();
+}
+
+/* 未解鎖時點編輯區 → 跳提示讓使用者知道「是沒解鎖，不是當機」。
+   被禁用欄位設了 pointer-events:none，點擊會穿透到容器，這裡在容器層攔截。
+   只綁一次（容器為靜態節點，innerHTML 換不影響外層監聽）。 */
+let _roHintBound = false;
+function bindReadonlyHints() {
+  if (_roHintBound) return;
+  Object.entries(RO_CONTAINER_BAR).forEach(([cid, bid]) => {
+    const c = document.getElementById(cid);
+    if (!c) return;
+    c.addEventListener('click', (e) => {
+      if (!isProtected) return;
+      if (e.target.closest('.btn-export, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用
+      showReadonlyHint(bid);
+    }, true);
+    _roHintBound = true;   // 至少綁到一個容器才算數
+  });
+}
+
+function showReadonlyHint(barId) {
+  roToast('🔒 目前為唯讀狀態，請先點「解鎖」並輸入密碼，才能編輯或新增元件');
+  const bar = document.getElementById(barId);
+  if (!bar) return;
+  bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  bar.classList.remove('ro-flash');
+  void bar.offsetWidth;            // 強制 reflow，讓動畫可重複觸發
+  bar.classList.add('ro-flash');
+  setTimeout(() => bar.classList.remove('ro-flash'), 2400);
+}
+
+function roToast(msg) {
+  let t = document.getElementById('ro-toast');
+  if (!t) { t = document.createElement('div'); t.id = 'ro-toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(roToast._t);
+  roToast._t = setTimeout(() => {
+    const el = document.getElementById('ro-toast');
+    if (el) el.classList.remove('show');
+  }, 2800);
 }
 
 async function toggleProtection() {
