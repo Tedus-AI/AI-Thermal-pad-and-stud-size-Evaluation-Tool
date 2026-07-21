@@ -4349,6 +4349,32 @@
   </div>
 </div>
 
+<!-- 系統管理員：強制請離佔用編輯鎖的人員 -->
+<div id="admin-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)adminClose()">
+  <div class="lock-modal-box">
+    <h3 class="lock-modal-title">&#128737; 系統管理員</h3>
+    <div id="admin-auth">
+      <p class="lock-modal-text">請輸入系統管理員密碼以繼續。</p>
+      <input type="password" id="admin-pwd" placeholder="密碼" autocomplete="off"
+        onkeydown="if(event.key==='Enter')adminVerify()"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;margin:6px 0;">
+      <div class="lock-modal-actions">
+        <button onclick="adminVerify()" class="lock-modal-btn lock-modal-teams-btn">確認</button>
+        <button onclick="adminClose()" class="lock-modal-btn">取消</button>
+      </div>
+    </div>
+    <div id="admin-panel" style="display:none">
+      <div id="admin-lock-info" class="lock-modal-info"></div>
+      <p id="admin-status" class="lock-modal-text" style="color:#1d4ed8;min-height:1.2em;"></p>
+      <div class="lock-modal-actions" id="admin-actions"></div>
+      <div class="lock-modal-actions" style="margin-top:6px;">
+        <button onclick="adminRefresh()" class="lock-modal-btn">🔄 重新整理狀態</button>
+        <button onclick="adminClose()" class="lock-modal-btn">關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="container">
 
   <div class="header">
@@ -4361,6 +4387,7 @@
       <button id="btn-sp-login" onclick="handleSpLogin()" style="display:none">&#128273; 登入 SharePoint</button>
       <button id="btn-sp-logout" onclick="handleSpLogout()" style="display:none">&#128682; 登出</button>
       <span id="sp-user-info" style="display:none"></span>
+      <button id="btn-admin" onclick="adminOpen()" title="系統管理員：強制請離佔用編輯鎖的人員（需密碼）" style="font-size:0.72rem; padding:3px 9px;">&#128737; 管理</button>
     </div>
   </div>
 
@@ -5616,6 +5643,25 @@ async function _onLockLost(msg) {
   alert(msg);
 }
 
+// 被系統管理員請離：此時仍持鎖 → 先自動儲存(通過驗鎖)，再釋放鎖、退回上鎖並通知。
+let _evicting = false;
+async function _handleEviction(lk) {
+  let saved = false;
+  try {
+    if (typeof hasUnsavedEdits === 'function' && hasUnsavedEdits() && typeof saveAllTabs === 'function') {
+      await saveAllTabs();   // 存檔(SharePoint 模式內含釋放鎖 + relock)
+      saved = true;
+    }
+  } catch (e) { console.warn('[evict] 自動儲存失敗：', e); }
+  try { await dbAdapter.releaseLock(); } catch (e) {}   // 確保釋放(無變更/未 relock 時)
+  if (!isProtected) relock();
+  if (!fbIsProtected) _fbRelockUI();
+  updateLockStatusBar();
+  const who = lk && lk.evictBy ? '（由 ' + lk.evictBy + ' 執行）' : '';
+  alert('🔔 系統管理員已將你請離編輯狀態' + who + '。\n' +
+        (saved ? '你的變更已自動儲存，資料庫已上鎖。' : '（無未儲存變更）資料庫已上鎖。'));
+}
+
 // 由 60 秒輪詢呼叫：閒置自動釋放、偵測鎖被接手、接近過期則續約
 async function _maintainLock() {
   if (!_iHoldLock()) return;
@@ -5631,6 +5677,12 @@ async function _maintainLock() {
   const mine = lk && acct && lk.lockedByEmail === acct.email && new Date(lk.expiresAt) > new Date();
   if (!mine) {
     await _onLockLost('⚠️ 你的編輯鎖已逾時並被釋放或被他人接手，已退出編輯狀態。需要時請重新解鎖以取得鎖。');
+    return;
+  }
+  // (2.5) 系統管理員請離：旗標在自己的鎖上 → 自動儲存後釋放、退回上鎖
+  if (lk.evictRequested && !_evicting) {
+    _evicting = true;
+    try { await _handleEviction(lk); } finally { _evicting = false; }
     return;
   }
   // (3) 剩不到半個 TTL → 續約（再次 acquireLock 會延長自己的 expiresAt；被接手時丟 LockError）
@@ -9262,6 +9314,116 @@ function showLockWarning(lockError) {
 function closeLockWarning() {
   const modal = document.getElementById('lock-warning-modal');
   if (modal) modal.style.display = 'none';
+}
+
+/* ============================
+   系統管理員：強制請離佔用編輯鎖的人員（密碼 0420）
+   優先安全路徑：對持鎖者下「請離」旗標 → 對方端輪詢偵測到後自動儲存並釋放、退回上鎖。
+   最後手段：對方離線/無回應時可「強制清除鎖」（對方未存變更會遺失）。
+   ============================ */
+const ADMIN_PASSWORD = '0420';
+let _adminAuthed = false;
+
+function adminOpen() {
+  _adminAuthed = false;
+  const m = document.getElementById('admin-modal');
+  if (!m) return;
+  document.getElementById('admin-auth').style.display = '';
+  document.getElementById('admin-panel').style.display = 'none';
+  const pwd = document.getElementById('admin-pwd');
+  if (pwd) pwd.value = '';
+  m.style.display = 'flex';
+  setTimeout(() => { if (pwd) pwd.focus(); }, 50);
+}
+
+function adminClose() {
+  const m = document.getElementById('admin-modal');
+  if (m) m.style.display = 'none';
+}
+
+function adminVerify() {
+  const pwd = document.getElementById('admin-pwd');
+  if (!pwd || pwd.value !== ADMIN_PASSWORD) {
+    alert('密碼錯誤');
+    if (pwd) { pwd.value = ''; pwd.focus(); }
+    return;
+  }
+  _adminAuthed = true;
+  document.getElementById('admin-auth').style.display = 'none';
+  document.getElementById('admin-panel').style.display = '';
+  adminRefresh();
+}
+
+async function adminRefresh() {
+  if (!_adminAuthed) return;
+  const infoEl = document.getElementById('admin-lock-info');
+  const statusEl = document.getElementById('admin-status');
+  const actionsEl = document.getElementById('admin-actions');
+  statusEl.textContent = '';
+  actionsEl.innerHTML = '';
+  if (!(dbAdapter.isSharePointMode && dbAdapter.isSharePointMode())) {
+    infoEl.innerHTML = '<div>本機（單機檔案）模式無共用編輯鎖，無需管理。</div>';
+    return;
+  }
+  if (!(dbAdapter.isSignedIn && dbAdapter.isSignedIn())) {
+    infoEl.innerHTML = '<div>尚未登入 SharePoint，請先於右上角登入後再管理。</div>';
+    return;
+  }
+  infoEl.innerHTML = '<div>讀取編輯鎖狀態中…</div>';
+  let lk = null;
+  try { lk = await dbAdapter.peekLock(); }
+  catch (e) { infoEl.innerHTML = '<div>讀取鎖狀態失敗：' + escapeHtml(String(e.message || e)) + '</div>'; return; }
+  const fmt = (t) => t ? new Date(t).toLocaleString('zh-TW') : '-';
+  if (!lk || !lk.lockedByEmail) {
+    infoEl.innerHTML = '<div>✅ 目前<strong>無人</strong>佔用編輯鎖，資料庫可正常解鎖編輯。</div>';
+    return;
+  }
+  const expired = lk.expiresAt && new Date(lk.expiresAt) <= new Date();
+  infoEl.innerHTML =
+    '<div><strong>佔用者：</strong>' + escapeHtml(lk.lockedBy || '-') + '</div>' +
+    '<div><strong>信箱：</strong>' + escapeHtml(lk.lockedByEmail || '-') + '</div>' +
+    '<div><strong>鎖定於：</strong>' + fmt(lk.lockedAt) + '</div>' +
+    '<div><strong>預計自動解鎖：</strong>' + fmt(lk.expiresAt) + (expired ? '（已逾時）' : '') + '</div>' +
+    (lk.evictRequested ? '<div style="color:#b45309;">⏳ 已送出請離要求（' + escapeHtml(lk.evictBy || '') + '），等待對方端自動儲存並釋放…</div>' : '');
+  const evictBtn = document.createElement('button');
+  evictBtn.className = 'lock-modal-btn lock-modal-teams-btn';
+  evictBtn.textContent = '🚪 強制請離（對方自動存檔並上鎖）';
+  evictBtn.onclick = adminEvict;
+  actionsEl.appendChild(evictBtn);
+  const forceBtn = document.createElement('button');
+  forceBtn.className = 'lock-modal-btn';
+  forceBtn.style.background = '#dc2626';
+  forceBtn.style.color = '#fff';
+  forceBtn.textContent = '⚠ 強制清除鎖（未存變更會遺失）';
+  forceBtn.onclick = adminForceRelease;
+  actionsEl.appendChild(forceBtn);
+}
+
+async function adminEvict() {
+  const statusEl = document.getElementById('admin-status');
+  const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
+  const by = (acct && acct.name) || '系統管理員';
+  statusEl.textContent = '送出請離要求中…';
+  try {
+    const lk = await dbAdapter.requestEvict(by);
+    if (!lk) { statusEl.textContent = '目前無人佔用編輯鎖。'; await adminRefresh(); return; }
+    statusEl.textContent = '✅ 已送出請離。對方端會在約 60 秒內自動儲存並釋放編輯鎖，之後即可解鎖編輯；可按「重新整理狀態」查看是否已釋放。';
+  } catch (e) {
+    statusEl.textContent = '請離失敗：' + (e.message || e);
+  }
+}
+
+async function adminForceRelease() {
+  if (!confirm('強制清除編輯鎖會讓對方「尚未儲存」的變更遺失，僅在對方已離線且無法自動儲存時使用。\n\n確定要強制清除嗎？')) return;
+  const statusEl = document.getElementById('admin-status');
+  statusEl.textContent = '強制清除中…';
+  try {
+    const lk = await dbAdapter.forceReleaseLock();
+    statusEl.textContent = lk ? '✅ 已強制清除編輯鎖，資料庫現在可解鎖編輯。' : '目前無人佔用編輯鎖。';
+    await adminRefresh();
+  } catch (e) {
+    statusEl.textContent = '強制清除失敗：' + (e.message || e);
+  }
 }
 
 // 資料庫健康橫幅：壞檔唯讀保護時置頂警告（updateLockStatusBar 的所有呼叫點會一併刷新）

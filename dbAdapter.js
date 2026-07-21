@@ -359,6 +359,18 @@ const dbAdapter = {
     return await graphDb.peekLock();
   },
 
+  /* 系統管理員：對持鎖者下請離旗標（對方端會自動儲存並釋放） */
+  async requestEvict(byName) {
+    if (DB_MODE !== 'sharepoint') return null;
+    return await graphDb.requestEvict(byName);
+  },
+
+  /* 系統管理員最後手段：強制清除鎖（對方未存變更會遺失） */
+  async forceReleaseLock() {
+    if (DB_MODE !== 'sharepoint') return null;
+    return await graphDb.forceReleaseLock();
+  },
+
   /* ─── TCP Image File Storage ─────────────────────────── */
   async uploadTcpImage(projectId, catKey, jpegBlob) {
     if (DB_MODE !== 'sharepoint') return null;
