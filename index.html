@@ -7983,9 +7983,9 @@ async function tcpFlipImg(axis) {
 }
 
 /* ── 局部放大鏡 ──
-   點「🔍 局部放大」→ 在工作區框選一塊 → 以 html2canvas 對工作區(含圖片與標註)
-   快照、裁出該框放大到燈箱檢視。純檢視輔助、不改任何資料，故唯讀模式也能用。
-   放大層(z-index 40，pointer-events 作用時才開)蓋在標註之上攔截框選，
+   點「🔍 局部放大」→ 在工作區框選一塊 → 底圖直接取原圖 natural 解析度重繪(最銳利)，
+   標註再以 html2canvas 只拍標註層合成疊上，放大到燈箱檢視。純檢視輔助、不改任何資料，
+   故唯讀模式也能用。放大層(z-index 40，pointer-events 作用時才開)蓋在標註之上攔截框選，
    因此編輯模式下框選不會誤新增標註(模式互斥)。 */
 function tcpToggleMagnify() {
   const layer = document.getElementById('tcp-magnify-layer');
@@ -8059,28 +8059,102 @@ function tcpSetupMagnifyDrag(layer) {
   layer.addEventListener('mouseleave', (e) => { if (start) finish(e); });
 }
 
+/* 放大：底圖直接取「原圖 natural 解析度」重繪選區（最銳利），再把標註（marker/label/
+   散熱框）以 html2canvas 只拍標註層合成疊上，維持與畫面完全一致的樣式。
+   旋轉/翻轉皆已 bake 進 imageData（非 CSS transform），故 drawImage 原圖不受影響；
+   crop 為 imgFrame 視窗（frame overflow:hidden 裁切），可見區＝選框 ∩ frame ∩ 影像。 */
 async function tcpShowZoom(x, y, w, h) {
-  const ws = document.getElementById('tcp-workspace');
-  if (!ws || typeof html2canvas !== 'function') return;
-  const SCALE = 3;   // 快照密度：越高放大後越清晰
-  let canvas;
-  try {
-    canvas = await html2canvas(ws, {
-      scale: SCALE, useCORS: true, backgroundColor: '#fff',
-      // 不要把編輯把手/刪除鈕/放大層本身拍進去
-      ignoreElements: (el) => el.classList && (
-        el.classList.contains('tcp-rh') ||
-        el.classList.contains('tcp-delete-photo-btn') ||
-        el.classList.contains('tcp-replace-btn') ||
-        el.classList.contains('tcp-magnify-layer') ||
-        el.classList.contains('tcp-crop-overlay')),
-    });
-  } catch (err) { console.warn('[magnify] html2canvas 失敗：', err); return; }
-  const sw = Math.max(1, Math.round(w * SCALE)), sh = Math.max(1, Math.round(h * SCALE));
-  const sub = document.createElement('canvas');
-  sub.width = sw; sub.height = sh;
-  sub.getContext('2d').drawImage(canvas, Math.round(x * SCALE), Math.round(y * SCALE), sw, sh, 0, 0, sw, sh);
-  tcpOpenZoomLightbox(sub, w / h);
+  const ws   = document.getElementById('tcp-workspace');
+  const img  = document.getElementById('tcp-photo-img');
+  const page = _tcpActivePage;
+  const f    = page && page.imgFrame;
+  if (!ws) return;
+
+  // 沒有可用的原圖/座標 → 退回整體快照（保底）
+  const canNative = img && f && img.naturalWidth > 0 && f.iw > 0 && f.ih > 0;
+
+  const out = document.createElement('canvas');
+  let cw, ch;
+
+  if (canNative) {
+    const imgAbsX = f.x + f.ix, imgAbsY = f.y + f.iy;   // 影像在工作區的絕對左上
+    const dispW = f.iw, dispH = f.ih;                    // 影像顯示尺寸
+    const kNatX = img.naturalWidth / dispW, kNatY = img.naturalHeight / dispH;  // 顯示px→原圖px
+    const fw = (f.fw != null ? f.fw : dispW), fh = (f.fh != null ? f.fh : dispH);
+
+    // 目標畫布密度：以原圖密度重繪（越大越清晰），上限避免畫布過大
+    const MAXPX = 2800;
+    let k = kNatX;
+    if (w * k > MAXPX) k = MAXPX / w;
+    if (h * k > MAXPX) k = Math.min(k, MAXPX / h);
+    cw = Math.max(1, Math.round(w * k)); ch = Math.max(1, Math.round(h * k));
+    out.width = cw; out.height = ch;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch);
+
+    // 可見影像區 = 選框 ∩ frame視窗 ∩ 影像 → 以原圖 natural 像素重繪
+    const vx0 = Math.max(x, f.x, imgAbsX), vy0 = Math.max(y, f.y, imgAbsY);
+    const vx1 = Math.min(x + w, f.x + fw, imgAbsX + dispW);
+    const vy1 = Math.min(y + h, f.y + fh, imgAbsY + dispH);
+    if (vx1 > vx0 && vy1 > vy0) {
+      const sx = (vx0 - imgAbsX) * kNatX, sy = (vy0 - imgAbsY) * kNatY;
+      const sw = (vx1 - vx0) * kNatX,     sh = (vy1 - vy0) * kNatY;
+      const dx = (vx0 - x) * k, dy = (vy0 - y) * k;
+      const dw = (vx1 - vx0) * k, dh = (vy1 - vy0) * k;
+      try { ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh); }
+      catch (e) { console.warn('[magnify] 原圖重繪失敗：', e); }
+    }
+
+    // 疊上標註：暫時隱藏影像 + 背景透明，html2canvas 只拍標註，裁同區合成
+    if (typeof html2canvas === 'function' && page.annotations && page.annotations.length) {
+      const outer = document.getElementById('tcp-img-outer');
+      const frame = document.getElementById('tcp-img-frame');
+      const prev = { imgD: img.style.display, wsB: ws.style.background,
+                     oB: outer ? outer.style.background : '', fB: frame ? frame.style.background : '' };
+      img.style.display = 'none';
+      ws.style.background = 'transparent';
+      if (outer) outer.style.background = 'transparent';
+      if (frame) frame.style.background = 'transparent';
+      const AS = 3;
+      let annoCanvas = null;
+      try {
+        annoCanvas = await html2canvas(ws, {
+          scale: AS, useCORS: true, backgroundColor: null,
+          ignoreElements: (el) => el.classList && (
+            el.classList.contains('tcp-rh') ||
+            el.classList.contains('tcp-delete-photo-btn') ||
+            el.classList.contains('tcp-replace-btn') ||
+            el.classList.contains('tcp-magnify-layer') ||
+            el.classList.contains('tcp-crop-overlay')),
+        });
+      } catch (e) { console.warn('[magnify] 標註快照失敗：', e); }
+      img.style.display = prev.imgD; ws.style.background = prev.wsB;
+      if (outer) outer.style.background = prev.oB;
+      if (frame) frame.style.background = prev.fB;
+      if (annoCanvas) {
+        try { ctx.drawImage(annoCanvas, x * AS, y * AS, w * AS, h * AS, 0, 0, cw, ch); }
+        catch (e) { console.warn('[magnify] 標註合成失敗：', e); }
+      }
+    }
+  } else {
+    // 保底：整體 html2canvas 快照再裁切
+    if (typeof html2canvas !== 'function') return;
+    const S = 3;
+    let canvas;
+    try {
+      canvas = await html2canvas(ws, { scale: S, useCORS: true, backgroundColor: '#fff',
+        ignoreElements: (el) => el.classList && (
+          el.classList.contains('tcp-rh') || el.classList.contains('tcp-delete-photo-btn') ||
+          el.classList.contains('tcp-replace-btn') || el.classList.contains('tcp-magnify-layer') ||
+          el.classList.contains('tcp-crop-overlay')) });
+    } catch (err) { console.warn('[magnify] html2canvas 失敗：', err); return; }
+    cw = Math.max(1, Math.round(w * S)); ch = Math.max(1, Math.round(h * S));
+    out.width = cw; out.height = ch;
+    out.getContext('2d').drawImage(canvas, Math.round(x * S), Math.round(y * S), cw, ch, 0, 0, cw, ch);
+  }
+
+  tcpOpenZoomLightbox(out, w / h);
 }
 
 function tcpOpenZoomLightbox(canvasEl, aspect) {
