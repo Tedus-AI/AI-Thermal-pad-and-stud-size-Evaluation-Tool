@@ -373,6 +373,32 @@ const graphDb = {
     currentLock = null;
   },
 
+  /* 系統管理員：對「目前持鎖者」下請離旗標（不搶鎖）。持鎖者的輪詢偵測到
+     evictRequested 後，會自動儲存並釋放鎖、退回上鎖。回傳被請離的鎖資訊或 null。
+     旗標寫在 lock 物件上，透過樂觀寫入（If-Match）套用，不影響其他 doc/collection。 */
+  async requestEvict(byName) {
+    if (!msalAccount) throw new Error('尚未登入 SharePoint');
+    return await this._withOptimisticWrite((cache) => {
+      if (!cache.lock || !cache.lock.lockedByEmail) return { skipWrite: true, value: null };
+      cache.lock.evictRequested = true;
+      cache.lock.evictBy = byName || '系統管理員';
+      cache.lock.evictAt = new Date().toISOString();
+      return { value: { ...cache.lock } };
+    });
+  },
+
+  /* 系統管理員最後手段：強制清除編輯鎖（不論持有者）。對方尚未儲存的變更會遺失，
+     僅供對方已離線/無回應、無法自動儲存時使用。回傳被清除的鎖資訊或 null。 */
+  async forceReleaseLock() {
+    if (!msalAccount) throw new Error('尚未登入 SharePoint');
+    return await this._withOptimisticWrite((cache) => {
+      if (!cache.lock) return { skipWrite: true, value: null };
+      const prev = { ...cache.lock };
+      delete cache.lock;
+      return { value: prev };
+    });
+  },
+
   hasLock() {
     return currentLock !== null;
   },

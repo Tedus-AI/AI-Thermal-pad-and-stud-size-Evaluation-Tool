@@ -55,6 +55,16 @@
    CAS（兩人不會同時取得鎖）、(b) 他人對其他 doc/collection 的寫入不會被我們的整檔 PUT 回滾、
    (c) releaseLock 衝突時只刪自己的鎖。**兩個 repo 要同步實作**（共用同一份檔案，並發保護取決於最弱的寫入者）。
    參考實作：本 repo 的 `graphDb.js`（`_withOptimisticWrite`、`currentEtag`），對應 5G-RRU PR #66。
+7. **系統管理員強制請離（共用 `lock` 物件新增欄位）**：`cache.lock` 除 `lockedBy/lockedByEmail/
+   lockedAt/expiresAt` 外，新增 `evictRequested`(bool)、`evictBy`(name)、`evictAt`(iso)。系統管理員
+   （密碼 `0420`，頂部「🛡 管理」）以 `requestEvict(byName)` 在**目前持鎖者**的鎖上標記 `evictRequested`
+   （不搶鎖，走樂觀寫入）；持鎖者的 60 秒輪詢 `_maintainLock` 偵測到「旗標在自己鎖上」→ `_handleEviction`：
+   **先自動 `saveAllTabs`（此時仍持鎖、驗鎖通過）再 `releaseLock` + 退回上鎖**。離線/無回應時管理員可
+   `forceReleaseLock()` 硬清鎖（對方未存變更會遺失，最後手段）。⚠ **跨工具限制**：5G-RRU 的
+   `acquireLock` 續約會以全新 lock 物件覆寫（不含旗標），故要**請離 5G-RRU 端使用者，5G-RRU 也必須
+   同步實作** `requestEvict/forceReleaseLock` 與 `_handleEviction` 偵測，否則對 5G-RRU 佔用者只能靠硬清鎖或等逾時。
+   參考實作：本 repo `graphDb.js`（`requestEvict`/`forceReleaseLock`）＋ `index.html`（`_handleEviction`、
+   `admin*` 面板）。
 
 ### 反例（造成 Bug 的寫法）
 
