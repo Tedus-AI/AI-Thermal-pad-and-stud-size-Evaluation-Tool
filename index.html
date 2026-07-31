@@ -1327,6 +1327,17 @@
   }
   .sg-move-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-move-btn:disabled { opacity: 0.35; cursor: default; }
+  /* 實測 Pd 參照（來自模擬與實測驗證頁；不覆寫估值，可一鍵套用） */
+  .sg-meas-ref {
+    margin-top: 3px; font-size: 0.7rem; color: #0f766e; line-height: 1.3;
+    background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 4px;
+    padding: 1px 5px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .sg-meas-apply {
+    border: 1px solid #5eead4; background: #fff; color: #0f766e;
+    border-radius: 3px; font-size: 0.68rem; padding: 0 5px; cursor: pointer;
+  }
+  .sg-meas-apply:hover:not(:disabled) { background: #ccfbf1; }
   .sg-comp-add-btn {
     display: inline-flex;
     align-items: center;
@@ -7045,12 +7056,21 @@ function sgRenderProjectComponents() {
       const pwCell = (fieldName, val) => refLocked
         ? `<span class="sg-locked-val" title="瓦數已鎖定，請先按「解除參照」">${escapeHtml(String(val ?? ''))}</span>`
         : `<input class="sg-cell-input" type="number" step="any" value="${escapeAttr(val ?? '')}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
+      // 實測 Pd（來自同專案「模擬與實測驗證」頁；不覆寫估值，僅參照＋一鍵套用）
+      const meas = sgMeasuredPd(c, comp.Component);   // { value, source:'hot'|'rt' } 或 null
+      const measBadge = (cond) => {
+        if (!meas || meas.source !== cond) return '';
+        const fld = cond === 'rt' ? 'Power_RT(W)' : 'Power(W)';
+        const applyBtn = refLocked ? '' :
+          ` <button class="sg-meas-apply" onclick="sgApplyMeasured('${c}',${i},'${fld}')" title="套用實測值為估值">↧ 套用</button>`;
+        return `<div class="sg-meas-ref" title="來自「模擬與實測驗證」頁的實測值">🎯 實測 ${escapeHtml(String(meas.value))} W${applyBtn}</div>`;
+      };
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}</td>
-        <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}</td>
+        <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}${measBadge('hot')}</td>
+        <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}${measBadge('rt')}</td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-ts-cell">
@@ -7073,7 +7093,7 @@ function sgRenderProjectComponents() {
     let vopts = '';
     vlist.forEach((v, vi) => {
       if (presentNames.has(v.name)) return;
-      vopts += `<option value="${vi}">${escapeHtml(v.name)} - ${escapeHtml(String(v.power))}W - ${escapeHtml(v.originProjectName)}</option>`;
+      vopts += `<option value="${vi}">${escapeHtml(v.name)} - ${escapeHtml(String(v.power))}W${v.pd_meas != null && v.pd_meas !== '' ? ' ｜實測 ' + escapeHtml(String(v.pd_meas)) + 'W' : ''} - ${escapeHtml(v.originProjectName)}</option>`;
     });
     const quickAdd = (sgVariantsCache === null)
       ? `<span class="sg-lib-label">📚 從資料庫快選：</span><select disabled><option>載入中…</option></select>`
@@ -7275,11 +7295,14 @@ const SG_VARIANT_CARRY = ['Type','Qty','Power(W)','Power_RT(W)','TV_ID_mil','TV_
 function sgAggregateVariants(projects, category) {
   const field = SG_CAT_MAP[category]?.field;
   if (!field) return [];
+  const catLower = String(category).toLowerCase();
   const byKey = new Map();   // key = `${name} ${power}` -> variant（保留最早建立者）
+  const measuredByName = new Map();   // name -> { pd, source, projName, ts }（跨專案取最新實測）
   for (const [pid, proj] of Object.entries(projects || {})) {
     const items = Array.isArray(proj?.[field]) ? proj[field] : [];
     const projName = proj?.project_name || pid;
     const ts = Date.parse(proj?.meta?.timestamp || '') || Infinity;   // 無時戳 -> 最晚，不誤判為 origin
+    const tsMeas = Date.parse(proj?.meta?.timestamp || '') || 0;      // 實測取「最新」：無時戳當最舊
     for (const comp of items) {
       const name = String(comp?.Component || '').trim();
       if (!name) continue;
@@ -7300,9 +7323,23 @@ function sgAggregateVariants(projects, category) {
         });
       }
     }
+    // 收集此專案的實測 Pd（來自 validation_data，與 rf_data 同存於專案文件）
+    const vd = Array.isArray(proj?.validation_data?.[catLower]) ? proj.validation_data[catLower] : [];
+    for (const it of vd) {
+      const name = String(it?.component || '').trim();
+      if (!name || it.pd_meas === '' || it.pd_meas == null) continue;
+      if (isNaN(parseFloat(it.pd_meas))) continue;
+      const prevM = measuredByName.get(name);
+      if (!prevM || tsMeas >= prevM.ts) {
+        measuredByName.set(name, { pd: it.pd_meas, source: (it.pd_source === 'rt' ? 'rt' : 'hot'), projName, ts: tsMeas });
+      }
+    }
   }
-  return Array.from(byKey.values()).map(({ _ts, ...v }) => v)
-    .sort((a, b) => a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0));
+  return Array.from(byKey.values()).map(({ _ts, ...v }) => {
+    const m = measuredByName.get(v.name);
+    if (m) { v.pd_meas = m.pd; v.pd_meas_source = m.source; v.pd_meas_from = m.projName; }
+    return v;
+  }).sort((a, b) => a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0));
 }
 
 /* 讀一次 projects，聚合三個分類並快取到 sgVariantsCache */
@@ -7361,14 +7398,49 @@ function sgAddFromVariant(cat) {
   if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
   // 帶齊來源元件的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等），
   // 並標記為「參照」：瓦數鎖定、記錄來源專案，避免改到舊案已驗證的值。
-  sgProjectData[fieldKey].push(sgMakeComp(cat, {
+  const overrides = {
     Component: v.name,
     ...(v.src || {}),
     _ref_origin_project: v.originProjectName,
     _ref_origin_id: v.originProjectId,
     _ref_locked: true,
-  }));
+  };
+  // 若聚合到此元件的實測 Pd → 直接以實測值當起始估值（更準的起點；標記來源）
+  if (v.pd_meas != null && v.pd_meas !== '') {
+    const fld = v.pd_meas_source === 'rt' ? 'Power_RT(W)' : 'Power(W)';
+    overrides[fld] = String(v.pd_meas);
+    overrides._pd_from_meas = true;
+    overrides._pd_meas_from = v.pd_meas_from || '';
+  }
+  sgProjectData[fieldKey].push(sgMakeComp(cat, overrides));
   sgRenderProjectComponents();
+}
+
+/* 讀取某元件（同專案「模擬與實測驗證」）的實測 Pd。實測值與 rf_data 同存於專案文件，
+   故直接對名字比對即可（顯示以 Tab1 載入當下的 validation_data 為準，Tab3 存檔後重載即更新）。
+   回傳 { value, source:'hot'|'rt' } 或 null；source 決定對應高溫(Power(W))或常溫(Power_RT(W))。 */
+function sgMeasuredPd(catKey, componentName) {
+  const vd = sgProjectData && sgProjectData.validation_data;
+  if (!vd || !componentName) return null;
+  const arr = vd[String(catKey).toLowerCase()] || [];
+  const item = arr.find(i => i && i.component === componentName);
+  if (!item || item.pd_meas === '' || item.pd_meas == null) return null;
+  const m = parseFloat(item.pd_meas);
+  if (isNaN(m)) return null;
+  return { value: item.pd_meas, source: (item.pd_source === 'rt' ? 'rt' : 'hot') };
+}
+
+/* 一鍵套用：把實測值帶入對應的 Pd 估值欄（保留原欄位語意，不動其他資料）。 */
+function sgApplyMeasured(cat, idx, field) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  const comp = sgProjectData?.[SG_CAT_MAP[cat]?.field]?.[idx];
+  if (!comp || comp._ref_locked) return;
+  const meas = sgMeasuredPd(cat, comp.Component);
+  if (!meas) return;
+  comp[field] = String(meas.value);
+  const y = window.scrollY;
+  sgRenderProjectComponents();
+  window.scrollTo(0, y);
 }
 
 /* 解除參照：解鎖瓦數使其可編輯；保留 _ref_origin_* 以淡灰「曾參照自 X」追溯。 */
