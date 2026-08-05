@@ -7059,11 +7059,16 @@ function sgRenderProjectComponents() {
       // 實測 Pd（來自同專案「模擬與實測驗證」頁；不覆寫估值，僅參照＋一鍵套用）
       const meas = sgMeasuredPd(c, comp.Component);   // { value, source:'hot'|'rt' } 或 null
       const measBadge = (cond) => {
-        if (!meas || meas.source !== cond) return '';
-        const fld = cond === 'rt' ? 'Power_RT(W)' : 'Power(W)';
+        if (!meas) return '';
+        const isBoth = meas.source === 'both';
+        // both（常溫同高溫）：只在高溫欄顯示一個合併小標；hot/rt：各自欄位
+        if (isBoth ? cond !== 'hot' : meas.source !== cond) return '';
+        const label = '🎯 實測 ' + escapeHtml(String(meas.value)) + ' W' + (isBoth ? '（常溫=高溫）' : '');
+        const applyArg = isBoth ? 'both' : (cond === 'rt' ? 'Power_RT(W)' : 'Power(W)');
+        const applyTxt = isBoth ? '↧ 套用(高溫+常溫)' : '↧ 套用';
         const applyBtn = refLocked ? '' :
-          ` <button class="sg-meas-apply" onclick="sgApplyMeasured('${c}',${i},'${fld}')" title="套用實測值為估值">↧ 套用</button>`;
-        return `<div class="sg-meas-ref" title="來自「模擬與實測驗證」頁的實測值">🎯 實測 ${escapeHtml(String(meas.value))} W${applyBtn}</div>`;
+          ` <button class="sg-meas-apply" onclick="sgApplyMeasured('${c}',${i},'${applyArg}')" title="套用實測值為估值">${applyTxt}</button>`;
+        return `<div class="sg-meas-ref" title="來自「模擬與實測驗證」頁的實測值">${label}${applyBtn}</div>`;
       };
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
@@ -7331,7 +7336,8 @@ function sgAggregateVariants(projects, category) {
       if (isNaN(parseFloat(it.pd_meas))) continue;
       const prevM = measuredByName.get(name);
       if (!prevM || tsMeas >= prevM.ts) {
-        measuredByName.set(name, { pd: it.pd_meas, source: (it.pd_source === 'rt' ? 'rt' : 'hot'), projName, ts: tsMeas });
+        const mSource = it.pd_source === 'rt' ? 'rt' : it.pd_source === 'both' ? 'both' : 'hot';
+        measuredByName.set(name, { pd: it.pd_meas, source: mSource, projName, ts: tsMeas });
       }
     }
   }
@@ -7407,8 +7413,13 @@ function sgAddFromVariant(cat) {
   };
   // 若聚合到此元件的實測 Pd → 直接以實測值當起始估值（更準的起點；標記來源）
   if (v.pd_meas != null && v.pd_meas !== '') {
-    const fld = v.pd_meas_source === 'rt' ? 'Power_RT(W)' : 'Power(W)';
-    overrides[fld] = String(v.pd_meas);
+    if (v.pd_meas_source === 'both') {
+      overrides['Power(W)'] = String(v.pd_meas);
+      overrides['Power_RT(W)'] = String(v.pd_meas);
+    } else {
+      const fld = v.pd_meas_source === 'rt' ? 'Power_RT(W)' : 'Power(W)';
+      overrides[fld] = String(v.pd_meas);
+    }
     overrides._pd_from_meas = true;
     overrides._pd_meas_from = v.pd_meas_from || '';
   }
@@ -7427,7 +7438,8 @@ function sgMeasuredPd(catKey, componentName) {
   if (!item || item.pd_meas === '' || item.pd_meas == null) return null;
   const m = parseFloat(item.pd_meas);
   if (isNaN(m)) return null;
-  return { value: item.pd_meas, source: (item.pd_source === 'rt' ? 'rt' : 'hot') };
+  const source = item.pd_source === 'rt' ? 'rt' : item.pd_source === 'both' ? 'both' : 'hot';
+  return { value: item.pd_meas, source };
 }
 
 /* 一鍵套用：把實測值帶入對應的 Pd 估值欄（保留原欄位語意，不動其他資料）。 */
@@ -7437,7 +7449,12 @@ function sgApplyMeasured(cat, idx, field) {
   if (!comp || comp._ref_locked) return;
   const meas = sgMeasuredPd(cat, comp.Component);
   if (!meas) return;
-  comp[field] = String(meas.value);
+  if (field === 'both') {
+    comp['Power(W)'] = String(meas.value);
+    comp['Power_RT(W)'] = String(meas.value);
+  } else {
+    comp[field] = String(meas.value);
+  }
   const y = window.scrollY;
   sgRenderProjectComponents();
   window.scrollTo(0, y);
@@ -9796,7 +9813,8 @@ function vdRender() {
       const pdCell = item.pd_est_rt
         ? `<select class="vd-pd-sel" data-cat="${catLower}" data-idx="${idx}" onchange="vdOnPdSourceChange(this)">` +
           `<option value="hot"${pdSrc === 'hot' ? ' selected' : ''}>${escapeHtml(item.pd_est)} (高溫)</option>` +
-          `<option value="rt"${pdSrc === 'rt' ? ' selected' : ''}>${escapeHtml(item.pd_est_rt)} (常溫)</option></select>`
+          `<option value="rt"${pdSrc === 'rt' ? ' selected' : ''}>${escapeHtml(item.pd_est_rt)} (常溫)</option>` +
+          `<option value="both"${pdSrc === 'both' ? ' selected' : ''}>${escapeHtml(item.pd_est)} (常溫同高溫)</option></select>`
         : escapeHtml(item.pd_est || '-');
 
       const rowHtml = `<tr${isHidden ? ' class="vd-row-hidden"' : ''}>
