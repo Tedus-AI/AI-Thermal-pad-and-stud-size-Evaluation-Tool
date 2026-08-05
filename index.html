@@ -1362,6 +1362,27 @@
   }
   .sg-comp-quickadd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
   .sg-lib-label { font-weight: 600; font-size: 0.85rem; color: #1a3a6b; white-space: nowrap; }
+  /* 從資料庫快選：可搜尋 + 專案分組收合面板 */
+  .sg-picker { position: relative; display: inline-block; }
+  .sg-picker-trigger { padding: 5px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; cursor: pointer; font-size: 0.85rem; color: #1a3a6b; }
+  .sg-picker-trigger:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
+  .sg-picker-caret { font-size: 0.7rem; color: #64748b; }
+  .sg-picker-pop { position: absolute; z-index: 200; top: calc(100% + 4px); left: 0; width: 360px; max-width: 92vw; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.16); padding: 8px; }
+  .sg-picker-search { width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px; }
+  .sg-picker-list { max-height: 340px; overflow-y: auto; }
+  .sg-pk-group { border-bottom: 1px solid #f1f5f9; }
+  .sg-pk-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #1a3a6b; user-select: none; }
+  .sg-pk-head:hover { background: #f8fafc; }
+  .sg-pk-caret { width: 12px; color: #64748b; font-size: 0.72rem; flex: none; }
+  .sg-pk-proj { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-pk-count { font-size: 0.7rem; color: #64748b; background: #eef2f7; border-radius: 10px; padding: 0 7px; flex: none; }
+  .sg-pk-comps { padding-bottom: 4px; }
+  .sg-pk-comp { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 24px; cursor: pointer; font-size: 0.82rem; border-radius: 5px; }
+  .sg-pk-comp:hover { background: #e0f2fe; }
+  .sg-pk-cn { flex: 1; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-pk-cp { color: #334155; font-variant-numeric: tabular-nums; flex: none; }
+  .sg-pk-meas { color: #0f766e; font-size: 0.72rem; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 4px; padding: 0 5px; flex: none; }
+  .sg-pk-empty { padding: 14px 8px; text-align: center; color: #94a3b8; font-size: 0.82rem; }
   .sg-comp-quickadd select {
     padding: 4px 8px; border: 1px solid #c5d9ee; border-radius: 6px;
     font-size: 0.85rem; max-width: 460px; background: #fff; color: #1a3a6b;
@@ -6942,7 +6963,7 @@ async function sgOnProjectChange() {
   const select = document.getElementById('sg-project-select');
   sgProjectId = select.value || null;
   sgProjectData = null;
-  sgVariantsCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
+  sgVariantsCache = null; sgProjectTreeCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
   if (!sgProjectId) {
     sgRenderProjectComponents();
     snapSgClean();
@@ -7093,21 +7114,16 @@ function sgRenderProjectComponents() {
       </tr>`;
     });
 
-    const presentNames = new Set((items || []).map(c => c.Component));
-    const vlist = (sgVariantsCache && sgVariantsCache[catKey]) || [];
-    let vopts = '';
-    vlist.forEach((v, vi) => {
-      if (presentNames.has(v.name)) return;
-      vopts += `<option value="${vi}">${escapeHtml(v.name)} - ${escapeHtml(String(v.power))}W${v.pd_meas != null && v.pd_meas !== '' ? ' ｜實測 ' + escapeHtml(String(v.pd_meas)) + 'W' : ''} - ${escapeHtml(v.originProjectName)}</option>`;
-    });
     const quickAdd = (sgVariantsCache === null)
-      ? `<span class="sg-lib-label">📚 從資料庫快選：</span><select disabled><option>載入中…</option></select>`
+      ? `<span class="sg-lib-label">📚 從資料庫快選：</span><span style="font-size:0.8rem;color:#94a3b8;">載入中…</span>`
       : `<span class="sg-lib-label">📚 從資料庫快選：</span>
-         <select id="sg-lib-sel-${catKey}">
-           <option value="">${vopts ? '（請選擇：名稱・瓦數・來源專案）' : '（目前無可新增的元件）'}</option>
-           ${vopts}
-         </select>
-         <button class="sg-comp-add-btn" onclick="sgAddFromVariant('${catKey}')">&#10133; 加入</button>`;
+         <div class="sg-picker" id="sg-picker-${catKey}">
+           <button type="button" class="sg-picker-trigger" onclick="sgPickerToggle('${catKey}')">＋ 選擇元件… <span class="sg-picker-caret">▾</span></button>
+           <div class="sg-picker-pop" id="sg-picker-pop-${catKey}" style="display:none">
+             <input type="text" class="sg-picker-search" id="sg-picker-search-${catKey}" placeholder="🔍 搜尋元件 / 瓦數 / 專案（可只打片段，如 2160）" oninput="sgPickerFilter('${catKey}')" autocomplete="off">
+             <div class="sg-picker-list" id="sg-picker-list-${catKey}"></div>
+           </div>
+         </div>`;
 
     html += `</tbody></table>
       <div class="sg-comp-quickadd">${quickAdd}</div>
@@ -7291,7 +7307,10 @@ function tcpRenameComponentRef(cat, oldName, newName) {
    同名不同瓦 → 各自一筆。⚠ 純讀取：只用 getCollection，絕不寫入任何專案或集合。
    ====================================================== */
 let sgVariantsCache = null;      // { RF:[...], Digital:[...], PWR:[...] } 或 null（未載入）
+let sgProjectTreeCache = null;   // { RF:[群組], ... }：每專案→其元件（快選 B 模式的樹）
 let sgVariantsLoading = false;
+/* 快選面板 UI 狀態（每分類）：open、filter、展開的專案 id 集合 */
+const sgPickerState = { RF: null, Digital: null, PWR: null };
 
 /* 從資料庫快選複製元件時，要一併帶過去的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等） */
 const SG_VARIANT_CARRY = ['Type','Qty','Power(W)','Power_RT(W)','TV_ID_mil','TV_Qty','Temp_Sensor','Local_Qty','Remote_Qty','note'];
@@ -7348,7 +7367,50 @@ function sgAggregateVariants(projects, category) {
   }).sort((a, b) => a.name.localeCompare(b.name) || (parseFloat(a.power) || 0) - (parseFloat(b.power) || 0));
 }
 
-/* 讀一次 projects，聚合三個分類並快取到 sgVariantsCache */
+/* 建「每專案 → 其元件」樹（快選 B 模式）。不跨專案去重：同名元件在多個專案各自列出，
+   各帶該專案的瓦數與（該專案的）實測值。專案依最近建立排序，元件依名稱排序。 */
+function sgBuildProjectTree(projects, category) {
+  const field = SG_CAT_MAP[category]?.field;
+  if (!field) return [];
+  const catLower = String(category).toLowerCase();
+  const groups = [];
+  for (const [pid, proj] of Object.entries(projects || {})) {
+    const items = Array.isArray(proj?.[field]) ? proj[field] : [];
+    if (!items.length) continue;
+    const projName = proj?.project_name || pid;
+    const ts = Date.parse(proj?.meta?.timestamp || '') || 0;
+    const measMap = new Map();   // 該專案實測值：name → { pd, source }
+    const vd = Array.isArray(proj?.validation_data?.[catLower]) ? proj.validation_data[catLower] : [];
+    for (const it of vd) {
+      const nm = String(it?.component || '').trim();
+      if (!nm || it.pd_meas === '' || it.pd_meas == null || isNaN(parseFloat(it.pd_meas))) continue;
+      measMap.set(nm, { pd: it.pd_meas, source: it.pd_source === 'rt' ? 'rt' : it.pd_source === 'both' ? 'both' : 'hot' });
+    }
+    const comps = [];
+    for (const comp of items) {
+      const name = String(comp?.Component || '').trim();
+      if (!name) continue;
+      const src = {};
+      SG_VARIANT_CARRY.forEach(k => { if (comp[k] !== undefined) src[k] = comp[k]; });
+      const m = measMap.get(name);
+      comps.push({
+        name,
+        power: comp?.['Power(W)'] ?? '',
+        power_rt: comp?.['Power_RT(W)'] ?? '',
+        src,
+        pd_meas: m ? m.pd : null,
+        pd_meas_source: m ? m.source : null,
+      });
+    }
+    if (!comps.length) continue;
+    comps.sort((a, b) => a.name.localeCompare(b.name));
+    groups.push({ projId: pid, projName, ts, comps });
+  }
+  groups.sort((a, b) => (b.ts - a.ts) || a.projName.localeCompare(b.projName));   // 近期專案在上
+  return groups;
+}
+
+/* 讀一次 projects，聚合三個分類並快取到 sgVariantsCache（同時建每專案元件樹） */
 async function sgLoadVariantsCache() {
   let projects;
   try {
@@ -7356,12 +7418,18 @@ async function sgLoadVariantsCache() {
   } catch (e) {
     console.warn('[variants] 讀取 projects 失敗：', e);
     sgVariantsCache = { RF: [], Digital: [], PWR: [] };
+    sgProjectTreeCache = { RF: [], Digital: [], PWR: [] };
     return sgVariantsCache;
   }
   sgVariantsCache = {
     RF:      sgAggregateVariants(projects, 'RF'),
     Digital: sgAggregateVariants(projects, 'Digital'),
     PWR:     sgAggregateVariants(projects, 'PWR'),
+  };
+  sgProjectTreeCache = {
+    RF:      sgBuildProjectTree(projects, 'RF'),
+    Digital: sgBuildProjectTree(projects, 'Digital'),
+    PWR:     sgBuildProjectTree(projects, 'PWR'),
   };
   return sgVariantsCache;
 }
@@ -7393,37 +7461,138 @@ function sgMakeComp(cat, overrides) {
   }, overrides || {});
 }
 
-/* 從資料庫快選新增一顆元件到目前專案（Phase 2：先不鎖瓦數、可編輯） */
-function sgAddFromVariant(cat) {
+
+/* ── 從資料庫快選：可搜尋 + 專案分組收合面板（B 模式：每專案列出其元件）──
+   父列＝專案（預設收合、顯示元件數），點開才展開子列（元件）；搜尋框子字串比對
+   名稱/瓦數/專案（不分大小寫），命中群組自動展開；點元件即加入。 */
+function sgPickerToggle(cat) {
+  if (isProtected) return;   // 未解鎖不可新增（trigger 本已被禁用，雙保險）
+  const pop = document.getElementById('sg-picker-pop-' + cat);
+  if (!pop) return;
+  const opening = pop.style.display === 'none';
+  ['RF', 'Digital', 'PWR'].forEach(k => { if (k !== cat) sgPickerClose(k); });
+  if (!opening) { sgPickerClose(cat); return; }
+  sgPickerState[cat] = { open: true, filter: '', expanded: new Set() };
+  pop.style.display = 'block';
+  const listEl = document.getElementById('sg-picker-list-' + cat);
+  if (listEl) listEl.onclick = (e) => sgPickerListClick(e, cat);
+  sgPickerRender(cat);
+  const s = document.getElementById('sg-picker-search-' + cat);
+  if (s) { s.value = ''; setTimeout(() => s.focus(), 30); }
+  setTimeout(() => document.addEventListener('mousedown', sgPickerOutside, true), 0);
+}
+
+function sgPickerClose(cat) {
+  const pop = document.getElementById('sg-picker-pop-' + cat);
+  if (pop) pop.style.display = 'none';
+  if (sgPickerState[cat]) sgPickerState[cat].open = false;
+  if (!['RF', 'Digital', 'PWR'].some(k => sgPickerState[k] && sgPickerState[k].open)) {
+    document.removeEventListener('mousedown', sgPickerOutside, true);
+  }
+}
+
+function sgPickerOutside(e) {
+  ['RF', 'Digital', 'PWR'].forEach(cat => {
+    const st = sgPickerState[cat];
+    if (!st || !st.open) return;
+    const wrap = document.getElementById('sg-picker-' + cat);
+    if (wrap && !wrap.contains(e.target)) sgPickerClose(cat);
+  });
+}
+
+function sgPickerFilter(cat) {
+  const s = document.getElementById('sg-picker-search-' + cat);
+  if (!sgPickerState[cat]) sgPickerState[cat] = { open: true, filter: '', expanded: new Set() };
+  sgPickerState[cat].filter = (s ? s.value : '').trim().toLowerCase();
+  sgPickerRender(cat);
+}
+
+function sgPickerListClick(e, cat) {
+  const comp = e.target.closest('.sg-pk-comp');
+  if (comp) { sgPickerAdd(cat, comp.dataset.proj, comp.dataset.name); return; }
+  const head = e.target.closest('.sg-pk-head');
+  if (head) {
+    const st = sgPickerState[cat];
+    if (!st) return;
+    const id = head.dataset.proj;
+    if (st.expanded.has(id)) st.expanded.delete(id); else st.expanded.add(id);
+    sgPickerRender(cat);
+  }
+}
+
+function sgPickerRender(cat) {
+  const listEl = document.getElementById('sg-picker-list-' + cat);
+  const st = sgPickerState[cat];
+  if (!listEl || !st) return;
+  const groups = (sgProjectTreeCache && sgProjectTreeCache[cat]) || [];
+  const present = new Set(((sgProjectData && sgProjectData[SG_CAT_MAP[cat].field]) || []).map(c => c.Component));
+  const f = st.filter;
+  const hit = (comp, projName) => !f ||
+    comp.name.toLowerCase().includes(f) ||
+    String(comp.power).toLowerCase().includes(f) ||
+    String(comp.power_rt).toLowerCase().includes(f) ||
+    projName.toLowerCase().includes(f);
+  let html = '';
+  let anyShown = false;
+  for (const g of groups) {
+    const comps = g.comps.filter(c => !present.has(c.name) && hit(c, g.projName));
+    if (!comps.length) continue;
+    anyShown = true;
+    const expanded = f ? true : st.expanded.has(g.projId);   // 搜尋時自動展開命中群組
+    html += `<div class="sg-pk-group"><div class="sg-pk-head" data-proj="${escapeAttr(g.projId)}">` +
+      `<span class="sg-pk-caret">${expanded ? '▾' : '▸'}</span>` +
+      `<span class="sg-pk-proj" title="${escapeAttr(g.projName)}">${escapeHtml(g.projName)}</span>` +
+      `<span class="sg-pk-count">${comps.length}</span></div>`;
+    if (expanded) {
+      html += `<div class="sg-pk-comps">`;
+      for (const c of comps) {
+        const measTxt = (c.pd_meas != null && c.pd_meas !== '')
+          ? ` <span class="sg-pk-meas">實測 ${escapeHtml(String(c.pd_meas))}W</span>` : '';
+        html += `<div class="sg-pk-comp" data-proj="${escapeAttr(g.projId)}" data-name="${escapeAttr(c.name)}" title="加入此元件（參照自 ${escapeAttr(g.projName)}）">` +
+          `<span class="sg-pk-cn">${escapeHtml(c.name)}</span>` +
+          `<span class="sg-pk-cp">${escapeHtml(String(c.power))}W</span>${measTxt}</div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  if (!anyShown) {
+    html = `<div class="sg-pk-empty">${f ? '找不到符合「' + escapeHtml(f) + '」的元件' : '目前無可新增的元件'}</div>`;
+  }
+  listEl.innerHTML = html;
+}
+
+function sgPickerAdd(cat, projId, compName) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
   if (!sgProjectData) return;
-  const sel = document.getElementById('sg-lib-sel-' + cat);
-  if (!sel || sel.value === '') return;
-  const v = (sgVariantsCache?.[cat] || [])[parseInt(sel.value, 10)];
-  if (!v) return;
+  const groups = (sgProjectTreeCache && sgProjectTreeCache[cat]) || [];
+  const g = groups.find(x => x.projId === projId);
+  const c = g && g.comps.find(x => x.name === compName);
+  if (!c) return;
   const fieldKey = SG_CAT_MAP[cat].field;
   if (!sgProjectData[fieldKey]) sgProjectData[fieldKey] = [];
-  // 帶齊來源元件的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等），
-  // 並標記為「參照」：瓦數鎖定、記錄來源專案，避免改到舊案已驗證的值。
+  if (sgProjectData[fieldKey].some(x => x.Component === c.name)) { sgPickerClose(cat); return; }  // 同名已存在
   const overrides = {
-    Component: v.name,
-    ...(v.src || {}),
-    _ref_origin_project: v.originProjectName,
-    _ref_origin_id: v.originProjectId,
+    Component: c.name,
+    ...(c.src || {}),
+    _ref_origin_project: g.projName,
+    _ref_origin_id: g.projId,
     _ref_locked: true,
   };
-  // 若聚合到此元件的實測 Pd → 直接以實測值當起始估值（更準的起點；標記來源）
-  if (v.pd_meas != null && v.pd_meas !== '') {
-    if (v.pd_meas_source === 'both') {
-      overrides['Power(W)'] = String(v.pd_meas);
-      overrides['Power_RT(W)'] = String(v.pd_meas);
+  // 帶入該專案的實測 Pd 當起始估值（依 source；both = 高溫+常溫）
+  if (c.pd_meas != null && c.pd_meas !== '') {
+    if (c.pd_meas_source === 'both') {
+      overrides['Power(W)'] = String(c.pd_meas);
+      overrides['Power_RT(W)'] = String(c.pd_meas);
     } else {
-      const fld = v.pd_meas_source === 'rt' ? 'Power_RT(W)' : 'Power(W)';
-      overrides[fld] = String(v.pd_meas);
+      const fld = c.pd_meas_source === 'rt' ? 'Power_RT(W)' : 'Power(W)';
+      overrides[fld] = String(c.pd_meas);
     }
     overrides._pd_from_meas = true;
-    overrides._pd_meas_from = v.pd_meas_from || '';
+    overrides._pd_meas_from = g.projName;
   }
   sgProjectData[fieldKey].push(sgMakeComp(cat, overrides));
+  sgPickerClose(cat);
   sgRenderProjectComponents();
 }
 
@@ -9332,7 +9501,7 @@ async function sgDeleteProject(projectId, projectName) {
     // 刪除整個專案文件(元件/設定皆內嵌其中一併刪除)
     await dbAdapter.deleteDoc('projects', projectId);
     if (sgProjectId === projectId) { sgProjectId = null; sgProjectData = null; }
-    sgVariantsCache = null;          // 專案集合改變 → 失效快選快取
+    sgVariantsCache = null; sgProjectTreeCache = null;   // 專案集合改變 → 失效快選快取
     await sgLoadProjects();          // 重讀並刷新下拉(刪到當前專案會自動清空顯示)
     sgShowStatus(`已刪除專案「${projectName}」`, 'success');
   } catch (e) {
