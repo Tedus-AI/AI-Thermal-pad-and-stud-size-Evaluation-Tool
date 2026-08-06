@@ -26,9 +26,14 @@
     }
   },
   "feedback_items":  { ... },   // AI-Thermal Tab5
+  "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
   "version":         <number>
 }
 ```
+
+> `login_history`：登入時節流(同 email 60 分鐘一筆)逐筆 `setDoc` 一個唯一 id doc，超過上限刪最舊；
+> 系統管理員面板「🕘 使用者登入紀錄」讀出依時間列出。頂層 collection 天然與其他工具寫入隔離；
+> **僅本工具會寫**，要含 5G-RRU 端登入需 5G-RRU 同步記錄到同一 collection。
 
 ### 規則
 

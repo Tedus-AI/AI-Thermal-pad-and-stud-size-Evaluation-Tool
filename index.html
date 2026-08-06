@@ -309,6 +309,18 @@
   }
   #ro-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* 系統管理員：登入紀錄清單 */
+  #admin-loginhist { margin-top: 4px; }
+  .admin-lh-head { font-size: 0.8rem; font-weight: 600; color: #1a3a6b; margin: 4px 2px 6px; }
+  .admin-lh-list { max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; }
+  .admin-lh-row { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; font-size: 0.78rem; border-bottom: 1px solid #f1f5f9; }
+  .admin-lh-row:last-child { border-bottom: none; }
+  .admin-lh-row:nth-child(even) { background: #f8fafc; }
+  .admin-lh-time { color: #64748b; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+  .admin-lh-name { color: #0f172a; font-weight: 600; flex: none; }
+  .admin-lh-email { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
+  .admin-lh-empty { padding: 12px 8px; text-align: center; color: #94a3b8; font-size: 0.8rem; }
+
   /* ── Lock status bar ── */
   #lock-status-bar {
     display: none;
@@ -4399,7 +4411,12 @@
       <div id="admin-lock-info" class="lock-modal-info"></div>
       <p id="admin-status" class="lock-modal-text" style="color:#1d4ed8;min-height:1.2em;"></p>
       <div class="lock-modal-actions" id="admin-actions"></div>
-      <div class="lock-modal-actions" style="margin-top:6px;">
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0 8px;">
+      <div class="lock-modal-actions">
+        <button onclick="adminShowLoginHistory()" class="lock-modal-btn">&#128336; 使用者登入紀錄</button>
+      </div>
+      <div id="admin-loginhist"></div>
+      <div class="lock-modal-actions" style="margin-top:10px;">
         <button onclick="adminRefresh()" class="lock-modal-btn">🔄 重新整理狀態</button>
         <button onclick="adminClose()" class="lock-modal-btn">關閉</button>
       </div>
@@ -5608,6 +5625,44 @@ function _updateSpHeaderSignedIn() {
   if (btnLogin) btnLogin.style.display = 'none';
   if (btnLogout) btnLogout.style.display = '';
   if (userInfo) { userInfo.style.display = ''; userInfo.textContent = acct.email; }
+  recordLoginHistory();   // 記錄登入(節流，供管理員查詢近期誰登入)
+}
+
+/* 記錄一筆登入到共用 top-level collection `login_history`（供系統管理員查詢近期登入者）。
+   節流：同一 email 60 分鐘內已有紀錄則略過，避免每次 reload 都寫共用檔。
+   以唯一 id 逐筆寫入（不同 key → 樂觀寫入並發安全）；超過上限刪最舊者。fire-and-forget。
+   ⚠ 僅本工具會寫；要含 5G-RRU 端登入需 5G-RRU 同步實作。 */
+async function recordLoginHistory() {
+  try {
+    if (!(dbAdapter.isSharePointMode && dbAdapter.isSharePointMode())) return;
+    if (!(dbAdapter.isSignedIn && dbAdapter.isSignedIn())) return;
+    const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
+    if (!acct || !acct.email) return;
+    const hist = (await dbAdapter.getCollection('login_history')) || {};
+    const THROTTLE_MS = 60 * 60 * 1000;
+    const now = Date.now();
+    let latest = 0;
+    for (const rec of Object.values(hist)) {
+      if (rec && rec.email === acct.email) {
+        const t = Date.parse(rec.at || '') || 0;
+        if (t > latest) latest = t;
+      }
+    }
+    if (now - latest < THROTTLE_MS) return;   // 太近 → 不重複記
+    const iso = new Date().toISOString();
+    const id = iso.replace(/[:.]/g, '-') + '_' + Math.random().toString(36).slice(2, 7);
+    await dbAdapter.setDoc('login_history', id, { name: acct.name || '', email: acct.email, at: iso, tool: 'AI-Thermal' });
+    // 修剪：僅保留最近 CAP 筆
+    const CAP = 500;
+    const all = { ...hist, [id]: { at: iso } };
+    const ids = Object.keys(all);
+    if (ids.length > CAP) {
+      const sorted = ids.sort((a, b) => (Date.parse(all[a].at || '') || 0) - (Date.parse(all[b].at || '') || 0));
+      for (const dId of sorted.slice(0, ids.length - CAP)) {
+        try { await dbAdapter.deleteDoc('login_history', dId); } catch (e) {}
+      }
+    }
+  } catch (e) { console.warn('[login-history] 記錄失敗：', e); }
 }
 
 function _updateSpHeaderSignedOut() {
@@ -9609,6 +9664,8 @@ function adminVerify() {
   _adminAuthed = true;
   document.getElementById('admin-auth').style.display = 'none';
   document.getElementById('admin-panel').style.display = '';
+  const lh = document.getElementById('admin-loginhist');
+  if (lh) lh.innerHTML = '';
   adminRefresh();
 }
 
@@ -9682,6 +9739,39 @@ async function adminForceRelease() {
   } catch (e) {
     statusEl.textContent = '強制清除失敗：' + (e.message || e);
   }
+}
+
+/* 系統管理員：查詢近期登入紀錄（讀共用 login_history，依時間新→舊列出） */
+async function adminShowLoginHistory() {
+  if (!_adminAuthed) return;
+  const el = document.getElementById('admin-loginhist');
+  if (!el) return;
+  if (!(dbAdapter.isSharePointMode && dbAdapter.isSharePointMode())) {
+    el.innerHTML = '<div class="admin-lh-empty">本機（單機檔案）模式無共用登入紀錄。</div>';
+    return;
+  }
+  el.innerHTML = '<div class="admin-lh-empty">讀取中…</div>';
+  let hist;
+  try { hist = (await dbAdapter.getCollection('login_history')) || {}; }
+  catch (e) { el.innerHTML = '<div class="admin-lh-empty">讀取失敗：' + escapeHtml(String(e.message || e)) + '</div>'; return; }
+  const rows = Object.values(hist)
+    .filter(r => r && r.at)
+    .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0))
+    .slice(0, 100);
+  if (!rows.length) {
+    el.innerHTML = '<div class="admin-lh-empty">目前尚無登入紀錄（此功能上線後才開始記錄）。</div>';
+    return;
+  }
+  const fmt = t => { try { return new Date(t).toLocaleString('zh-TW'); } catch (e) { return t; } };
+  const uniqUsers = new Set(rows.map(r => r.email)).size;
+  let html = '<div class="admin-lh-head">最近 ' + rows.length + ' 筆登入 ｜ ' + uniqUsers + ' 位使用者</div><div class="admin-lh-list">';
+  for (const r of rows) {
+    html += '<div class="admin-lh-row"><span class="admin-lh-time">' + escapeHtml(fmt(r.at)) + '</span>' +
+      '<span class="admin-lh-name">' + escapeHtml(r.name || '-') + '</span>' +
+      '<span class="admin-lh-email">' + escapeHtml(r.email || '') + '</span></div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 // 資料庫健康橫幅：壞檔唯讀保護時置頂警告（updateLockStatusBar 的所有呼叫點會一併刷新）
