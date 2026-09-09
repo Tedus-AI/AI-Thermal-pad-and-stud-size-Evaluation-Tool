@@ -572,13 +572,39 @@ const graphDb = {
     return out;
   },
 
-  exportBackup() {
-    const blob = new Blob([JSON.stringify(dbCache, null, 2)], { type: 'application/json' });
+  /* 自包含備份：把所有 sp: 圖檔(元件位置標註)抓下來嵌成 data URL 存進 JSON，
+     使備份單一檔即含全部內容(含圖)，離線載入也能直接顯示。onProgress(done,total) 供 UI 顯示進度。
+     深拷貝後處理，不動 live dbCache;個別圖片抓取失敗則保留 sp: 參照(不中斷整體備份)。 */
+  async exportBackup(onProgress) {
+    const clone = JSON.parse(JSON.stringify(dbCache));
+    const spSet = new Set();
+    (function collect(n) {
+      if (Array.isArray(n)) { for (const v of n) collect(v); return; }
+      if (n && typeof n === 'object') { for (const k in n) collect(n[k]); return; }
+      if (typeof n === 'string' && n.startsWith('sp:')) spSet.add(n.slice(3));
+    })(clone);
+    const map = {};
+    let done = 0, ok = 0;
+    for (const path of spSet) {
+      try {
+        const url = await this.getTcpImageSrc(path);
+        const blob = await fetch(url).then(r => r.blob());
+        map[path] = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+        ok++;
+      } catch (e) { console.warn('[backup] 圖片嵌入失敗，保留 sp: 參照：', path, e); }
+      done++; if (typeof onProgress === 'function') onProgress(done, spSet.size);
+    }
+    (function embed(n) {
+      if (Array.isArray(n)) { for (let i = 0; i < n.length; i++) { const v = n[i]; if (typeof v === 'string' && v.startsWith('sp:') && map[v.slice(3)]) n[i] = map[v.slice(3)]; else if (v && typeof v === 'object') embed(v); } return; }
+      if (n && typeof n === 'object') { for (const k in n) { const v = n[k]; if (typeof v === 'string' && v.startsWith('sp:') && map[v.slice(3)]) n[k] = map[v.slice(3)]; else if (v && typeof v === 'object') embed(v); } }
+    })(clone);
+    const blob = new Blob([JSON.stringify(clone, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `thermal_db_backup_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+    return { total: spSet.size, embedded: ok };
   }
 };
 

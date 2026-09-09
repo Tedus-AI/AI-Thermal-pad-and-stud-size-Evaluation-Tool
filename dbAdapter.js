@@ -183,12 +183,27 @@ async function _doShadowReadDiffReverse(id, listItem) {
 }
 
 const dbAdapter = {
+  /* 離線模式：使用者用「載入離線資料庫 (.json)」載入本地備份後設為 true。
+     此時所有讀寫走 fileDb，且 isSharePointMode() 必須回報 false —— 否則
+     tcpNormalizeSPImages 會把標註圖片上傳到 SharePoint、並把 sp: 參照寫進
+     本地離線檔（離線檔就再也看不到圖）。離線時圖片一律維持 data URL。 */
+  _offline: false,
+
+  setOfflineMode(on) {
+    this._offline = !!on;
+  },
+
+  isOfflineMode() {
+    return this._offline === true;
+  },
+
   _backend() {
+    if (this._offline) return fileDb;
     return DB_MODE === 'sharepoint' ? graphDb : fileDb;
   },
 
   isSharePointMode() {
-    return DB_MODE === 'sharepoint';
+    return !this._offline && DB_MODE === 'sharepoint';
   },
 
   async init() {
@@ -308,8 +323,10 @@ const dbAdapter = {
     return await fileDb.pickFile();
   },
 
-  exportBackup() {
-    this._backend().exportBackup();
+  /* 自包含備份（含元件位置標註圖片）。async：SharePoint 模式需下載圖檔內嵌。
+     回傳 { total, embedded } 供 UI 回報；onProgress(done,total) 可顯示進度。 */
+  async exportBackup(onProgress) {
+    return await this._backend().exportBackup(onProgress);
   },
 
   /* ─── Auth methods (SharePoint mode) ─────────────────── */
