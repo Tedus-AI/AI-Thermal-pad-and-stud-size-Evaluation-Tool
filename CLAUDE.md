@@ -94,6 +94,20 @@ await dbAdapter.updateDoc('projects', docId, {
 
 參考歷史 fix：5G-RRU PR #53（`claude/fix-database-overwrite-bug-W1bT1`）。
 
+## 備份必須「自包含」＋離線模式不可回寫 SharePoint ⚠️
+
+元件位置標註（Tab1 TC Placement）的圖檔**不在 `thermal_db.json` 裡**：SharePoint 模式下由
+`uploadTcpImage` 存到同層的 `tcp_images/` 資料夾，JSON 內只留 `page.imageData = 'sp:<路徑>'` 參照。
+
+1. **`exportBackup` 必須內嵌圖片**：`graphDb.exportBackup(onProgress)` 會深拷貝 `dbCache`、
+   走訪整棵 JSON 找出所有 `sp:` 字串（schema-agnostic，含陣列），逐張 `getTcpImageSrc` → fetch →
+   轉 data URL 回填，輸出**單一自包含 JSON**。個別圖片失敗時保留該筆 `sp:` 並回報
+   `{ total, embedded }`，不中斷整體備份。**不要退回只 dump `dbCache`**，否則備份只有斷鏈參照。
+   `fileDb.exportBackup` 簽章對齊（本機模式圖片本就是 data URL，回傳 `{total:0,embedded:0}`）。
+2. **離線載入要切 `dbAdapter.setOfflineMode(true)`**（不要直接 monkey-patch `_backend`）。
+   離線時 `isSharePointMode()` 必須回報 **false**，否則存檔時 `tcpNormalizeSPImages` 會把標註圖片
+   上傳到 SharePoint、並把 `sp:` 參照寫進本地離線檔，離線檔就再也看不到圖。離線時圖片一律維持 data URL。
+
 ## 軟體版本戳記是「自動」的，不要手改 ⚠️
 
 本工具有一套「使用者載入到舊版會被醒目橫幅提醒更新」的機制，版本號**完全由 CI 自動產生**，

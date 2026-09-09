@@ -4432,7 +4432,7 @@
     <div class="header-db-bar">
       <span id="db-status-text">未選擇資料庫</span>
       <button id="btn-pick-db" onclick="handlePickDb()">&#128194; 資料庫目錄</button>
-      <button id="btn-backup" onclick="dbAdapter.exportBackup()">&#128190; 備份資料庫</button>
+      <button id="btn-backup" onclick="handleExportBackup()" title="匯出單一自包含 JSON（含元件位置標註圖片）">&#128190; 備份資料庫</button>
       <button id="btn-sp-login" onclick="handleSpLogin()" style="display:none">&#128273; 登入 SharePoint</button>
       <button id="btn-sp-logout" onclick="handleSpLogout()" style="display:none">&#128682; 登出</button>
       <span id="sp-user-info" style="display:none"></span>
@@ -9824,12 +9824,43 @@ async function handlePickDb() {
   }
 }
 
+/* 備份資料庫：SharePoint 模式下，元件位置標註的圖檔是存在 tcp_images 資料夾、
+   JSON 只放 sp: 參照，因此備份時會把圖檔下載並內嵌成 data URL，產出「單一自包含
+   JSON」——可直接用「載入離線資料庫」開啟並看到標註圖片。內嵌需逐張下載，故顯示進度。 */
+async function handleExportBackup() {
+  const btns = ['btn-backup'].map(id => document.getElementById(id)).filter(Boolean);
+  btns.forEach(b => { b.disabled = true; });
+  try {
+    roToast('💾 備份中…');
+    const r = await dbAdapter.exportBackup((done, total) => {
+      if (total) roToast('💾 備份中… 內嵌標註圖片 ' + done + '/' + total);
+    });
+    const total = (r && r.total) || 0, ok = (r && r.embedded) || 0;
+    if (total === 0) {
+      alert('✅ 備份完成。\n此備份為單一自包含 JSON（本模式的標註圖片本來就內嵌在檔案中）。');
+    } else if (ok === total) {
+      alert('✅ 備份完成。\n已一併內嵌 ' + ok + ' 張「元件位置標註」圖片 → 單一 JSON 即含全部內容，'
+          + '可直接用「載入離線資料庫」開啟並看到圖。');
+    } else {
+      alert('⚠️ 備份完成，但有 ' + (total - ok) + ' 張標註圖片下載失敗（該筆維持 sp: 參照，離線將看不到該圖）。\n'
+          + '已內嵌 ' + ok + '/' + total + ' 張。建議確認網路／登入狀態後重新備份一次。');
+    }
+  } catch (e) {
+    console.error('[backup]', e);
+    alert('備份失敗：' + (e.message || e));
+  } finally {
+    btns.forEach(b => { b.disabled = false; });
+  }
+}
+
 async function handleLoadOfflineDb() {
   try {
     const result = await fileDb.pickFile();
     if (!result || !result.success) return;
-    // Redirect all dbAdapter reads/writes to the local fileDb
-    dbAdapter._backend = () => fileDb;
+    // 切到離線模式：所有讀寫走 fileDb，且 isSharePointMode() 轉為 false，
+    // 否則存檔時 tcpNormalizeSPImages 會把標註圖片上傳 SharePoint 並把 sp: 參照
+    // 寫進本地離線檔（離線就再也看不到圖）。離線時圖片一律維持 data URL。
+    dbAdapter.setOfflineMode(true);
     updateDbStatusText('✅ 離線 ｜ ' + result.filename, 'success');
     await loadProjects();
     if (typeof sgLoadProjects === 'function') await sgLoadProjects();
@@ -10991,7 +11022,7 @@ function fbShowShadowReadReport() {
     </svg>
   </button>
   <div class="gm-rail-divider"></div>
-  <button type="button" data-tip="備份資料庫" onclick="if(window.dbAdapter&&dbAdapter.exportBackup)dbAdapter.exportBackup()">
+  <button type="button" data-tip="備份資料庫（含標註圖片）" onclick="if(typeof handleExportBackup==='function')handleExportBackup()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
       <polyline points="7 10 12 15 17 10"/>

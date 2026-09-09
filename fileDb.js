@@ -145,13 +145,18 @@ const fileDb = {
       });
   },
 
-  exportBackup() {
+  /* 本機/離線模式的備份：此模式沒有 SharePoint 檔案儲存，標註圖片本來就以
+     data URL 內嵌在 JSON 裡，故直接匯出即為自包含。簽章與 graphDb 對齊
+     （async + 回傳 { total, embedded }），讓 dbAdapter/UI 可統一處理。 */
+  async exportBackup(onProgress) {
     const blob = new Blob([JSON.stringify(dbCache, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `thermal_db_backup_${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+    if (typeof onProgress === 'function') onProgress(0, 0);
+    return { total: 0, embedded: 0 };
   },
 
   async _readFile() {
