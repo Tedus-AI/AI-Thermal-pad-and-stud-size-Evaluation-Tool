@@ -1396,6 +1396,34 @@
   .sg-spec-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-spec-btn.danger:hover:not(:disabled) { background: #fee2e2; border-color: #f5b5b5; }
   .sg-spec-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+  /* 熱阻欄：一顆窄按鈕，顯示「主要」那筆 + 其餘數量 */
+  .sg-rth-cell { text-align: center; white-space: nowrap; }
+  .sg-rth-btn {
+    border: 1px solid #cbd5e1; background: #fff; color: #64748b;
+    border-radius: 5px; font-size: 0.74rem; line-height: 1;
+    padding: 3px 6px; cursor: pointer; font-variant-numeric: tabular-nums;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sg-rth-btn:hover { background: #eef2f7; border-color: #94a3b8; }
+  .sg-rth-btn.has-rth { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; font-weight: 600; }
+  .sg-rth-btn.has-rth:hover { background: #ede9fe; border-color: #c4b5fd; }
+  /* 熱阻編輯視窗的表格 */
+  .sg-rth-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 4px; }
+  .sg-rth-table th {
+    text-align: left; font-weight: 600; color: #475569; padding: 4px 6px;
+    border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  }
+  .sg-rth-table td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; }
+  .sg-rth-table select, .sg-rth-table input[type="number"], .sg-rth-table input[type="text"] {
+    width: 100%; box-sizing: border-box; padding: 4px 6px; font-size: 0.82rem;
+    border: 1px solid #cbd5e1; border-radius: 5px;
+  }
+  .sg-rth-del {
+    border: 1px solid #fecaca; background: #fff; color: #dc2626;
+    border-radius: 5px; font-size: 0.75rem; line-height: 1; padding: 2px 5px; cursor: pointer;
+  }
+  .sg-rth-del:hover { background: #fee2e2; }
+
   /* 備註欄：改為筆記本 icon 按鈕（點開才編輯），欄寬大幅縮小 */
   .sg-note-cell { text-align: center; white-space: nowrap; }
   .sg-note-btn {
@@ -1439,6 +1467,14 @@
     flex-wrap: wrap;
   }
   .sg-comp-quickadd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
+  /* 類別底部動作列：把「新增元件的兩種方法」放同一列講清楚，標註/檢視推到最右 */
+  .sg-comp-actionbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid #eef2f7;
+  }
+  .sg-add-label { font-weight: 700; font-size: 0.85rem; color: #1a3a6b; white-space: nowrap; }
+  .sg-add-or { color: #94a3b8; font-size: 0.82rem; padding: 0 2px; }
+  .sg-actionbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .sg-lib-label { font-weight: 600; font-size: 0.85rem; color: #1a3a6b; white-space: nowrap; }
   /* 從資料庫快選：可搜尋 + 專案分組收合面板 */
   .sg-picker { position: relative; display: inline-block; }
@@ -4517,6 +4553,30 @@
   </div>
 </div>
 
+<!-- 熱阻（θ/Ψ）編輯視窗：一顆 IC 可有多筆不同標法，逐列記錄類型／數值／測試條件，
+     並可指定一筆為「主要」（表格欄位優先顯示該筆） -->
+<div id="sg-rth-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)sgRthClose()">
+  <div class="lock-modal-box" style="max-width:660px;width:94vw;">
+    <h3 class="lock-modal-title">&#952; 熱阻參數（°C/W）</h3>
+    <div id="sg-rth-comp" class="lock-modal-text" style="font-weight:600;"></div>
+    <p class="lock-modal-hint">規格書標法不同、意義也不同，請選對類型；標「主要」的那一筆會顯示在表格欄位上。</p>
+    <table class="sg-rth-table">
+      <thead><tr>
+        <th style="width:44px">主要</th><th>類型</th><th style="width:100px">數值</th>
+        <th>測試條件（選填）</th><th style="width:38px"></th>
+      </tr></thead>
+      <tbody id="sg-rth-rows"></tbody>
+    </table>
+    <div class="lock-modal-actions" style="margin-top:8px;">
+      <button id="sg-rth-add" onclick="sgRthAddRow()" class="lock-modal-btn">＋ 新增一列</button>
+    </div>
+    <div class="lock-modal-actions">
+      <button id="sg-rth-save" onclick="sgRthSave()" class="lock-modal-btn lock-modal-teams-btn">確定</button>
+      <button onclick="sgRthClose()" class="lock-modal-btn">取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- 備註編輯視窗（Tab1 元件清單的「備註」欄改為 icon 按鈕，點開才編輯，以縮小欄寬） -->
 <div id="sg-note-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)sgNoteClose()">
   <div class="lock-modal-box">
@@ -7353,7 +7413,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>規格書</th><th>備註</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>熱阻<br>(°C/W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>規格書</th><th>備註</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -7370,6 +7430,20 @@ function sgRenderProjectComponents() {
       const spec = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile : null;
       const specName = spec ? (spec.name || '規格書') : '';
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
+      // 熱阻：一顆窄按鈕。有資料時優先顯示「主要」那筆（其餘以 +N 表示），
+      // tooltip 列出全部。datasheet 的標法意義不同，故型別以固定清單記錄。
+      const rthArr = Array.isArray(comp.Rth)
+        ? comp.Rth.filter(r => r && r.value !== '' && r.value != null) : [];
+      const rthPrim = rthArr.find(r => r.primary) || rthArr[0] || null;
+      const rthMore = rthArr.length > 1 ? (' +' + (rthArr.length - 1)) : '';
+      const rthLabel = rthPrim ? (rthShort(rthPrim) + ' ' + rthPrim.value + rthMore) : 'θ';
+      const rthTip = rthArr.length
+        ? rthArr.map(r => (r.primary ? '★ ' : '') + rthTypeLabel(r) + ' = ' + r.value + ' °C/W'
+            + (r.cond ? '（' + r.cond + '）' : '')).join('\n')
+        : '填寫熱阻參數（θJA / θJC,top / θJC,bottom / θJB / ΨJT / ΨJB）';
+      const rthCell =
+        `<button class="sg-rth-btn sg-spec-ro${rthArr.length ? ' has-rth' : ''}" ` +
+        `title="${escapeAttr(rthTip)}" onclick="sgRthOpen('${c}',${i})">${escapeHtml(rthLabel)}</button>`;
       // 備註：改為筆記本 icon 按鈕（點開才編輯），大幅縮小欄寬；tooltip 顯示內容摘要。
       // 標 sg-spec-ro → 唯讀(未解鎖)時仍可點開「檢視」備註，但視窗內不可編輯。
       const noteVal = comp.note || '';
@@ -7411,6 +7485,7 @@ function sgRenderProjectComponents() {
         <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}${measBadge('hot')}</td>
         <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}${measBadge('rt')}</td>
+        <td class="sg-edit-cell sg-rth-cell">${rthCell}</td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil"><option value="自行輸入"${comp.TV_ID_mil !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_ID_mil === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" step="any" min="0" class="sg-tv-input${comp.TV_ID_mil === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_ID_mil && comp.TV_ID_mil !== 'N/A' ? comp.TV_ID_mil : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_ID_mil" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-tv-cell"><select onchange="sgOnTvChange(this)" data-cat="${c}" data-idx="${i}" data-field="TV_Qty"><option value="自行輸入"${comp.TV_Qty !== 'N/A' ? ' selected' : ''}>自行輸入</option><option value="N/A"${comp.TV_Qty === 'N/A' ? ' selected' : ''}>N/A</option></select><input type="number" min="0" class="sg-tv-input${comp.TV_Qty === 'N/A' ? ' hidden' : ''}" value="${escapeAttr(comp.TV_Qty && comp.TV_Qty !== 'N/A' ? comp.TV_Qty : '')}" data-cat="${c}" data-idx="${i}" data-field="TV_Qty" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell"><div class="sg-ts-cell">
@@ -7441,11 +7516,15 @@ function sgRenderProjectComponents() {
          </div>`;
 
     html += `</tbody></table>
-      <div class="sg-comp-quickadd">${quickAdd}</div>
-      <div class="sg-comp-footer">
-        <button class="sg-comp-add-btn" onclick="sgAddCompRow('${catKey}')">&#10133; 新增 ${catInfo.label}</button>
-        <button class="tcp-placement-btn ${catInfo.css}" onclick="tcpOpenModal('${catKey}')" ${isProtected ? 'disabled' : ''} title="${catInfo.label} 元件位置標註（需解鎖才能編輯）">📍 元件位置標註</button>
-        <button class="tcp-view-btn" onclick="tcpOpenModal('${catKey}', true)" title="檢視 ${catInfo.label} 元件位置標註（唯讀，免解鎖）">👁 檢視</button>
+      <div class="sg-comp-actionbar">
+        <span class="sg-add-label">新增元件：</span>
+        <button class="sg-comp-add-btn" onclick="sgAddCompRow('${catKey}')" title="新增一列空白的 ${catInfo.label}，自行填寫">&#10133; 直接新增 ${catInfo.label}</button>
+        <span class="sg-add-or">或</span>
+        ${quickAdd}
+        <div class="sg-actionbar-right">
+          <button class="tcp-placement-btn ${catInfo.css}" onclick="tcpOpenModal('${catKey}')" ${isProtected ? 'disabled' : ''} title="${catInfo.label} 元件位置標註（需解鎖才能編輯）">📍 元件位置標註</button>
+          <button class="tcp-view-btn" onclick="tcpOpenModal('${catKey}', true)" title="檢視 ${catInfo.label} 元件位置標註（唯讀，免解鎖）">👁 檢視</button>
+        </div>
       </div>
     </div>`;
   }
@@ -7911,6 +7990,97 @@ function sgPickerAdd(cat, projId, compName) {
   sgRenderProjectComponents();
 }
 
+/* ── 熱阻（θ/Ψ）參數 ──
+   規格書常同時提供多種標法且意義不同，故以固定型別清單逐筆記錄，不可只存一個數字。
+   資料掛在元件上：comp.Rth = [{ type, value, cond, primary }]（跟著元件走，改名不斷）。 */
+const RTH_TYPES = [
+  { key: 'JA',     label: 'θJA（接面 → 環境）',           short: 'JA'  },
+  { key: 'JC_top', label: 'θJC,top（接面 → 外殼頂面）',    short: 'JCt' },
+  { key: 'JC_bot', label: 'θJC,bottom（接面 → 外殼底面）', short: 'JCb' },
+  { key: 'JB',     label: 'θJB（接面 → 電路板）',         short: 'JB'  },
+  { key: 'PSI_JT', label: 'ΨJT（接面 → 晶片頂面，特性參數）', short: 'ΨJT' },
+  { key: 'PSI_JB', label: 'ΨJB（接面 → 電路板，特性參數）',  short: 'ΨJB' },
+  { key: 'OTHER',  label: '其他（請於測試條件說明）',       short: '其他' },
+];
+function rthTypeDef(k) { return RTH_TYPES.find(t => t.key === k) || RTH_TYPES[0]; }
+function rthShort(r) { return rthTypeDef(r && r.type).short; }
+function rthTypeLabel(r) { return rthTypeDef(r && r.type).label; }
+
+let _sgRthTarget = null;
+let _sgRthRows = [];
+
+function sgRthOpen(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  if (!comp) return;
+  _sgRthTarget = { cat, idx };
+  _sgRthRows = (Array.isArray(comp.Rth) ? comp.Rth : []).map(r => ({
+    type: r.type || 'JA', value: (r.value == null ? '' : r.value),
+    cond: r.cond || '', primary: !!r.primary,
+  }));
+  if (!_sgRthRows.length) _sgRthRows.push({ type: 'JA', value: '', cond: '', primary: true });
+  const who = document.getElementById('sg-rth-comp');
+  if (who) who.textContent = '元件：' + (comp.Component || '(未命名)');
+  sgRthRender();
+  const saveBtn = document.getElementById('sg-rth-save');
+  const addBtn = document.getElementById('sg-rth-add');
+  if (saveBtn) saveBtn.style.display = isProtected ? 'none' : '';
+  if (addBtn) addBtn.style.display = isProtected ? 'none' : '';
+  const m = document.getElementById('sg-rth-modal');
+  if (m) m.style.display = 'flex';
+}
+
+function sgRthRender() {
+  const tb = document.getElementById('sg-rth-rows');
+  if (!tb) return;
+  const ro = isProtected;   // 未解鎖 → 可檢視不可編輯
+  tb.innerHTML = _sgRthRows.map((r, k) =>
+    `<tr>
+      <td style="text-align:center"><input type="radio" name="sg-rth-primary" ${r.primary ? 'checked' : ''} ${ro ? 'disabled' : ''} onchange="sgRthSetPrimary(${k})" title="設為主要（顯示在表格欄位）"></td>
+      <td><select ${ro ? 'disabled' : ''} onchange="sgRthEdit(${k},'type',this.value)">${
+        RTH_TYPES.map(t => `<option value="${t.key}" ${r.type === t.key ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')
+      }</select></td>
+      <td><input type="number" step="any" min="0" value="${escapeAttr(r.value)}" ${ro ? 'readonly' : ''} onchange="sgRthEdit(${k},'value',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(r.cond)}" placeholder="如 JESD51-7 / 2S2P / still air" ${ro ? 'readonly' : ''} onchange="sgRthEdit(${k},'cond',this.value)"></td>
+      <td style="text-align:center">${ro ? '' : `<button class="sg-rth-del" title="刪除此列" onclick="sgRthDelRow(${k})">✕</button>`}</td>
+    </tr>`).join('');
+}
+
+function sgRthEdit(k, field, v) { if (_sgRthRows[k]) _sgRthRows[k][field] = v; }
+function sgRthSetPrimary(k) { _sgRthRows.forEach((r, j) => { r.primary = (j === k); }); }
+function sgRthAddRow() {
+  if (isProtected) return;
+  _sgRthRows.push({ type: 'JA', value: '', cond: '', primary: _sgRthRows.length === 0 });
+  sgRthRender();
+}
+function sgRthDelRow(k) {
+  if (isProtected) return;
+  const wasPrimary = !!(_sgRthRows[k] && _sgRthRows[k].primary);
+  _sgRthRows.splice(k, 1);
+  if (wasPrimary && _sgRthRows.length) _sgRthRows[0].primary = true;
+  sgRthRender();
+}
+function sgRthClose() {
+  const m = document.getElementById('sg-rth-modal');
+  if (m) m.style.display = 'none';
+  _sgRthTarget = null; _sgRthRows = [];
+}
+function sgRthSave() {
+  if (isProtected) { sgRthClose(); return; }
+  const t = _sgRthTarget;
+  if (!t) return;
+  const comp = _sgSpecComp(t.cat, t.idx);
+  if (!comp) { sgRthClose(); return; }
+  const cleaned = _sgRthRows
+    .filter(r => r.value !== '' && r.value != null && !isNaN(parseFloat(r.value)))
+    .map(r => ({ type: r.type || 'JA', value: String(r.value).trim(), cond: (r.cond || '').trim(), primary: !!r.primary }));
+  if (cleaned.length && !cleaned.some(r => r.primary)) cleaned[0].primary = true;
+  if (cleaned.length) comp.Rth = cleaned; else delete comp.Rth;
+  sgRthClose();
+  const y = window.scrollY;
+  sgRenderProjectComponents();
+  window.scrollTo(0, y);
+}
+
 /* ── 備註編輯視窗 ──
    備註欄改為 icon 按鈕以縮小欄寬；點開才編輯。未解鎖時仍可點開「檢視」，但唯讀。 */
 let _sgNoteTarget = null;
@@ -7954,8 +8124,14 @@ function sgNoteSave() {
   window.scrollTo(0, y);
 }
 
-/* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出） */
+/* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出）。
+   熱阻視窗：Esc 取消（多列表單，不用 Enter 直接送出以免誤存）。 */
 document.addEventListener('keydown', (e) => {
+  const rth = document.getElementById('sg-rth-modal');
+  if (rth && rth.style.display !== 'none' && rth.style.display !== '') {
+    if (e.key === 'Escape') { e.preventDefault(); sgRthClose(); }
+    return;
+  }
   const m = document.getElementById('sg-note-modal');
   if (!m || m.style.display === 'none') return;
   if (e.key === 'Escape') { e.preventDefault(); sgNoteClose(); }
