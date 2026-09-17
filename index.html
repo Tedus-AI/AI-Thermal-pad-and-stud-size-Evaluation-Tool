@@ -1396,6 +1396,19 @@
   .sg-spec-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-spec-btn.danger:hover:not(:disabled) { background: #fee2e2; border-color: #f5b5b5; }
   .sg-spec-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+  /* 備註欄：改為筆記本 icon 按鈕（點開才編輯），欄寬大幅縮小 */
+  .sg-note-cell { text-align: center; white-space: nowrap; }
+  .sg-note-btn {
+    border: 1px solid #cbd5e1; background: #fff; border-radius: 5px;
+    font-size: 0.85rem; line-height: 1; padding: 3px 6px; cursor: pointer;
+    filter: grayscale(1); opacity: 0.45;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s, filter 0.15s;
+  }
+  .sg-note-btn:hover { background: #eef2f7; border-color: #94a3b8; opacity: 0.8; }
+  /* 已有備註 → 彩色且加底色，一眼看出哪些元件有備註 */
+  .sg-note-btn.has-note { filter: none; opacity: 1; background: #fef9c3; border-color: #fde047; }
+  .sg-note-btn.has-note:hover { background: #fef08a; border-color: #facc15; }
+
   /* 上傳＝藍色箭頭、下載＝紅色箭頭（用純文字箭頭，才吃得到 CSS color；emoji 不吃色） */
   .sg-spec-btn.sg-spec-up,
   .sg-spec-btn.sg-spec-down { font-size: 0.95rem; font-weight: 700; padding: 1px 6px; }
@@ -3919,10 +3932,12 @@
   .gm-action-rail.gm-dragging .gm-rail-grip { cursor: grabbing; }
   .gm-action-rail.gm-dragging { user-select: none; }
   /* 拖曳後：解除原本的右側定位與垂直置中位移，改吃 inline left/top。
-     注意：這裡不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉
-     我們設的 inline top，拖曳的垂直位置會失效（元件被推到畫面頂端）。
-     基礎規則的 top:50% 非 !important，inline top 本來就蓋得過。 */
-  .gm-action-rail.gm-moved { right: auto !important; transform: none !important; }
+     ⚠ 必須作用在 .tc-rail-wrapper 上：rail 被 `.tc-rail-wrapper .gm-action-rail`
+     設成 position:static，而 static 元素完全忽略 left/top，對 rail 設座標不會動。
+     真正被定位（position:fixed）的是外層 wrapper，它同時裝著 Teams FAB 與 rail。
+     另注意：不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉我們設的
+     inline top，垂直位置會失效；基礎規則的 top:50% 非 !important，inline 本來就蓋得過。 */
+  .tc-rail-wrapper.gm-moved { right: auto !important; transform: none !important; }
   /* 收合：body 與把手隱藏 → 只剩一顆按鈕 */
   .gm-action-rail.gm-collapsed .gm-rail-body,
   .gm-action-rail.gm-collapsed .gm-rail-grip { display: none; }
@@ -4498,6 +4513,21 @@
         <button onclick="adminRefresh()" class="lock-modal-btn">🔄 重新整理狀態</button>
         <button onclick="adminClose()" class="lock-modal-btn">關閉</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- 備註編輯視窗（Tab1 元件清單的「備註」欄改為 icon 按鈕，點開才編輯，以縮小欄寬） -->
+<div id="sg-note-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)sgNoteClose()">
+  <div class="lock-modal-box">
+    <h3 class="lock-modal-title">&#128221; 備註</h3>
+    <div id="sg-note-comp" class="lock-modal-text" style="font-weight:600;"></div>
+    <textarea id="sg-note-text" rows="6" placeholder="輸入備註…（Ctrl+Enter 儲存、Esc 取消）"
+      style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;
+             font-size:0.9rem;line-height:1.5;resize:vertical;margin:6px 0;"></textarea>
+    <div class="lock-modal-actions">
+      <button id="sg-note-save" onclick="sgNoteSave()" class="lock-modal-btn lock-modal-teams-btn">確定</button>
+      <button onclick="sgNoteClose()" class="lock-modal-btn">取消</button>
     </div>
   </div>
 </div>
@@ -5534,22 +5564,30 @@ function railSyncCollapseUi() {
   btn.classList.toggle('gm-ai', collapsed);   // 收合時用強調色，維持明顯可見
 }
 
+/* 被拖曳的是外層 .tc-rail-wrapper（position:fixed），不是 rail 本身：
+   rail 被 CSS 設成 position:static，static 元素會忽略 left/top，設了也不會動。 */
+function railMovable() {
+  return document.getElementById('tc-rail-wrapper')
+      || (document.getElementById('gm-rail') && document.getElementById('gm-rail').closest('.tc-rail-wrapper'))
+      || document.getElementById('gm-rail');
+}
+
 function railApplyPos(left, top) {
-  const rail = document.getElementById('gm-rail');
-  if (!rail) return;
-  const w = rail.offsetWidth, h = rail.offsetHeight;
+  const el = railMovable();
+  if (!el) return;
+  const w = el.offsetWidth, h = el.offsetHeight;
   const maxL = Math.max(4, window.innerWidth - w - 4);
   const maxT = Math.max(4, window.innerHeight - h - 4);
-  rail.classList.add('gm-moved');
-  rail.style.left = Math.min(Math.max(4, left), maxL) + 'px';
-  rail.style.top = Math.min(Math.max(4, top), maxT) + 'px';
+  el.classList.add('gm-moved');
+  el.style.left = Math.min(Math.max(4, left), maxL) + 'px';
+  el.style.top = Math.min(Math.max(4, top), maxT) + 'px';
 }
 
 function railResetPos() {
-  const rail = document.getElementById('gm-rail');
-  if (!rail) return;
-  rail.classList.remove('gm-moved');
-  rail.style.left = ''; rail.style.top = '';
+  const el = railMovable();
+  if (!el) return;
+  el.classList.remove('gm-moved');
+  el.style.left = ''; el.style.top = '';
   try { localStorage.removeItem(RAIL_POS_KEY); } catch (e) {}
 }
 
@@ -5572,7 +5610,9 @@ function railInitFloating() {
     const viaGrip = !!e.target.closest('#gm-rail-grip');
     // 展開時只有把手可拖；收合時整顆（只剩一顆鈕）都可拖
     if (!viaGrip && !rail.classList.contains('gm-collapsed')) return;
-    const r = rail.getBoundingClientRect();
+    const el = railMovable();
+    if (!el) return;
+    const r = el.getBoundingClientRect();   // 以「會被移動的 wrapper」為基準算偏移
     st = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, moved: false };
     e.preventDefault();
   });
@@ -5589,16 +5629,21 @@ function railInitFloating() {
     st = null;
     rail.classList.remove('gm-dragging');
     if (!moved) return;
-    const r = rail.getBoundingClientRect();
+    const el = railMovable();
+    const r = (el || rail).getBoundingClientRect();
     try { localStorage.setItem(RAIL_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
-    // 拖曳結束後抑制這一次 click，避免收合鈕被誤觸
-    window.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); },
-      { capture: true, once: true });
+    // 拖曳結束後抑制「這一次」click，避免放開滑鼠時誤觸收合鈕（收合時整顆就是那顆鈕）。
+    // 加逾時自動解除：萬一這次拖曳後沒有 click 事件，才不會把使用者下一次點擊吃掉。
+    const suppress = (ev) => { ev.stopPropagation(); ev.preventDefault(); cleanup(); };
+    const cleanup = () => { window.removeEventListener('click', suppress, true); clearTimeout(timer); };
+    const timer = setTimeout(cleanup, 350);
+    window.addEventListener('click', suppress, true);
   });
   // 視窗縮放 → 夾回可視範圍，避免浮動列跑出畫面
   window.addEventListener('resize', () => {
-    if (!rail.classList.contains('gm-moved')) return;
-    const r = rail.getBoundingClientRect();
+    const el = railMovable();
+    if (!el || !el.classList.contains('gm-moved')) return;
+    const r = el.getBoundingClientRect();
     railApplyPos(r.left, r.top);
   });
   const grip = document.getElementById('gm-rail-grip');
@@ -7325,6 +7370,14 @@ function sgRenderProjectComponents() {
       const spec = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile : null;
       const specName = spec ? (spec.name || '規格書') : '';
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
+      // 備註：改為筆記本 icon 按鈕（點開才編輯），大幅縮小欄寬；tooltip 顯示內容摘要。
+      // 標 sg-spec-ro → 唯讀(未解鎖)時仍可點開「檢視」備註，但視窗內不可編輯。
+      const noteVal = comp.note || '';
+      const notePreview = noteVal.length > 60 ? (noteVal.slice(0, 60) + '…') : noteVal;
+      const noteCell =
+        `<button class="sg-note-btn sg-spec-ro${noteVal ? ' has-note' : ''}" ` +
+        `title="${escapeAttr(noteVal ? ('備註：' + notePreview) : '新增備註')}" ` +
+        `onclick="sgNoteOpen('${c}',${i})">📝</button>`;
       const specCell =
         `<div class="sg-spec-btns">` +
         `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
@@ -7371,7 +7424,7 @@ function sgRenderProjectComponents() {
           </div>
         </div></td>
         <td class="sg-edit-cell sg-spec-cell">${specCell}</td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell sg-note-cell">${noteCell}</td>
         <td class="sg-edit-cell" style="text-align:center; white-space:nowrap;"><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},-1)" ${i === 0 ? 'disabled' : ''} title="上移（順序連動 Tab2/Tab3）">&#9650;</button><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},1)" ${i === items.length - 1 ? 'disabled' : ''} title="下移（順序連動 Tab2/Tab3）">&#9660;</button> <button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
@@ -7857,6 +7910,57 @@ function sgPickerAdd(cat, projId, compName) {
   sgPickerClose(cat);
   sgRenderProjectComponents();
 }
+
+/* ── 備註編輯視窗 ──
+   備註欄改為 icon 按鈕以縮小欄寬；點開才編輯。未解鎖時仍可點開「檢視」，但唯讀。 */
+let _sgNoteTarget = null;
+
+function sgNoteOpen(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  if (!comp) return;
+  _sgNoteTarget = { cat, idx };
+  const m = document.getElementById('sg-note-modal');
+  const ta = document.getElementById('sg-note-text');
+  const saveBtn = document.getElementById('sg-note-save');
+  const who = document.getElementById('sg-note-comp');
+  if (!m || !ta) return;
+  if (who) who.textContent = '元件：' + (comp.Component || '(未命名)');
+  ta.value = comp.note || '';
+  ta.readOnly = isProtected;                       // 未解鎖 → 只能看
+  ta.placeholder = isProtected ? '（未解鎖，僅供檢視）' : '輸入備註…（Ctrl+Enter 儲存、Esc 取消）';
+  if (saveBtn) saveBtn.style.display = isProtected ? 'none' : '';
+  m.style.display = 'flex';
+  setTimeout(() => { if (!isProtected) ta.focus(); }, 40);
+}
+
+function sgNoteClose() {
+  const m = document.getElementById('sg-note-modal');
+  if (m) m.style.display = 'none';
+  _sgNoteTarget = null;
+}
+
+function sgNoteSave() {
+  if (isProtected) { sgNoteClose(); return; }
+  const t = _sgNoteTarget;
+  if (!t) return;
+  const comp = _sgSpecComp(t.cat, t.idx);
+  if (!comp) { sgNoteClose(); return; }
+  const ta = document.getElementById('sg-note-text');
+  const v = (ta ? ta.value : '').trim();
+  if (v) comp.note = v; else delete comp.note;
+  sgNoteClose();
+  const y = window.scrollY;
+  sgRenderProjectComponents();
+  window.scrollTo(0, y);
+}
+
+/* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出） */
+document.addEventListener('keydown', (e) => {
+  const m = document.getElementById('sg-note-modal');
+  if (!m || m.style.display === 'none') return;
+  if (e.key === 'Escape') { e.preventDefault(); sgNoteClose(); }
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sgNoteSave(); }
+});
 
 /* ── 元件規格書（SPEC）上傳／下載／刪除 ──
    檔案存到 SharePoint：<ToolDatabase>/SPEC/<專案名稱>/<元件類別>/<元件名>__<檔名>；
@@ -11314,7 +11418,7 @@ function fbShowShadowReadReport() {
 }
 </script>
 
-<div class="tc-rail-wrapper">
+<div class="tc-rail-wrapper" id="tc-rail-wrapper">
 
 <!-- Teams Quick Contact FAB (above rail) -->
 <button id="tc-fab" class="tc-fab" type="button" aria-label="快速聯絡專案成員">
