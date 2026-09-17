@@ -513,8 +513,8 @@
 
   /* ── Tab1 專案列：下拉縮半 + 六顆按鈕同排等高，匯出鈕靠最右分隔 ── */
   .sg-proj-toolbar { --sg-row-h: 42px; align-items: flex-end; row-gap: 10px; }
-  /* 下拉縮短為原本的一半（原本 flex:1 吃滿寬） */
-  .sg-proj-toolbar .sg-proj-field { flex: 0 1 50%; max-width: 50%; min-width: 180px; }
+  /* 下拉縮短：原本 flex:1 吃滿寬 → 先減半 → 再減半（25%），讓匯出鈕不必換行 */
+  .sg-proj-toolbar .sg-proj-field { flex: 0 1 25%; max-width: 25%; min-width: 170px; }
   .sg-proj-toolbar .sg-proj-field select { height: var(--sg-row-h); box-sizing: border-box; }
   .sg-proj-actions,
   .sg-proj-exports { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
@@ -528,6 +528,14 @@
     padding-top: 0; padding-bottom: 0;
     display: inline-flex; align-items: center; justify-content: center;
     white-space: nowrap;
+  }
+  /* 匯出 Excel／PDF：高度改為其他按鈕的一半 */
+  .sg-proj-exports .btn-export {
+    height: calc(var(--sg-row-h) / 2);
+    font-size: 0.72rem;
+    padding-left: 10px; padding-right: 10px;
+    line-height: 1;
+    border-radius: 7px !important;
   }
   .sg-proj-actions .save-status { align-self: center; }
   /* 視窗較窄時：匯出鈕換行後仍靠右 */
@@ -1388,6 +1396,13 @@
   .sg-spec-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-spec-btn.danger:hover:not(:disabled) { background: #fee2e2; border-color: #f5b5b5; }
   .sg-spec-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+  /* 上傳＝藍色箭頭、下載＝紅色箭頭（用純文字箭頭，才吃得到 CSS color；emoji 不吃色） */
+  .sg-spec-btn.sg-spec-up,
+  .sg-spec-btn.sg-spec-down { font-size: 0.95rem; font-weight: 700; padding: 1px 6px; }
+  .sg-spec-btn.sg-spec-up { color: #2563eb; border-color: #bfdbfe; }
+  .sg-spec-btn.sg-spec-up:hover:not(:disabled) { background: #dbeafe; border-color: #60a5fa; }
+  .sg-spec-btn.sg-spec-down { color: #dc2626; border-color: #fecaca; }
+  .sg-spec-btn.sg-spec-down:hover:not(:disabled) { background: #fee2e2; border-color: #f87171; }
   .sg-comp-add-btn {
     display: inline-flex;
     align-items: center;
@@ -5877,8 +5892,16 @@ initDatabase();
 
 // 啟動時同步工具列鎖頭圖示（預設為鎖定 = 閉合掛鎖）
 if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
-// 浮動工具列：還原收合狀態與位置，並啟用拖曳
-if (typeof railInitFloating === 'function') railInitFloating();
+// 浮動工具列：還原收合狀態與位置，並啟用拖曳。
+// 注意：此段 script 的位置在 <aside id="gm-rail"> 之前，直接呼叫會拿不到元素
+// （getElementById 回 null → 監聽掛不上 → 拖曳失效），故一律等 DOM 解析完再初始化。
+if (typeof railInitFloating === 'function') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', railInitFloating, { once: true });
+  } else {
+    railInitFloating();
+  }
+}
 
 // ── 編輯鎖生命週期：活動追蹤 + 自動續約 + 逾時/遺失偵測（H-4）──
 let _lastActivityTs = Date.now();
@@ -7285,7 +7308,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>備註</th><th>規格書</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>規格書</th><th>備註</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -7304,8 +7327,8 @@ function sgRenderProjectComponents() {
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
       const specCell =
         `<div class="sg-spec-btns">` +
-        `<button class="sg-spec-btn" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">⬆</button>` +
-        `<button class="sg-spec-btn sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">⬇</button>` +
+        `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
+        `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
         `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('刪除規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
         `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '')) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
         `</div>`;
@@ -7347,8 +7370,8 @@ function sgRenderProjectComponents() {
             <label>Remote<input type="number" min="0" value="${escapeAttr(comp.Remote_Qty ?? '')}" placeholder="0" data-cat="${c}" data-idx="${i}" data-field="Remote_Qty" onchange="sgOnCompEdit(this)"></label>
           </div>
         </div></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell sg-spec-cell">${specCell}</td>
+        <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell" style="text-align:center; white-space:nowrap;"><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},-1)" ${i === 0 ? 'disabled' : ''} title="上移（順序連動 Tab2/Tab3）">&#9650;</button><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},1)" ${i === items.length - 1 ? 'disabled' : ''} title="下移（順序連動 Tab2/Tab3）">&#9660;</button> <button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
