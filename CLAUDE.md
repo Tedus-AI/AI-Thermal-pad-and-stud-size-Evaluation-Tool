@@ -35,6 +35,39 @@
 > 系統管理員面板「🕘 使用者登入紀錄」讀出依時間列出。頂層 collection 天然與其他工具寫入隔離；
 > **僅本工具會寫**，要含 5G-RRU 端登入需 5G-RRU 同步記錄到同一 collection。
 
+#### 元件物件（`rf_data` / `digital_data` / `pwr_data` 的每一筆）欄位歸屬
+
+同一顆元件物件由兩個工具共寫，各自只畫得出自己那一半欄位：
+
+| 欄位 | 誰有畫面可編輯 | 備註 |
+|---|---|---|
+| `Component` | 兩邊 | 名稱即 key |
+| `Qty`、`Power(W)` | 兩邊 | |
+| `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
+| `Height(mm)`、`Pad_L`、`Pad_W`、`Thick(mm)`、`Board_Type`、`Limit(C)`、`R_jc`、`TIM_Type` | 只有 5G-RRU | AI-Thermal 無編輯入口，靠 `SG_DEFAULTS` 給初值 |
+
+⚠ **「從資料庫快選」的 carry 白名單兩邊都必須列全所有欄位**（AI-Thermal 的
+`SG_VARIANT_CARRY` / 5G-RRU 的 `VARIANT_CARRY`）。漏列的 key 會被各自的分類預設值蓋掉，
+複製完再存回共用 DB 就等於把對方工具填的真實值洗成罐頭值。新增任何每元件欄位時，
+**同一個 commit 內要把它加進本工具的白名單，並在另一個 repo 同步補上**。
+物件／陣列型欄位（`Rth`、`SpecFile`）carry 時必須深拷貝，否則新元件與來源共用參照。
+
+> `SpecFile` 是檔案參照不是複本（實體檔在來源專案的 `SPEC/<專案名>/` 底下）。快選帶入時
+> 會標 `SpecFile._from = <來源專案名>`，本專案刪除／換檔時只解除參照，不得刪來源檔。
+
+> `R_jc` 由 AI-Thermal 的熱阻表自動推導（見下節），不是使用者在 AI-Thermal 直接填的。
+
+#### `R_jc` 的單一事實來源：AI-Thermal 的 `comp.Rth`
+
+`comp.Rth = [{ type, value, cond, primary }]` 逐筆記錄 datasheet 的熱阻標法。
+存檔時 `sgSyncRjcAll` 會把其中的 **θJC** 寫進 `comp.R_jc` 供 5G-RRU 算 Tj：
+
+- 取值順序：標「主要」的 θJC → 第一筆 `JC_bot` → 第一筆 `JC_top`，來源記在 `comp._rjc_from`。
+- **只有 θJC 可以當 `R_jc`**。5G-RRU 的熱路徑是 `Tj = Tc + P×R_jc`、
+  `Tc = T_hsk + P×(R_int + R_TIM)`，其「殼」是元件底面 → 對應 θJC,bottom；
+  θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數，硬塞會讓 Tj 重複計算而失真。
+- 沒有任何 θJC 時不動 `R_jc`（保留既有值），只清掉 `_rjc_from`。
+
 ### 規則
 
 1. **存 project 一律用 `updateDoc('projects', id, fields)`，不要用 `setDoc`。**

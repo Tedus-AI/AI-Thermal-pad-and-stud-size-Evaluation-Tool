@@ -4567,6 +4567,7 @@
       </tr></thead>
       <tbody id="sg-rth-rows"></tbody>
     </table>
+    <p id="sg-rth-rjc" class="lock-modal-hint" style="margin-top:6px;"></p>
     <div class="lock-modal-actions" style="margin-top:8px;">
       <button id="sg-rth-add" onclick="sgRthAddRow()" class="lock-modal-btn">＋ 新增一列</button>
     </div>
@@ -7430,6 +7431,7 @@ function sgRenderProjectComponents() {
       const spec = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile : null;
       const specName = spec ? (spec.name || '規格書') : '';
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
+      const specRef = (spec && spec._from) ? ('（參照自專案「' + spec._from + '」）') : '';
       // 熱阻：一顆窄按鈕。有資料時優先顯示「主要」那筆（其餘以 +N 表示），
       // tooltip 列出全部。datasheet 的標法意義不同，故型別以固定清單記錄。
       const rthArr = Array.isArray(comp.Rth)
@@ -7437,9 +7439,13 @@ function sgRenderProjectComponents() {
       const rthPrim = rthArr.find(r => r.primary) || rthArr[0] || null;
       const rthMore = rthArr.length > 1 ? (' +' + (rthArr.length - 1)) : '';
       const rthLabel = rthPrim ? (rthShort(rthPrim) + ' ' + rthPrim.value + rthMore) : 'θ';
+      const rthRjc = sgRjcFromRth(comp);   // 會被 5G-RRU 當成 Rjc 的那一筆（只認 θJC）
       const rthTip = rthArr.length
         ? rthArr.map(r => (r.primary ? '★ ' : '') + rthTypeLabel(r) + ' = ' + r.value + ' °C/W'
             + (r.cond ? '（' + r.cond + '）' : '')).join('\n')
+          + '\n—\n' + (rthRjc
+            ? '🔗 5G-RRU 的 Rjc 取用：' + rthTypeDef(rthRjc.type).label + ' = ' + rthRjc.value + ' °C/W'
+            : '🔗 無 θJC 資料，5G-RRU 的 Rjc 沿用其預設值')
         : '填寫熱阻參數（θJA / θJC,top / θJC,bottom / θJB / ΨJT / ΨJB）';
       const rthCell =
         `<button class="sg-rth-btn sg-spec-ro${rthArr.length ? ' has-rth' : ''}" ` +
@@ -7455,9 +7461,9 @@ function sgRenderProjectComponents() {
       const specCell =
         `<div class="sg-spec-btns">` +
         `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
-        `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
-        `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('刪除規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
-        `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '')) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
+        `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
+        `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ((specRef ? '移除規格書參照：' : '刪除規格書：') + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
+        `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '') + specRef) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
         `</div>`;
       const refBadge = refLocked
         ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button></div>`
@@ -7706,8 +7712,38 @@ let sgVariantsLoading = false;
 /* 快選面板 UI 狀態（每分類）：open、filter、展開的專案 id 集合 */
 const sgPickerState = { RF: null, Digital: null, PWR: null };
 
-/* 從資料庫快選複製元件時，要一併帶過去的 Tab1 欄位（Type / Thermal Via / Temp Sensor / 備註 等） */
-const SG_VARIANT_CARRY = ['Type','Qty','Power(W)','Power_RT(W)','TV_ID_mil','TV_Qty','Temp_Sensor','Local_Qty','Remote_Qty','note'];
+/* 從資料庫快選複製元件時，要一併帶過去的「每元件欄位」白名單。
+   ⚠ 三類都要列全，漏列的 key 會被 sgMakeComp 的分類罐頭預設值蓋掉（= 快選掉值）：
+     (1) 本工具 Tab1 看得到的欄位（Type / Thermal Via / Temp Sensor / 熱阻 / 規格書 / 備註…）
+     (2) 5G-RRU 專屬、本工具沒有畫面可編輯但存在同一顆元件物件上的欄位
+         （Height/Pad/Thick/Board_Type/Limit/R_jc/TIM_Type）——這些值多半是 5G-RRU 端
+         工程師填的真實值，不抄過來就會被罐頭值洗掉，再存回共用 DB 等於把對方資料毀了。
+   對應 5G-RRU 的 VARIANT_CARRY（他們那邊也把本工具的欄位全列入）。 */
+const SG_VARIANT_CARRY = [
+  // Tab1 可編輯欄位
+  'Type', 'Qty', 'Power(W)', 'Power_RT(W)', 'TV_ID_mil', 'TV_Qty',
+  'Temp_Sensor', 'Local_Qty', 'Remote_Qty', 'note',
+  'Rth', 'SpecFile',
+  // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
+  'Height(mm)', 'Pad_L', 'Pad_W', 'Thick(mm)', 'Board_Type', 'Limit(C)', 'R_jc', 'TIM_Type',
+];
+
+/* 依白名單抄出來源元件的欄位。物件／陣列（Rth、SpecFile）必須深拷貝，
+   否則新元件與快選快取裡的來源元件共用同一份參照，改一邊會動到另一邊。 */
+function sgCarrySrc(comp) {
+  const src = {};
+  if (!comp) return src;
+  SG_VARIANT_CARRY.forEach(k => {
+    const v = comp[k];
+    if (v === undefined) return;
+    if (v && typeof v === 'object') {
+      try { src[k] = JSON.parse(JSON.stringify(v)); } catch (e) { /* 壞資料就跳過該欄 */ }
+    } else {
+      src[k] = v;
+    }
+  });
+  return src;
+}
 
 /* 純函式：用一份 projects 物件聚合出某分類的 variant 陣列 */
 function sgAggregateVariants(projects, category) {
@@ -7728,8 +7764,7 @@ function sgAggregateVariants(projects, category) {
       const key = name + ' ' + String(power);
       const prev = byKey.get(key);
       if (!prev || ts < prev._ts) {
-        const src = {};
-        SG_VARIANT_CARRY.forEach(k => { if (comp[k] !== undefined) src[k] = comp[k]; });
+        const src = sgCarrySrc(comp);
         byKey.set(key, {
           name, power,
           power_rt: comp?.['Power_RT(W)'] ?? '',
@@ -7784,8 +7819,7 @@ function sgBuildProjectTree(projects, category) {
     for (const comp of items) {
       const name = String(comp?.Component || '').trim();
       if (!name) continue;
-      const src = {};
-      SG_VARIANT_CARRY.forEach(k => { if (comp[k] !== undefined) src[k] = comp[k]; });
+      const src = sgCarrySrc(comp);
       const m = measMap.get(name);
       comps.push({
         name,
@@ -7973,6 +8007,9 @@ function sgPickerAdd(cat, projId, compName) {
     _ref_origin_id: g.projId,
     _ref_locked: true,
   };
+  // 規格書是「參照」不是複本：檔案仍在來源專案的 SPEC 資料夾底下。
+  // 標記來源，讓本專案刪除時只解除參照、不會把來源專案的原始檔刪掉。
+  if (overrides.SpecFile && overrides.SpecFile.path) overrides.SpecFile._from = g.projName;
   // 帶入該專案的實測 Pd 當起始估值（依 source；both = 高溫+常溫）
   if (c.pd_meas != null && c.pd_meas !== '') {
     if (c.pd_meas_source === 'both') {
@@ -8005,6 +8042,43 @@ const RTH_TYPES = [
 function rthTypeDef(k) { return RTH_TYPES.find(t => t.key === k) || RTH_TYPES[0]; }
 function rthShort(r) { return rthTypeDef(r && r.type).short; }
 function rthTypeLabel(r) { return rthTypeDef(r && r.type).label; }
+
+/* ── 熱阻 → 5G-RRU 的 Rjc（comp.R_jc）──
+   5G-RRU 體積評估的熱路徑是 Tj = Tc + P×R_jc、Tc = T_hsk + P×(R_int + R_TIM)，
+   R_int 是元件經 Thermal Via／Copper Coin 導到散熱器的基板熱阻，
+   也就是它的「殼」指的是元件底面 → 對應 datasheet 的 θJC,bottom。
+   ⚠ 只有 θJC 類型可以當 R_jc：θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數而非熱阻，
+     硬塞進去會讓 5G-RRU 的 Tj 重複計算而失真，因此一律不取用。
+   取值順序：標「主要」的 θJC → 第一筆 θJC,bottom → 第一筆 θJC,top。 */
+const RTH_RJC_TYPES = ['JC_bot', 'JC_top'];
+function sgRjcFromRth(comp) {
+  const arr = Array.isArray(comp && comp.Rth) ? comp.Rth : [];
+  const cand = arr.filter(r => r && RTH_RJC_TYPES.includes(r.type) && !isNaN(parseFloat(r.value)));
+  if (!cand.length) return null;
+  const pick = cand.find(r => r.primary) || cand.find(r => r.type === 'JC_bot') || cand[0];
+  return { value: parseFloat(pick.value), type: pick.type, cond: pick.cond || '' };
+}
+/* 把 θJC 同步寫進 comp.R_jc（5G-RRU 專屬欄位，本工具不顯示）。
+   沒有任何 θJC 資料時不動 R_jc（保留既有值），只清掉來源標記。 */
+function sgSyncRjc(comp) {
+  if (!comp) return false;
+  const got = sgRjcFromRth(comp);
+  if (!got) {
+    if (comp._rjc_from) { delete comp._rjc_from; return true; }
+    return false;
+  }
+  if (parseFloat(comp.R_jc) === got.value && comp._rjc_from === got.type) return false;
+  comp.R_jc = got.value;
+  comp._rjc_from = got.type;
+  return true;
+}
+/* 儲存前整批同步（直接新增／快選／舊資料都會經過這裡） */
+function sgSyncRjcAll(projectData) {
+  if (!projectData) return;
+  ['rf_data', 'digital_data', 'pwr_data'].forEach(f => {
+    (Array.isArray(projectData[f]) ? projectData[f] : []).forEach(sgSyncRjc);
+  });
+}
 
 let _sgRthTarget = null;
 let _sgRthRows = [];
@@ -8043,10 +8117,29 @@ function sgRthRender() {
       <td><input type="text" value="${escapeAttr(r.cond)}" placeholder="如 JESD51-7 / 2S2P / still air" ${ro ? 'readonly' : ''} onchange="sgRthEdit(${k},'cond',this.value)"></td>
       <td style="text-align:center">${ro ? '' : `<button class="sg-rth-del" title="刪除此列" onclick="sgRthDelRow(${k})">✕</button>`}</td>
     </tr>`).join('');
+  sgRthRenderRjcHint();
 }
 
-function sgRthEdit(k, field, v) { if (_sgRthRows[k]) _sgRthRows[k][field] = v; }
-function sgRthSetPrimary(k) { _sgRthRows.forEach((r, j) => { r.primary = (j === k); }); }
+/* 讓使用者看得到「哪一筆會被 5G-RRU 當成 Rjc」——數字要標來源，不能靜默帶入 */
+function sgRthRenderRjcHint() {
+  const el = document.getElementById('sg-rth-rjc');
+  if (!el) return;
+  const got = sgRjcFromRth({ Rth: _sgRthRows });
+  if (got) {
+    const d = rthTypeDef(got.type);
+    el.innerHTML = '🔗 5G-RRU 體積評估的「熱阻 Rjc」將取用：<b>' + escapeHtml(d.label) +
+      ' = ' + escapeHtml(String(got.value)) + ' °C/W</b>' +
+      (got.cond ? '（' + escapeHtml(got.cond) + '）' : '') +
+      '　<span style="opacity:.75">θJC 才是接面到殼；θJA／θJB／Ψ 熱路徑不同，不會被取用。</span>';
+  } else {
+    el.innerHTML = '🔗 目前沒有 θJC,top／θJC,bottom 的資料，5G-RRU 的「熱阻 Rjc」會沿用它自己的預設值。' +
+      '<span style="opacity:.75">（θJA／θJB／Ψ 熱路徑不同，不能當 Rjc 使用）</span>';
+  }
+}
+
+/* 只更新提示文字，不整區重繪（重繪會讓輸入中的游標跳開） */
+function sgRthEdit(k, field, v) { if (_sgRthRows[k]) _sgRthRows[k][field] = v; sgRthRenderRjcHint(); }
+function sgRthSetPrimary(k) { _sgRthRows.forEach((r, j) => { r.primary = (j === k); }); sgRthRenderRjcHint(); }
 function sgRthAddRow() {
   if (isProtected) return;
   _sgRthRows.push({ type: 'JA', value: '', cond: '', primary: _sgRthRows.length === 0 });
@@ -8075,6 +8168,7 @@ function sgRthSave() {
     .map(r => ({ type: r.type || 'JA', value: String(r.value).trim(), cond: (r.cond || '').trim(), primary: !!r.primary }));
   if (cleaned.length && !cleaned.some(r => r.primary)) cleaned[0].primary = true;
   if (cleaned.length) comp.Rth = cleaned; else delete comp.Rth;
+  sgSyncRjc(comp);   // θJC → R_jc（供 5G-RRU 體積評估使用）
   sgRthClose();
   const y = window.scrollY;
   sgRenderProjectComponents();
@@ -8175,6 +8269,7 @@ async function sgSpecOnFilePicked(inputEl) {
   if (!comp) return;
   const projName = (sgProjectData && (sgProjectData.project_name || sgProjectId)) || 'UnknownProject';
   const old = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile.path : null;
+  const oldIsRef = !!(comp.SpecFile && comp.SpecFile._from);   // 參照別的專案 → 換檔時不可刪來源檔
   try {
     roToast('⬆ 規格書上傳中… ' + file.name);
     const path = await dbAdapter.uploadSpec(projName, t.cat, comp.Component, file);
@@ -8186,8 +8281,9 @@ async function sgSpecOnFilePicked(inputEl) {
       at: new Date().toISOString(),
       by: (acct && acct.name) || '',
     };
-    // 取代舊檔：新檔上傳成功後才刪舊檔（路徑不同才刪，避免刪掉剛覆蓋的同名檔）
-    if (old && old !== path) { try { await dbAdapter.deleteSpec(old); } catch (e) {} }
+    // 取代舊檔：新檔上傳成功後才刪舊檔（路徑不同才刪，避免刪掉剛覆蓋的同名檔）；
+    // 舊檔若是快選帶入的參照，實體檔屬於來源專案，只換掉參照不刪檔。
+    if (old && old !== path && !oldIsRef) { try { await dbAdapter.deleteSpec(old); } catch (e) {} }
     sgRenderProjectComponents();
     roToast('✅ 規格書已上傳，請記得按「儲存元件變更」');
   } catch (e) {
@@ -8222,6 +8318,16 @@ async function sgSpecDelete(cat, idx) {
   const comp = _sgSpecComp(cat, idx);
   const spec = comp && comp.SpecFile;
   if (!spec || !spec.path) return;
+  // 快選帶進來的規格書是「參照」，實體檔在來源專案底下 → 只解除參照，不可刪檔
+  if (spec._from) {
+    if (!confirm('元件「' + (comp.Component || '') + '」的規格書是從專案「' + spec._from +
+                 '」快選帶入的參照。\n檔案：' + (spec.name || '') +
+                 '\n\n將只移除本專案的參照，不會刪除來源專案的原始檔。要繼續嗎？')) return;
+    delete comp.SpecFile;
+    sgRenderProjectComponents();
+    roToast('🔗 已移除規格書參照（來源檔案保留），請記得按「儲存元件變更」');
+    return;
+  }
   // 破壞性操作：重複確認
   if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' + (spec.name || '') + '\n\n此操作會從 SharePoint 移除該檔案。')) return;
   if (!confirm('再次確認：刪除後無法復原，仍要刪除嗎？')) return;
@@ -8241,7 +8347,8 @@ function sgSpecInfo(cat, idx) {
   if (!spec || !spec.path) { alert('此元件尚未上傳規格書。'); return; }
   const at = spec.at ? new Date(spec.at).toLocaleString('zh-TW') : '（無紀錄）';
   alert('元件：' + (comp.Component || '') + '\n檔案：' + (spec.name || '') +
-        '\n上傳時間：' + at + (spec.by ? '\n上傳者：' + spec.by : ''));
+        '\n上傳時間：' + at + (spec.by ? '\n上傳者：' + spec.by : '') +
+        (spec._from ? '\n來源：快選自專案「' + spec._from + '」（檔案存放於該專案，本專案只保留參照）' : ''));
 }
 
 /* 讀取某元件（同專案「模擬與實測驗證」）的實測 Pd。實測值與 rf_data 同存於專案文件，
@@ -9804,6 +9911,8 @@ async function saveAllTabs() {
   try {
     // Tab1 的貼圖需先上傳到 SP(讓 JSON 保持精簡)
     if (hasSg) await tcpNormalizeSPImages();
+    // 熱阻的 θJC 同步到 R_jc(5G-RRU 讀這個欄位算 Tj);直接新增/快選/舊資料統一在這裡對齊
+    if (hasSg) sgSyncRjcAll(sgProjectData);
 
     // 把三頁的寫入合併成單一批次(每頁寫回各自的專案 id)
     const ops = [];
