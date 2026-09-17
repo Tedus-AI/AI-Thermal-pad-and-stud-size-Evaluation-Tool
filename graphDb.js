@@ -572,6 +572,56 @@ const graphDb = {
     return out;
   },
 
+  /* ─── 元件規格書 (SPEC) 檔案儲存 ───────────────────────
+     路徑：<ToolDatabase>/SPEC/<專案名稱>/<元件類別>/<元件名>__<原始檔名>
+     例：/…/ToolDatabase/SPEC/StarKcore-12L/RF/GTRB384608FC-Final__datasheet.pdf
+     與 tcp_images 一樣採 path-based addressing（不額外 encode，與既有實作一致），
+     故使用者可控的專案名／元件名／檔名一律先過 _specSafe 去掉會壞掉的字元。 */
+  _specSafe(s) {
+    return String(s == null ? '' : s)
+      .replace(/[\\/:*?"<>|#%]/g, '_')     // SharePoint 非法字元 + 會破壞 URL 的 # %
+      .replace(/[ -]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100) || '_';
+  },
+
+  async uploadSpec(projectName, catKey, componentName, file) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const base = SHAREPOINT_CONFIG.filePath.replace(/[^/]+$/, '') + 'SPEC';
+    const folder = `${base}/${this._specSafe(projectName)}/${this._specSafe(catKey)}`;
+    const filename = `${this._specSafe(componentName)}__${this._specSafe(file.name)}`;
+    const token = await this._getAccessToken(true);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${folder}/${filename}:/content`,
+      { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` }, body: file }
+    );
+    if (!resp.ok) throw new Error('規格書上傳失敗 ' + resp.status);
+    return `${folder}/${filename}`;
+  },
+
+  async getSpecSrc(path) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const token = await this._getAccessToken(true);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${path}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!resp.ok) throw new Error('規格書讀取失敗 ' + resp.status);
+    const item = await resp.json();
+    return item['@microsoft.graph.downloadUrl'] || null;
+  },
+
+  async deleteSpec(path) {
+    if (!_siteId) await this._resolveDriveItemId();
+    const token = await this._getAccessToken(false).catch(() => null);
+    if (!token) return;
+    await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${path}`,
+      { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
+    );
+  },
+
   /* 自包含備份：把所有 sp: 圖檔(元件位置標註)抓下來嵌成 data URL 存進 JSON，
      使備份單一檔即含全部內容(含圖)，離線載入也能直接顯示。onProgress(done,total) 供 UI 顯示進度。
      深拷貝後處理，不動 live dbCache;個別圖片抓取失敗則保留 sp: 參照(不中斷整體備份)。 */
