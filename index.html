@@ -511,6 +511,30 @@
   .comp-toolbar .field { margin-bottom: 0; flex: 1; min-width: 200px; }
   .comp-toolbar .field select { font-size: 0.95rem; }
 
+  /* ── Tab1 專案列：下拉縮半 + 六顆按鈕同排等高，匯出鈕靠最右分隔 ── */
+  .sg-proj-toolbar { --sg-row-h: 42px; align-items: flex-end; row-gap: 10px; }
+  /* 下拉縮短為原本的一半（原本 flex:1 吃滿寬） */
+  .sg-proj-toolbar .sg-proj-field { flex: 0 1 50%; max-width: 50%; min-width: 180px; }
+  .sg-proj-toolbar .sg-proj-field select { height: var(--sg-row-h); box-sizing: border-box; }
+  .sg-proj-actions,
+  .sg-proj-exports { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+  /* 匯出鈕推到同排最右側，與前面四顆明顯區隔 */
+  .sg-proj-exports { margin-left: auto; padding-left: 18px; }
+  /* 同排所有按鈕與下拉等高 */
+  .sg-proj-actions .btn,
+  .sg-proj-exports .btn-export {
+    height: var(--sg-row-h);
+    box-sizing: border-box;
+    padding-top: 0; padding-bottom: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    white-space: nowrap;
+  }
+  .sg-proj-actions .save-status { align-self: center; }
+  /* 視窗較窄時：匯出鈕換行後仍靠右 */
+  @media (max-width: 1280px) {
+    .sg-proj-toolbar .sg-proj-field { flex: 1 1 100%; max-width: 100%; }
+  }
+
   .comp-status {
     padding: 12px 20px;
     background: #fff8e1;
@@ -699,7 +723,9 @@
   .btn-save:hover { background: #d35400; }
   .btn:disabled { background: #b0c4de; cursor: not-allowed; }
   /* 鎖定時「+ 新增專案」反灰（覆寫 inline 綠色背景） */
-  #sg-new-project-btn:disabled { background: #b0c4de !important; color: #eef2f6 !important; cursor: not-allowed; opacity: 0.85; }
+  /* 新增專案已改用 .btn-primary（與載入專案同色），停用樣式交給通用 .btn:disabled，
+     這裡只保留游標提示，避免舊的淺藍配色蓋掉通用停用灰。 */
+  #sg-new-project-btn:disabled { cursor: not-allowed; }
 
   .loading-spinner {
     display: inline-block;
@@ -1350,6 +1376,18 @@
     border-radius: 3px; font-size: 0.68rem; padding: 0 5px; cursor: pointer;
   }
   .sg-meas-apply:hover:not(:disabled) { background: #ccfbf1; }
+  /* 規格書欄：上傳／下載／刪除／上傳時間 四顆 icon */
+  .sg-spec-cell { white-space: nowrap; text-align: center; }
+  .sg-spec-btns { display: inline-flex; gap: 3px; align-items: center; }
+  .sg-spec-btn {
+    border: 1px solid #cbd5e1; background: #fff; color: #334155;
+    border-radius: 5px; font-size: 0.8rem; line-height: 1;
+    padding: 3px 5px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .sg-spec-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
+  .sg-spec-btn.danger:hover:not(:disabled) { background: #fee2e2; border-color: #f5b5b5; }
+  .sg-spec-btn:disabled { opacity: 0.32; cursor: not-allowed; }
   .sg-comp-add-btn {
     display: inline-flex;
     align-items: center;
@@ -3855,6 +3893,31 @@
   .gm-action-rail button:hover::after { opacity: 1; }
   @media (max-width: 1100px) { .gm-action-rail { display: none; } }
 
+  /* ── 浮動工具列：可收合 + 可拖曳 ──
+     預設位置維持原本（右側垂直置中）；拖曳後改用 left/top 絕對定位並記憶於 localStorage。 */
+  .gm-rail-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .gm-rail-body { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .gm-action-rail .gm-rail-grip { cursor: grab; height: 22px; }
+  .gm-action-rail .gm-rail-grip svg { width: 18px; height: 18px; opacity: 0.55; }
+  .gm-action-rail .gm-rail-grip:hover svg { opacity: 0.9; }
+  .gm-action-rail.gm-dragging,
+  .gm-action-rail.gm-dragging .gm-rail-grip { cursor: grabbing; }
+  .gm-action-rail.gm-dragging { user-select: none; }
+  /* 拖曳後：解除原本的右側定位與垂直置中位移，改吃 inline left/top。
+     注意：這裡不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉
+     我們設的 inline top，拖曳的垂直位置會失效（元件被推到畫面頂端）。
+     基礎規則的 top:50% 非 !important，inline top 本來就蓋得過。 */
+  .gm-action-rail.gm-moved { right: auto !important; transform: none !important; }
+  /* 收合：body 與把手隱藏 → 只剩一顆按鈕 */
+  .gm-action-rail.gm-collapsed .gm-rail-body,
+  .gm-action-rail.gm-collapsed .gm-rail-grip { display: none; }
+  .gm-action-rail.gm-collapsed { padding: 6px; cursor: grab; }
+  .gm-action-rail.gm-collapsed.gm-dragging { cursor: grabbing; }
+  /* 展開/收合圖示切換 */
+  .gm-rail-ico-expand { display: none; }
+  .gm-action-rail.gm-collapsed .gm-rail-ico-collapse { display: none; }
+  .gm-action-rail.gm-collapsed .gm-rail-ico-expand { display: block; }
+
   /* AI popover */
   .gm-ai-popover {
     position: fixed;
@@ -4424,6 +4487,12 @@
   </div>
 </div>
 
+<!-- 規格書上傳用的隱藏檔案輸入：放在頂層（不可放進 #sg-project-components，
+     否則未解鎖時會被唯讀鎖 disabled，連解鎖後的 .click() 都觸發不了） -->
+<input type="file" id="sg-spec-file-input" style="display:none"
+       accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.png,.jpg,.jpeg"
+       onchange="sgSpecOnFilePicked(this)">
+
 <div class="container">
 
   <div class="header">
@@ -4670,16 +4739,24 @@
         專案元件電子清單
       </div>
       <div class="sg-panel-body">
-        <div class="comp-toolbar">
-          <div class="field">
+        <div class="comp-toolbar sg-proj-toolbar">
+          <div class="field sg-proj-field">
             <label>選擇專案</label>
             <select id="sg-project-select" onchange="sgOnProjectChange()">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
-          <button class="btn" id="sg-new-project-btn" style="background:#217346;color:#fff;" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
-          <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
+          <div class="sg-proj-actions">
+            <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
+            <button class="btn btn-primary" id="sg-new-project-btn" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
+            <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
+            <button class="btn btn-primary" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" disabled>儲存元件變更</button>
+            <span id="sg-comp-save-status" class="save-status"></span>
+          </div>
+          <div class="sg-proj-exports">
+            <button class="btn-export excel" onclick="sgExportExcel()" id="sg-export-excel-btn" disabled>&#128202; 匯出 Excel</button>
+            <button class="btn-export pdf" onclick="sgExportPdf()" id="sg-export-pdf-btn" disabled>&#128196; 匯出 PDF</button>
+          </div>
         </div>
         <div id="sg-new-project-form" class="sg-new-project-form">
           <div class="field">
@@ -4699,15 +4776,9 @@
 
         <!-- Existing Project Components -->
         <div id="sg-project-components" style="display:none; margin-top:16px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+          <div style="display:flex; align-items:center; margin-bottom:10px;">
             <div style="font-size:0.9rem; font-weight:700; color:#1a3a6b;">
               目前專案元件清單
-            </div>
-            <div class="sg-comp-save-bar" style="margin:0; padding:0; gap:8px; display:flex; align-items:center; flex-wrap:wrap;">
-              <button class="btn-export excel" onclick="sgExportExcel()" id="sg-export-excel-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128202; 匯出 Excel</button>
-              <button class="btn-export pdf" onclick="sgExportPdf()" id="sg-export-pdf-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128196; 匯出 PDF</button>
-              <button class="btn btn-save" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" style="padding:7px 18px; font-size:0.85rem;" disabled>儲存元件變更</button>
-              <span id="sg-comp-save-status" class="save-status"></span>
             </div>
           </div>
           <div id="sg-power-summary-container" style="display:none; margin-bottom:14px;">
@@ -5180,6 +5251,7 @@ function applyReadonlyLock() {
       if (el.closest('.protect-bar')) return;           // 密碼保護條本身
       if (el.classList.contains('btn-export')) return;  // 匯出保持可用
       if (el.classList.contains('tcp-view-btn')) return; // 👁 檢視：免解鎖唯讀檢視元件標註
+      if (el.classList.contains('sg-spec-ro')) return;   // 規格書 下載／上傳時間：唯讀資訊，免解鎖可用
       if (isProtected) {
         if (!el.disabled) { el.__roLocked = true; el.disabled = true; }
       } else if (el.__roLocked) {
@@ -5421,6 +5493,103 @@ function railHideLockPopover() {
   if (inp) inp.value = '';
   document.removeEventListener('mousedown', railLockOutsideClose);
 }
+/* ── 浮動工具列：可收合 + 可拖曳 ──
+   收合後只剩一顆按鈕（再按展開）；展開時用左上把手拖曳，收合時整顆可拖。
+   位置／收合狀態記憶在 localStorage（讀寫皆 try/catch：隱私視窗可能丟例外）；
+   未曾拖曳過就沿用 CSS 預設位置（右側垂直置中）。拖曳一律 clamp 在 viewport 內。 */
+const RAIL_POS_KEY = 'gmRailPos';
+const RAIL_COLLAPSED_KEY = 'gmRailCollapsed';
+
+function railToggleCollapse() {
+  const rail = document.getElementById('gm-rail');
+  if (!rail) return;
+  const collapsed = rail.classList.toggle('gm-collapsed');
+  try { localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
+  railSyncCollapseUi();
+}
+
+function railSyncCollapseUi() {
+  const rail = document.getElementById('gm-rail');
+  const btn = document.getElementById('gm-rail-toggle');
+  if (!rail || !btn) return;
+  const collapsed = rail.classList.contains('gm-collapsed');
+  const tip = collapsed ? '展開工具列（可拖曳移動）' : '收合工具列';
+  btn.setAttribute('data-tip', tip);
+  btn.setAttribute('aria-label', tip);
+  btn.classList.toggle('gm-ai', collapsed);   // 收合時用強調色，維持明顯可見
+}
+
+function railApplyPos(left, top) {
+  const rail = document.getElementById('gm-rail');
+  if (!rail) return;
+  const w = rail.offsetWidth, h = rail.offsetHeight;
+  const maxL = Math.max(4, window.innerWidth - w - 4);
+  const maxT = Math.max(4, window.innerHeight - h - 4);
+  rail.classList.add('gm-moved');
+  rail.style.left = Math.min(Math.max(4, left), maxL) + 'px';
+  rail.style.top = Math.min(Math.max(4, top), maxT) + 'px';
+}
+
+function railResetPos() {
+  const rail = document.getElementById('gm-rail');
+  if (!rail) return;
+  rail.classList.remove('gm-moved');
+  rail.style.left = ''; rail.style.top = '';
+  try { localStorage.removeItem(RAIL_POS_KEY); } catch (e) {}
+}
+
+function railInitFloating() {
+  const rail = document.getElementById('gm-rail');
+  if (!rail) return;
+  try { if (localStorage.getItem(RAIL_COLLAPSED_KEY) === '1') rail.classList.add('gm-collapsed'); } catch (e) {}
+  railSyncCollapseUi();
+  try {
+    const raw = localStorage.getItem(RAIL_POS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p && isFinite(p.left) && isFinite(p.top)) railApplyPos(p.left, p.top);
+    }
+  } catch (e) {}
+
+  let st = null;
+  rail.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const viaGrip = !!e.target.closest('#gm-rail-grip');
+    // 展開時只有把手可拖；收合時整顆（只剩一顆鈕）都可拖
+    if (!viaGrip && !rail.classList.contains('gm-collapsed')) return;
+    const r = rail.getBoundingClientRect();
+    st = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, moved: false };
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!st) return;
+    if (!st.moved && Math.hypot(e.clientX - st.sx, e.clientY - st.sy) < 4) return;  // 門檻：區分點擊與拖曳
+    st.moved = true;
+    rail.classList.add('gm-dragging');
+    railApplyPos(e.clientX - st.dx, e.clientY - st.dy);
+  });
+  window.addEventListener('mouseup', () => {
+    if (!st) return;
+    const moved = st.moved;
+    st = null;
+    rail.classList.remove('gm-dragging');
+    if (!moved) return;
+    const r = rail.getBoundingClientRect();
+    try { localStorage.setItem(RAIL_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
+    // 拖曳結束後抑制這一次 click，避免收合鈕被誤觸
+    window.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); },
+      { capture: true, once: true });
+  });
+  // 視窗縮放 → 夾回可視範圍，避免浮動列跑出畫面
+  window.addEventListener('resize', () => {
+    if (!rail.classList.contains('gm-moved')) return;
+    const r = rail.getBoundingClientRect();
+    railApplyPos(r.left, r.top);
+  });
+  const grip = document.getElementById('gm-rail-grip');
+  if (grip) grip.addEventListener('dblclick', railResetPos);
+}
+
 async function railToggleLock() {
   // 已解鎖 → 直接重新鎖定(不需密碼)
   if (!railCurrentLocked()) {
@@ -5708,6 +5877,8 @@ initDatabase();
 
 // 啟動時同步工具列鎖頭圖示（預設為鎖定 = 閉合掛鎖）
 if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
+// 浮動工具列：還原收合狀態與位置，並啟用拖曳
+if (typeof railInitFloating === 'function') railInitFloating();
 
 // ── 編輯鎖生命週期：活動追蹤 + 自動續約 + 逾時/遺失偵測（H-4）──
 let _lastActivityTs = Date.now();
@@ -7114,7 +7285,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>Thermal Via 內徑(mil)-貫穿型</th><th>Thermal Via Qty</th><th>Temp Sensor</th><th>備註</th><th></th>
+          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>備註</th><th>規格書</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -7126,6 +7297,18 @@ function sgRenderProjectComponents() {
       const customVisible = selectVal === '其他' ? ' visible' : '';
       const refLocked = !!comp._ref_locked;
       const refOrigin = comp._ref_origin_project || '';
+      // 規格書（SPEC）：上傳／下載／刪除／上傳時間四顆 icon，皆有 tooltip。
+      // 未上傳時下載與刪除停用；下載與時鐘標 sg-spec-ro → 唯讀(未解鎖)時仍可用。
+      const spec = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile : null;
+      const specName = spec ? (spec.name || '規格書') : '';
+      const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
+      const specCell =
+        `<div class="sg-spec-btns">` +
+        `<button class="sg-spec-btn" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">⬆</button>` +
+        `<button class="sg-spec-btn sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">⬇</button>` +
+        `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('刪除規格書：' + specName) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
+        `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '')) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
+        `</div>`;
       const refBadge = refLocked
         ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button></div>`
         : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}</div>` : '');
@@ -7165,6 +7348,7 @@ function sgRenderProjectComponents() {
           </div>
         </div></td>
         <td class="sg-edit-cell"><input class="sg-cell-input" type="text" value="${escapeHtml(comp.note || '')}" data-cat="${c}" data-idx="${i}" data-field="note" placeholder="—" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell sg-spec-cell">${specCell}</td>
         <td class="sg-edit-cell" style="text-align:center; white-space:nowrap;"><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},-1)" ${i === 0 ? 'disabled' : ''} title="上移（順序連動 Tab2/Tab3）">&#9650;</button><button class="sg-move-btn" onclick="sgMoveComp('${c}',${i},1)" ${i === items.length - 1 ? 'disabled' : ''} title="下移（順序連動 Tab2/Tab3）">&#9660;</button> <button class="sg-comp-del-btn" onclick="sgDeleteComp('${c}',${i})" title="刪除此元件">&#10060;</button></td>
       </tr>`;
     });
@@ -7649,6 +7833,112 @@ function sgPickerAdd(cat, projId, compName) {
   sgProjectData[fieldKey].push(sgMakeComp(cat, overrides));
   sgPickerClose(cat);
   sgRenderProjectComponents();
+}
+
+/* ── 元件規格書（SPEC）上傳／下載／刪除 ──
+   檔案存到 SharePoint：<ToolDatabase>/SPEC/<專案名稱>/<元件類別>/<元件名>__<檔名>；
+   DB 只在該元件上記 comp.SpecFile = { path, name, at, by }（跟著元件走，改名也不會斷）。
+   上傳／刪除屬寫入動作（未解鎖時按鈕已被唯讀鎖停用）；下載與時鐘為唯讀資訊，唯讀時仍可用。 */
+let _sgSpecTarget = null;   // { cat, idx } 等待檔案選取
+
+function _sgSpecComp(cat, idx) {
+  const arr = sgProjectData && sgProjectData[SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field];
+  return Array.isArray(arr) ? arr[idx] : null;
+}
+
+function sgSpecUpload(cat, idx) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  if (!dbAdapter.isSharePointMode || !dbAdapter.isSharePointMode()) {
+    alert('規格書需要 SharePoint 檔案儲存空間；目前為本機／離線模式，無法上傳。');
+    return;
+  }
+  const comp = _sgSpecComp(cat, idx);
+  if (!comp) return;
+  if (!comp.Component || !String(comp.Component).trim()) {
+    alert('請先填寫元件名稱，再上傳規格書（檔案會以元件名稱命名）。');
+    return;
+  }
+  _sgSpecTarget = { cat, idx };
+  const input = document.getElementById('sg-spec-file-input');
+  if (input) { input.value = ''; input.click(); }
+}
+
+async function sgSpecOnFilePicked(inputEl) {
+  const t = _sgSpecTarget;
+  _sgSpecTarget = null;
+  const file = inputEl && inputEl.files && inputEl.files[0];
+  if (!t || !file) return;
+  const comp = _sgSpecComp(t.cat, t.idx);
+  if (!comp) return;
+  const projName = (sgProjectData && (sgProjectData.project_name || sgProjectId)) || 'UnknownProject';
+  const old = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile.path : null;
+  try {
+    roToast('⬆ 規格書上傳中… ' + file.name);
+    const path = await dbAdapter.uploadSpec(projName, t.cat, comp.Component, file);
+    if (!path) throw new Error('上傳未回傳路徑');
+    const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
+    comp.SpecFile = {
+      path,
+      name: file.name,
+      at: new Date().toISOString(),
+      by: (acct && acct.name) || '',
+    };
+    // 取代舊檔：新檔上傳成功後才刪舊檔（路徑不同才刪，避免刪掉剛覆蓋的同名檔）
+    if (old && old !== path) { try { await dbAdapter.deleteSpec(old); } catch (e) {} }
+    sgRenderProjectComponents();
+    roToast('✅ 規格書已上傳，請記得按「儲存元件變更」');
+  } catch (e) {
+    console.error('[spec] 上傳失敗', e);
+    alert('規格書上傳失敗：' + (e.message || e));
+  }
+}
+
+async function sgSpecDownload(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  const spec = comp && comp.SpecFile;
+  if (!spec || !spec.path) return;
+  try {
+    const url = await dbAdapter.getSpecSrc(spec.path);
+    if (!url) throw new Error('取得下載連結失敗');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = spec.name || 'spec';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    console.error('[spec] 下載失敗', e);
+    alert('規格書下載失敗：' + (e.message || e));
+  }
+}
+
+async function sgSpecDelete(cat, idx) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  const comp = _sgSpecComp(cat, idx);
+  const spec = comp && comp.SpecFile;
+  if (!spec || !spec.path) return;
+  // 破壞性操作：重複確認
+  if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' + (spec.name || '') + '\n\n此操作會從 SharePoint 移除該檔案。')) return;
+  if (!confirm('再次確認：刪除後無法復原，仍要刪除嗎？')) return;
+  try {
+    await dbAdapter.deleteSpec(spec.path);
+  } catch (e) {
+    console.warn('[spec] 刪除檔案失敗（仍會清除參照）', e);
+  }
+  delete comp.SpecFile;
+  sgRenderProjectComponents();
+  roToast('🗑 規格書已刪除，請記得按「儲存元件變更」');
+}
+
+function sgSpecInfo(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  const spec = comp && comp.SpecFile;
+  if (!spec || !spec.path) { alert('此元件尚未上傳規格書。'); return; }
+  const at = spec.at ? new Date(spec.at).toLocaleString('zh-TW') : '（無紀錄）';
+  alert('元件：' + (comp.Component || '') + '\n檔案：' + (spec.name || '') +
+        '\n上傳時間：' + at + (spec.by ? '\n上傳者：' + spec.by : ''));
 }
 
 /* 讀取某元件（同專案「模擬與實測驗證」）的實測 Pd。實測值與 rf_data 同存於專案文件，
@@ -11014,7 +11304,25 @@ function fbShowShadowReadReport() {
 </button>
 
 <!-- ✦ GAMMA-STYLE FLOATING ACTION RAIL ✦ -->
-<aside class="gm-action-rail" aria-label="快速動作">
+<aside class="gm-action-rail" id="gm-rail" aria-label="快速動作">
+  <div class="gm-rail-head">
+    <button type="button" class="gm-rail-grip" id="gm-rail-grip" data-tip="拖曳移動工具列（雙擊還原預設位置）" aria-label="拖曳移動工具列">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+        <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+        <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+      </svg>
+    </button>
+    <button type="button" class="gm-rail-toggle" id="gm-rail-toggle" data-tip="收合工具列" aria-label="收合工具列" onclick="railToggleCollapse()">
+      <svg class="gm-rail-ico-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 6 15 12 9 18"/>
+      </svg>
+      <svg class="gm-rail-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+      </svg>
+    </button>
+  </div>
+  <div class="gm-rail-body" id="gm-rail-body">
   <button type="button" class="gm-ai" data-tip="關於此工具" onclick="gmToggleAiPopover()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
@@ -11075,6 +11383,7 @@ function fbShowShadowReadReport() {
       <polyline points="7 3 7 8 15 8"/>
     </svg>
   </button>
+  </div><!-- /.gm-rail-body -->
 </aside>
 
 </div><!-- /.tc-rail-wrapper -->

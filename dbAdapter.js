@@ -404,6 +404,22 @@ const dbAdapter = {
     return await graphDb.deleteTcpImage(spPath);
   },
 
+  /* ─── 元件規格書 (SPEC)：僅 SharePoint 模式支援（本機/離線無檔案儲存空間） ─── */
+  async uploadSpec(projectName, catKey, componentName, file) {
+    if (!this.isSharePointMode()) return null;
+    return await graphDb.uploadSpec(projectName, catKey, componentName, file);
+  },
+
+  async getSpecSrc(path) {
+    if (!this.isSharePointMode()) return null;
+    return await graphDb.getSpecSrc(path);
+  },
+
+  async deleteSpec(path) {
+    if (!this.isSharePointMode()) return null;
+    return await graphDb.deleteSpec(path);
+  },
+
   async listTcpImages(projectId) {
     if (DB_MODE !== 'sharepoint') return [];
     return await graphDb.listTcpImages(projectId);
