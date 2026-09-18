@@ -52,6 +52,11 @@
 > `tim_library` 查得到就用該型號的 `k` 與 `gapThickness`，否則 fallback 它自己
 > `global_params` 的 `K_<Type>` / `t_<Type>`；`Pad2` 已從它的 UI 移除（收斂成「`Pad` + 型號」）。
 > ⚠ **5G-RRU 只讀不寫 `tim_library`**：新增／修改型號的入口只有本工具 Tab2 的型號庫視窗。
+> 它的參數控制台已把 TIM 的六個 `K_`/`t_` 輸入欄換成一顆「🧪 TIM 型號庫」按鈕，開出來是
+> **唯讀檢視**（列出型號／類型／k／填縫厚度／預設厚度／廠商／備註 ＋ 一個前往本工具的連結），
+> 沒有任何可編輯欄位或新增／儲存／刪除鍵。**k 值屬於「材料」不屬於「專案」，編輯入口只留這一個。**
+> 因此在本工具的型號庫改了 k 或填縫厚度，5G-RRU 端只要重讀型號庫（載入專案／開那顆按鈕）
+> 就會即時反映到它的 `R_TIM`；反過來它改不動我們的型號庫。
 
 ##### ⚠ 兩個厚度不是同一件事（`thickness` vs `gapThickness`）
 
@@ -61,9 +66,13 @@
 | `gapThickness` | 填縫厚度(mm) | **壓縮後實際填在縫隙裡**的厚度 | `t_Pad` / `t_Putty` / `t_Grease` |
 | `k` | k (W/m·K) | 導熱係數 | `K_Pad` / `K_Putty` / `K_Grease` |
 
-5G-RRU 的 `calcRow` 是 `rt = (ti.t / 1000) / (ti.k × ta)`，`ti.t` 取自 `global_params` 的
-`t_<Type>`（參數控制台標題就叫 `t (Pad)`、`t (Putty)`、`t (Grease)`、`t (Pad 2)`、`t (錫片)`），
-單位 mm。**要餵給它的是 `gapThickness`，不是 `thickness`。**
+5G-RRU 的 `calcRow` 是 `rt = (ti.t / 1000) / (ti.k × ta)`，`ti.t` 取自型號的 `gapThickness`；
+沒選型號時才 fallback 到該專案 `global_params` 的 `t_<Type>`（單位 mm）。
+**要餵給它的是 `gapThickness`，不是 `thickness`。**
+
+> `K_<Type>`/`t_<Type>` 這六個 key 在 5G-RRU 端**仍存在於 `global_params`、仍是 fallback**，
+> 只是它的參數控制台已經沒有輸入欄（改成上面那顆唯讀按鈕）→ 使用者實際看得到、改得動的
+> k 與填縫厚度**只剩本工具的型號庫**。沒有型號可選的專案才會吃到那組 fallback 值。
 
 佐證（兩邊預設值互相對照）：5G-RRU `t_Pad = 1.7` 等於本工具 Tab2 的「IC 距離 HSK = 1.7」，
 而不是「TIM 厚度 = 2.5」→ 它要的就是壓縮後的縫隙厚度。Putty（0.5）與 Grease（0.05）
