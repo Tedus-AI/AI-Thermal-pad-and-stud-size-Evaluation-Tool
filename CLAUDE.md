@@ -89,7 +89,7 @@
 | `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
 | `TIM_Type` | 兩邊（AI-Thermal Tab2 有選類型時覆寫）| 見下方「`TIM_Type` 也由 Tab2 推導」的兩個守則 |
 | `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
-| `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
+| `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」。`Thick(mm)` 在 5G-RRU 端已改為由它參數控制台的「PCB 板厚度」(`t_PCB`) 與「銅塊厚度」(`Coin_T_Setting`) 依 `Board_Type` 推導（`IC top`/`None` 則為 0），本工具更不該碰它 |
 
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
 > `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`/`TIM_Type`）。漏一個，快選複製元件時就會掉值。
