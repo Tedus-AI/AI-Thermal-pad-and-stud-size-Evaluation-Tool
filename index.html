@@ -610,7 +610,15 @@
   .comp-table .heat-source-height-col { min-width: 90px; }
   .comp-table .boss-size-col { min-width: 96px; }
   .comp-table .boss-surface-col { min-width: 120px; }
-  .comp-table .tim-type-col { min-width: 100px; }
+  .comp-table .tim-type-col { min-width: 132px; }
+  /* TIM 選型：掛在「TIM Type」格底下的型號下拉 */
+  .comp-table .tim-model-sub { margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1; }
+  .comp-table .tim-model-sub .cell-select { font-size: 0.74rem; }
+  .comp-table .tim-model-empty {
+    display: block; font-size: 0.68rem; line-height: 1.25; color: #8a6100; cursor: help;
+  }
+  /* 型號已從型號庫移除 → 琥珀提示（紅色保留給 Fail/錯誤） */
+  .comp-table .tim-model-gone .cell-select { border-color: #f0b429; background: #fff8e1; }
   .comp-table .tim-thickness-col { min-width: 140px; }
   /* 選項字串比舊的「IC top/IC bot/雙向」長（Thermal Via / Copper Coin），要夠寬才不會
      把目前選到的值截斷；本表外層本來就是 overflow-x:auto，多這點寬度只是多捲一點。 */
@@ -6544,6 +6552,11 @@ async function onProjectChange() {
     hiddenComponents = currentProjectData.hidden_components || {};
 
     renderAllCategories();
+    // 型號庫是頂層 collection、與專案無關，但 TIM 選型的下拉需要它 → 背景載入後再重繪一次
+    if (!timLibLoaded) {
+      timLibLoad().then(() => { if (currentProjectData) renderAllCategories(); })
+                  .catch(e => console.warn('[timLib] 背景載入失敗', e));
+    }
     legendEl.style.display = 'flex';
     saveBtn.style.display = '';
     saveBtn.disabled = isProtected;
@@ -6704,6 +6717,13 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const icHskIsCustom = icToHSK && !icHskPresets.includes(icToHSK);
     const icHskSelVal = icHskIsCustom ? '\u81ea\u8a02' : icToHSK;
     const note         = spec.note           || '';
+    // TIM 選型（型號庫）：選了型號 → TIM 厚度改由型號的「預設厚度」帶入並鎖定，
+    // 單一事實來源是型號庫，且不再受 TIM_THICKNESS_OPTIONS 固定清單限制
+    // （型號可能是 1.2mm 這種清單裡沒有的值）。5G-RRU 端另取該型號的「填縫厚度」
+    // 算 R_TIM —— 兩邊各取所需，詳見 CLAUDE.md。
+    const timModel     = spec.timModel || '';
+    const timModelRec  = timModel ? timLibFindByModel(timType, timModel) : null;
+    const timModelGone = !!timModel && !timModelRec;   // 型號庫裡被刪掉了 → 要讓使用者知道
     const showTimSize  = !!TIM_AUTO[timType];   // Pad/Putty/Grease 皆有 TIM Size 欄
     const showBossCustom = (bossSizeType === '\u81ea\u8a02');
 
@@ -6716,7 +6736,12 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const _pw = parseFloat(comp['Power(W)']) || 0;
     const canAutoSize = isPad && autoApplied && !!_szm && parseFloat(_szm[1]) > 0 && parseFloat(_szm[2]) > 0 && _pw <= 5;
     const eqBossTimSize = autoApplied && !!timAutoCfg.timSizeEqualsBoss;  // Putty/Grease\uff1aTIM Size = \u51f8\u53f0\u5927\u5c0f
-    const lockThick   = autoApplied && !padUnlock.timThickness;  // \u4e09\u7a2e TIM \u7686\u9396 TIM \u539a\u5ea6
+    // 型號帶入的厚度優先（比 TIM_PRESETS 的分類預設更具體）；沒選型號才走原本的分類鎖定
+    const modelThick  = (timModelRec && timModelRec.thickness !== '' && timModelRec.thickness != null)
+      ? String(timModelRec.thickness) : '';
+    const lockThickByModel = !!modelThick && !padUnlock.timThickness;
+    const timThickShown = lockThickByModel ? modelThick : timThickness;
+    const lockThick   = (autoApplied || lockThickByModel) && !padUnlock.timThickness;  // \u4e09\u7a2e TIM \u7686\u9396 TIM \u539a\u5ea6
     const lockSurface = autoApplied && !padUnlock.bossSurface;   // \u4e09\u7a2e TIM \u7686\u9396\u51f8\u53f0\u8868\u9762\u8655\u7406
     const lockTimSize = (canAutoSize || eqBossTimSize) && !padUnlock.timSize;  // Pad \u516c\u5f0f / Putty,Grease \u540c\u51f8\u53f0
     const lockIc      = autoApplied && !!timAutoCfg.lockIc && !padUnlock.icToHSK;  // Putty,Grease \u9396 IC \u8ddd\u96e2 HSK
@@ -6724,7 +6749,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     // \u540d\u7a31/key \u4e00\u5f8b\u4e0d\u62fc\u9032 onclick \u5c6c\u6027\uff08\u9632 XSS \u8207\u5f15\u865f\u7834\u58de\uff09\uff1a\u7528 data-* + \u4e8b\u4ef6\u59d4\u6d3e
     const unlockBtn = (f) => `<button type="button" class="tim-unlock-btn" title="\u89e3\u9396\u4ee5\u624b\u52d5\u4fee\u6539" data-comp="${escapeAttr(specKey)}" data-unlock-field="${f}">\u2702</button>`;
     const timThickInner = lockThick
-      ? `<span class="tim-locked-val">${escapeHtml(timThickness || '\u2014')}</span>${unlockBtn('timThickness')}`
+      ? `<span class="tim-locked-val"${lockThickByModel ? ` title="自動帶入自型號「${escapeAttr(timModel)}」的預設厚度（型號庫）"` : ''}>${escapeHtml(timThickShown || '\u2014')}</span>${unlockBtn('timThickness')}`
       : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="timThickness" onchange="onCellChange(this)"><option value="">\u2014</option>${TIM_THICKNESS_OPTIONS.map(o=>`<option value="${o}" ${timThickness===o?'selected':''}>${o}</option>`).join('')}</select>`;
     const bossSurfaceInner = lockSurface
       ? `<span class="tim-locked-val">${escapeHtml(bossSurface || '\u2014')}</span>${unlockBtn('bossSurface')}`
@@ -6780,6 +6805,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                   `<option value="${o}" ${timType === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
               </select>
+              ${timLibModelCell(specKey, timType, timModel, timModelGone)}
             </td>
             <td class="editable-cell boss-size-col">${bossSizeCell}</td>
             <td class="editable-cell boss-surface-col">${bossSurfaceInner}</td>
@@ -6952,6 +6978,7 @@ function onTimTypeChange(el) {
   if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
   const spec = thermalSpecs[compKey];
   spec.timType = timType;
+  delete spec.timModel;                // 型號隸屬於某個 TIM 類型，換類型後舊型號不再適用
   spec.padUnlock = {};                 // 切換 TIM 種類 → 重置解鎖狀態
 
   const preset = TIM_PRESETS[timType];
@@ -7893,8 +7920,10 @@ const SG_VARIANT_CARRY = [
   'Type', 'Qty', 'Power(W)', 'Power_RT(W)', 'TV_ID_mil', 'TV_Qty',
   'Temp_Sensor', 'Local_Qty', 'Remote_Qty', 'note',
   'Rth', 'SpecFile',
+  // Tab2 推導出來的欄位（也要帶，否則快選複製的元件會掉掉這些值）
+  'Board_Type', 'Pad_L', 'Pad_W', 'R_jc', 'TIM_Model',
   // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
-  'Height(mm)', 'Pad_L', 'Pad_W', 'Thick(mm)', 'Board_Type', 'Limit(C)', 'R_jc', 'TIM_Type',
+  'Height(mm)', 'Thick(mm)', 'Limit(C)', 'TIM_Type',
 ];
 
 /* 依白名單抄出來源元件的欄位。物件／陣列（Rth、SpecFile）必須深拷貝，
@@ -8293,9 +8322,22 @@ function sgSpecKey(name) {
 /* 把單一元件的 Board_Type / Pad_L / Pad_W 依 spec 推導；有變更回 true */
 function sgDeriveFromSpec(comp, spec) {
   if (!comp) return false;
-  const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
-  if (!cfg) return false;              // 未選主散熱路徑 → 什麼都不寫
   let changed = false;
+
+  // TIM 選型 → comp.TIM_Model（型號「名字串」，不是內部 id —— 跨工具要看得懂）。
+  // 5G-RRU 端的規則：有 TIM_Model 且在 tim_library 查到 → 用該型號的 k 與 gapThickness；
+  // 否則沿用它自己 global_params 的 K_<Type> / t_<Type>。
+  // ⚠ 這裡刻意不寫 comp.TIM_Type：5G-RRU 有本工具沒有的 'Pad2'，貿然覆寫會把它的
+  //   K_Pad2/t_Pad2 換成 K_Pad/t_Pad。TIM_Type 的連動與 Pad2 收斂要兩邊一起改。
+  const model = (spec && spec.timModel) ? String(spec.timModel).trim() : '';
+  if (model) {
+    if (comp.TIM_Model !== model) { comp.TIM_Model = model; changed = true; }
+  } else if (comp.TIM_Model !== undefined) {
+    delete comp.TIM_Model; changed = true;
+  }
+
+  const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
+  if (!cfg) return changed;            // 未選主散熱路徑 → 不寫 Board_Type/Pad
   if (comp.Board_Type !== cfg.board) { comp.Board_Type = cfg.board; changed = true; }
 
   let lw = null;
@@ -8488,6 +8530,51 @@ async function timLibLoad(force) {
     console.error('[timLibLoad]', e);
     timLibrary = {};
   }
+}
+
+/* 依 (TIM 類型, 型號名) 找出型號庫的那一筆；找不到回 null（型號可能被刪掉了） */
+function timLibFindByModel(timType, model) {
+  if (!timType || !model) return null;
+  const want = String(model).trim().toLowerCase();
+  for (const [id, v] of Object.entries(timLibrary)) {
+    if (!v || v.timType !== timType) continue;
+    if (String(v.model || '').trim().toLowerCase() === want) return Object.assign({ _id: id }, v);
+  }
+  return null;
+}
+
+/* Tab2「TIM Type」格底下的型號下拉。只有 Grease/Pad/Putty 需要選型（None 沒有型號）。
+   型號庫還沒建該類型的型號時，直接指路到工具列的「TIM 型號庫」，不要只給一個空下拉。 */
+function timLibModelCell(specKey, timType, timModel, timModelGone) {
+  if (!TIM_LIB_TYPES.includes(timType)) return '';
+  const list = timLibListByType(timType);
+  if (!list.length) {
+    return `<div class="tim-model-sub"><span class="tim-model-empty" title="型號庫裡還沒有 ${escapeAttr(timType)} 型號。請按上方工具列的「TIM 型號庫」新增，填 k 值與填縫厚度後這裡就選得到。">型號庫無 ${escapeHtml(timType)} 型號</span></div>`;
+  }
+  // 型號被刪掉時仍把舊值列出來（標記為已移除），否則畫面會靜默改掉使用者填的內容
+  const opts = list.map(r =>
+    `<option value="${escapeAttr(r.model)}"${r.model === timModel ? ' selected' : ''}>${escapeHtml(r.model)}</option>`).join('');
+  const goneOpt = timModelGone
+    ? `<option value="${escapeAttr(timModel)}" selected>${escapeHtml(timModel)}（已從型號庫移除）</option>` : '';
+  return `<div class="tim-model-sub${timModelGone ? ' tim-model-gone' : ''}">
+    <select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="timModel"
+      title="從 TIM 型號庫選型。選了之後 TIM 厚度由型號帶入，5G-RRU 則取該型號的 k 值與填縫厚度算 R_TIM"
+      onchange="onTimModelChange(this)">
+      <option value="">— 未選型 —</option>${goneOpt}${opts}
+    </select>
+  </div>`;
+}
+
+/* 選型號 → 寫入 spec 並解除 TIM 厚度的手動解鎖（讓新型號的厚度生效）後重繪 */
+function onTimModelChange(el) {
+  const compKey = el.dataset.comp;
+  if (!thermalSpecs[compKey]) thermalSpecs[compKey] = {};
+  const spec = thermalSpecs[compKey];
+  const v = el.value;
+  if (v) spec.timModel = v; else delete spec.timModel;
+  // 換型號等於換來源值 → 取消 TIM 厚度的解鎖，改吃新型號帶入的值（UX 慣例 2：來源變動要跟隨）
+  if (spec.padUnlock) delete spec.padUnlock.timThickness;
+  renderAllCategories();
 }
 
 /* 供其他頁面/第二階段取用：依 TIM 類型列出型號（按型號名排序） */
