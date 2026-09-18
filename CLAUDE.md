@@ -46,8 +46,10 @@
 > `deleteDoc`（`writeBatch` 不支援 delete）。驗證：型號必填、k 必須 > 0、同一 `timType`
 > 下型號不可重複（跨工具是用**型號名字串**參照，不是 id）。`at`/`by` 是首次登錄、
 > 重存不覆蓋；`updatedAt`/`updatedBy` 記錄最後修改。
-> ⚠ **尚未接上元件**：把元件的 `TIM_Model` 指向型號名、並把 5G-RRU 的 `Pad2` 收斂成
-> 「`Pad` + 型號」，需要 5G-RRU 端同步實作（第二階段）。
+> **已接上元件**：Tab2「TIM Type」底下的型號下拉會把型號名寫進 `comp.TIM_Model`
+> （見下方「`TIM_Model`：Tab2 的 TIM 選型」）。
+> ⚠ **5G-RRU 端尚未實作**：`calcRow` 還沒改成優先查 `tim_library`，且 `Pad2` 還沒收斂成
+> 「`Pad` + 型號」。這兩件要在 5G-RRU 側完成，`TIM_Type` 的連動也等它做完才能開。
 
 ##### ⚠ 兩個厚度不是同一件事（`thickness` vs `gapThickness`）
 
@@ -83,11 +85,12 @@
 | `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
 | `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
 | `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
+| `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
+| `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
 
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
 > `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`）。漏一個，快選複製元件時就會掉值。
-| `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
-| `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
+> 目前應為 21 項，與上表一致。
 
 ##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
 
@@ -146,6 +149,7 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
   專案 document，但 Tab1/Tab2 各有獨立的專案選單且各持一份 `rf_data` 副本，所以只在
   「同一專案的兩半都在記憶體裡」時推導：兩頁同專案 → 推到 **Tab1 的副本**（否則 Tab1 的
   寫入會蓋回去）；Tab2 單獨載入別的專案 → 推到 Tab2 的副本並把三個陣列補進 Tab2 的寫入。
+
 #### `TIM_Model`：Tab2 的 TIM 選型
 
 Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` 中 `timType` 相符的型號
