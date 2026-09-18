@@ -43,8 +43,24 @@
 |---|---|---|
 | `Component` | 兩邊 | 名稱即 key |
 | `Qty`、`Power(W)` | 兩邊 | |
+| `Limit(C)` | 兩邊 | AI-Thermal 在 Tab1「限溫(°C)」欄（Qty 右側）|
 | `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
-| `Height(mm)`、`Pad_L`、`Pad_W`、`Thick(mm)`、`Board_Type`、`Limit(C)`、`R_jc`、`TIM_Type` | 只有 5G-RRU | AI-Thermal 無編輯入口，靠 `SG_DEFAULTS` 給初值 |
+| `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
+| `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
+| `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
+
+##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
+
+AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFAULT`/`PWR_DEFAULT`
+**完全同值**，等於本工具先塞一份假資料、5G-RRU 端再也分不出「工程師真的填了 250」還是
+「AI-Thermal 自動塞的 250」。已移除，新元件一律**不建立**這些 key。
+
+**空值一定要「不寫 key」，不可寫 `''`**：5G-RRU 快選是 `Object.assign({}, RF_DEFAULT, src)`，
+key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` 會**覆蓋掉**預設值，而它的 `calcRow`
+對空字串多半不會噴 NaN，而是靜默算成 0（實測：`Thick` 空 → `R_int`=0、`Board_Type` 空 →
+`R_int`=0、`Pad_L/W` 空 → 面積用字串算出假值、`Limit(C)` 空 → 裕度變超大負數），
+**方向是低估熱阻＝樂觀**，比 NaN 更危險。`sgCarrySrc` 會跳過 `undefined`，故快選不受影響。
+清空 Tab1「限溫」欄時 `sgOnCompEdit` 也是 `delete` key 而非寫 `''`。
 
 ⚠ **「從資料庫快選」的 carry 白名單兩邊都必須列全所有欄位**（AI-Thermal 的
 `SG_VARIANT_CARRY` / 5G-RRU 的 `VARIANT_CARRY`）。漏列的 key 會被各自的分類預設值蓋掉，
@@ -67,6 +83,31 @@
   `Tc = T_hsk + P×(R_int + R_TIM)`，其「殼」是元件底面 → 對應 θJC,bottom；
   θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數，硬塞會讓 Tj 重複計算而失真。
 - 沒有任何 θJC 時不動 `R_jc`（保留既有值），只清掉 `_rjc_from`。
+
+#### `Board_Type` / `Pad_L` / `Pad_W` 的單一事實來源：Tab2「主散熱路徑」
+
+Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主散熱路徑」**，選項直接對應
+5G-RRU 的導熱方式，並同時決定 `Pad_L`/`Pad_W` 取哪個尺寸（`HEAT_PATH_MAP`）：
+
+| 主散熱路徑 | `Board_Type` | `Pad_L`/`Pad_W` 取自 |
+|---|---|---|
+| `Copper Coin` | `Copper Coin` | `heatSourceSize`（元件大小）|
+| `Thermal Via` | `Thermal Via` | `epadSize`（**E-PAD 大小**，選此值才出現的分支欄）|
+| `IC top` | `None` | `heatSourceSize`（不穿板；5G-RRU 會退回以元件上表面積算 `R_TIM`）|
+| `None` | `None` | `0` |
+
+- `Pad_L`/`Pad_W` 是 **E-PAD（散熱焊墊）尺寸，不是 IC 外型尺寸**。Copper Coin 也需要它
+  （5G-RRU 的 die-attach solder 項是 `t_Solder/(K_Solder × pa × Voiding)`，直接除以 `pa`），
+  不能只靠它參數控制台的 coin L/W。
+- 未選主散熱路徑，或尺寸解析不出來 → **不寫任何 key**（不寫半套、不寫 `''`）。
+- 舊值 `IC bot`/`雙向` 在新選項無對應（資料裡看不出是 Coin 還是 Via）→ 載入時顯示空白＋
+  琥珀色「需重選」提示（`HEAT_PATH_LEGACY`），匯出也不輸出該值。
+- 推導時機在 `saveAllTabs`（`sgDeriveAllFromSpecs`）。⚠ `thermal_specs` 與 `rf_data` 同屬一個
+  專案 document，但 Tab1/Tab2 各有獨立的專案選單且各持一份 `rf_data` 副本，所以只在
+  「同一專案的兩半都在記憶體裡」時推導：兩頁同專案 → 推到 **Tab1 的副本**（否則 Tab1 的
+  寫入會蓋回去）；Tab2 單獨載入別的專案 → 推到 Tab2 的副本並把三個陣列補進 Tab2 的寫入。
+- `TIM_Type` 尚未連動（第二階段：Tab2 的 `timType` → `TIM_Type`，並把 5G-RRU 的 `Pad2`
+  收斂成「`Pad` + 型號」，型號→{k, 厚度} 對照表放頂層 collection `tim_library`）。
 
 ### 規則
 
