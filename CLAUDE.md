@@ -48,8 +48,10 @@
 > 重存不覆蓋；`updatedAt`/`updatedBy` 記錄最後修改。
 > **已接上元件**：Tab2「TIM Type」底下的型號下拉會把型號名寫進 `comp.TIM_Model`
 > （見下方「`TIM_Model`：Tab2 的 TIM 選型」）。
-> ⚠ **5G-RRU 端尚未實作**：`calcRow` 還沒改成優先查 `tim_library`，且 `Pad2` 還沒收斂成
-> 「`Pad` + 型號」。這兩件要在 5G-RRU 側完成，`TIM_Type` 的連動也等它做完才能開。
+> **5G-RRU 端已接上**（其 PR #76）：`calcRow` 走 `resolveTim(row, g)` —— `TIM_Model` 在
+> `tim_library` 查得到就用該型號的 `k` 與 `gapThickness`，否則 fallback 它自己
+> `global_params` 的 `K_<Type>` / `t_<Type>`；`Pad2` 已從它的 UI 移除（收斂成「`Pad` + 型號」）。
+> ⚠ **5G-RRU 只讀不寫 `tim_library`**：新增／修改型號的入口只有本工具 Tab2 的型號庫視窗。
 
 ##### ⚠ 兩個厚度不是同一件事（`thickness` vs `gapThickness`）
 
@@ -85,11 +87,12 @@
 | `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
 | `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
 | `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
+| `TIM_Type` | 兩邊（AI-Thermal Tab2 有選類型時覆寫）| 見下方「`TIM_Type` 也由 Tab2 推導」的兩個守則 |
 | `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
 | `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
 
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
-> `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`）。漏一個，快選複製元件時就會掉值。
+> `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`/`TIM_Type`）。漏一個，快選複製元件時就會掉值。
 > 目前應為 21 項，與上表一致。
 
 ##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
@@ -167,14 +170,25 @@ Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` �
 - 型號庫是頂層 collection、與專案無關，但選型下拉需要它 → Tab2 載入專案後背景
   `timLibLoad()`，讀完再 `renderAllCategories()` 一次。
 
-⚠ **`TIM_Type` 目前刻意不從 Tab2 覆寫到元件上**。5G-RRU 有本工具沒有的 `'Pad2'`，
-貿然覆寫會把它的 `K_Pad2`/`t_Pad2` 換成 `K_Pad`/`t_Pad`（靜默改變計算結果）。
-`TIM_Type` 的連動與 `Pad2` 收斂成「`Pad` + 型號」必須兩邊一起改，含既有
-`TIM_Type: 'Pad2'` 的資料遷移。
+#### `TIM_Type` 也由 Tab2 推導（5G-RRU 移除 `Pad2` 之後才開的連動）
 
-**5G-RRU 端待實作**：`calcRow` 取 TIM 的 k / t 時，先看 `row.TIM_Model` ——
-在 `tim_library` 查到該型號就用它的 `k` 與 `gapThickness`，否則沿用 `global_params` 的
-`K_<Type>` / `t_<Type>`。fallback 不可省，否則型號庫還沒建完的專案會整批算不出來。
+5G-RRU 的 TIM 類型已收斂成與本工具相同的 `Grease / Pad / Putty / None`（其 PR #76 移除
+`Pad2`），因此 `sgDeriveFromSpec` 現在把 Tab2 的 `spec.timType` 一併寫成 `comp.TIM_Type`。
+兩個守則不可拿掉：
+
+1. **只有「Tab2 這一列有選 TIM 類型」時才管這顆元件的 TIM 欄位。** 沒選（顯示「—」）
+   或 Tab2 根本沒有這一列 → `TIM_Type` 與 `TIM_Model` 兩個 key 都不動。
+   5G-RRU 端也選得了型號，Tab2 沒填就清掉對方的 `TIM_Model`，等於靜默把它的 k/t
+   換回 `K_<Type>`/`t_<Type>`，方向是低估熱阻。
+2. **舊類型（`SG_TIM_LEGACY_TYPES` = `Pad2` / `Solder`）沒有「連型號一起寫」就不覆寫。**
+   它們吃的是別組 global 參數（`Pad2` → `K_Pad2`/`t_Pad2`），只換類型不換 k/t 來源
+   等於靜默改變計算結果。有選型號時才收斂成 `Pad` ＋型號（＝完成遷移）。
+
+取消選型一律 `delete comp.TIM_Model`，不可寫 `''`。
+
+> 5G-RRU 端對舊資料仍保有讀取相容（`TIM_LEGACY_PARAM`）：`TIM_Type: 'Pad2'` 的元件繼續
+> 以該專案殘留的 `K_Pad2`/`t_Pad2` 計算，並在畫面上提示改用「`Pad` ＋型號」；
+> 它的參數控制台已不再有 `K_Pad2` / `t_Pad2` 欄位（也不再寫入這兩個 key，但既有專案的值保留）。
 
 ### 規則
 

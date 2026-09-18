@@ -4673,8 +4673,8 @@
     <h3 class="lock-modal-title">&#129517; TIM 型號庫</h3>
     <p class="lock-modal-hint">
       這份型號庫<b>全工具共用、不屬於任何專案</b>，之後新開的專案也能選用同一份型號。
-      填了 k 值與填縫厚度，5G-RRU 端就能用同一顆 Pad 的真實值算 R_TIM，
-      不必再靠 <code>Pad</code> / <code>Pad2</code> 兩個選項硬分。<br>
+      填了 k 值與填縫厚度，5G-RRU 端就能用同一顆 Pad 的真實值算 R_TIM；
+      它的 <code>Pad2</code> 選項已移除，不同 k 值的 Pad 一律用「型號」表達。<br>
       <b>兩個厚度不一樣</b>：「預設厚度」是材料原始片厚（Pad 買來 2.5mm），只供規格書參考；
       <b>「填縫厚度」是壓縮後實際填在縫隙裡的厚度</b>，對應 5G-RRU 參數控制台的
       <code>t (Pad)</code> / <code>t (Putty)</code> / <code>t (Grease)</code>，
@@ -6625,7 +6625,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="readonly-col power-col">發熱瓦數<br>(W)</th>
           <th class="editable-col heat-source-col">元件大小<br>(mm)</th>
           <th class="editable-col heat-source-height-col">元件高度(max)<br>(mm)</th>
-          <th class="editable-col tim-type-col">TIM Type</th>
+          <th class="editable-col tim-type-col" title="TIM 種類。存檔時寫回共用資料庫的元件欄位（＝5G-RRU 元件清單的「介面材料」）；底下若有選型號會連型號一起寫，5G-RRU 就以該型號的 k 與填縫厚度算 R_TIM">TIM Type</th>
           <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
           <th class="editable-col boss-surface-col">凸台表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
@@ -7912,18 +7912,18 @@ const sgPickerState = { RF: null, Digital: null, PWR: null };
    ⚠ 三類都要列全，漏列的 key 會被 sgMakeComp 的分類罐頭預設值蓋掉（= 快選掉值）：
      (1) 本工具 Tab1 看得到的欄位（Type / Thermal Via / Temp Sensor / 熱阻 / 規格書 / 備註…）
      (2) 5G-RRU 專屬、本工具沒有畫面可編輯但存在同一顆元件物件上的欄位
-         （Height/Pad/Thick/Board_Type/Limit/R_jc/TIM_Type）——這些值多半是 5G-RRU 端
-         工程師填的真實值，不抄過來就會被罐頭值洗掉，再存回共用 DB 等於把對方資料毀了。
+         （Height/Thick）——這些值是 5G-RRU 端工程師填的真實值，不抄過來就會被罐頭值
+         洗掉，再存回共用 DB 等於把對方資料毀了。
    對應 5G-RRU 的 VARIANT_CARRY（他們那邊也把本工具的欄位全列入）。 */
 const SG_VARIANT_CARRY = [
   // Tab1 可編輯欄位
   'Type', 'Qty', 'Power(W)', 'Power_RT(W)', 'TV_ID_mil', 'TV_Qty',
   'Temp_Sensor', 'Local_Qty', 'Remote_Qty', 'note',
   'Rth', 'SpecFile',
-  // Tab2 推導出來的欄位（也要帶，否則快選複製的元件會掉掉這些值）
-  'Board_Type', 'Pad_L', 'Pad_W', 'R_jc', 'TIM_Model',
+  // Tab1/Tab2 推導出來的欄位（也要帶，否則快選複製的元件會掉掉這些值）
+  'Board_Type', 'Pad_L', 'Pad_W', 'R_jc', 'TIM_Model', 'TIM_Type',
   // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
-  'Height(mm)', 'Thick(mm)', 'Limit(C)', 'TIM_Type',
+  'Height(mm)', 'Thick(mm)', 'Limit(C)',
 ];
 
 /* 依白名單抄出來源元件的欄位。物件／陣列（Rth、SpecFile）必須深拷貝，
@@ -8319,21 +8319,40 @@ function sgSpecKey(name) {
   return String(name || '').replace(/ /g, '_').replace(/\//g, '-');
 }
 
-/* 把單一元件的 Board_Type / Pad_L / Pad_W 依 spec 推導；有變更回 true */
+/* 5G-RRU 端已停用／非選單的舊 TIM 類型。它們各自吃別組 global 參數，
+   收斂時不可在「沒有指定型號」的情況下被覆寫掉（會靜默改變對方的計算結果）。 */
+const SG_TIM_LEGACY_TYPES = ['Pad2', 'Solder'];
+
+/* 把單一元件的 TIM 選型（TIM_Type / TIM_Model）與 Board_Type / Pad_L / Pad_W 依 spec 推導；
+   有變更回 true */
 function sgDeriveFromSpec(comp, spec) {
   if (!comp) return false;
   let changed = false;
 
-  // TIM 選型 → comp.TIM_Model（型號「名字串」，不是內部 id —— 跨工具要看得懂）。
-  // 5G-RRU 端的規則：有 TIM_Model 且在 tim_library 查到 → 用該型號的 k 與 gapThickness；
-  // 否則沿用它自己 global_params 的 K_<Type> / t_<Type>。
-  // ⚠ 這裡刻意不寫 comp.TIM_Type：5G-RRU 有本工具沒有的 'Pad2'，貿然覆寫會把它的
-  //   K_Pad2/t_Pad2 換成 K_Pad/t_Pad。TIM_Type 的連動與 Pad2 收斂要兩邊一起改。
-  const model = (spec && spec.timModel) ? String(spec.timModel).trim() : '';
-  if (model) {
-    if (comp.TIM_Model !== model) { comp.TIM_Model = model; changed = true; }
-  } else if (comp.TIM_Model !== undefined) {
-    delete comp.TIM_Model; changed = true;
+  // ── TIM 選型 → comp.TIM_Type / comp.TIM_Model ──
+  // 5G-RRU 已移除它獨有的 'Pad2'（PR #76），兩邊的 TIM 類型收斂成同一組
+  // （Grease/Pad/Putty/None），才輪得到本工具覆寫 TIM_Type。
+  // ⚠ 只有「Tab2 這一列有選 TIM 類型」時，Tab2 才是這顆元件 TIM 選型的事實來源；
+  //   沒選（顯示「—」或整列沒填過）→ 兩個 key 都不動，保留 5G-RRU 端填的值。
+  //   （5G-RRU 也選得了型號：Tab2 沒填就清掉對方的 TIM_Model，等於靜默把它的 k/t
+  //    換回 K_<Type>/t_<Type>，方向是低估熱阻。）
+  const timType = (spec && spec.timType) ? String(spec.timType).trim() : '';
+  const model   = (spec && spec.timModel) ? String(spec.timModel).trim() : '';
+  if (timType) {
+    // 型號存「名字串」不是內部 id —— 跨工具要看得懂。5G-RRU 的規則：查得到該型號
+    // → 用它的 k 與 gapThickness；否則沿用自己 global_params 的 K_<Type> / t_<Type>。
+    if (model) {
+      if (comp.TIM_Model !== model) { comp.TIM_Model = model; changed = true; }
+    } else if (comp.TIM_Model !== undefined) {
+      delete comp.TIM_Model; changed = true;       // 取消選型：刪 key，不可寫 ''
+    }
+    if (TIM_TYPE_OPTIONS.includes(timType)) {
+      const cur = String(comp.TIM_Type == null ? '' : comp.TIM_Type).trim();
+      // 舊類型吃的是別組 global 參數（Pad2 → K_Pad2/t_Pad2）：沒有同時指定型號就覆寫，
+      // 等於靜默把 5G-RRU 的 k/t 換成 K_Pad/t_Pad → 只在「連型號一起寫」時才收斂。
+      const legacyBlocked = SG_TIM_LEGACY_TYPES.includes(cur) && !model;
+      if (!legacyBlocked && comp.TIM_Type !== timType) { comp.TIM_Type = timType; changed = true; }
+    }
   }
 
   const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
