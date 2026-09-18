@@ -98,16 +98,23 @@ function ok(name, cond, extra) {
     sgDeriveFromSpec(via, { timType:'Putty', heatDirection:'Thermal Via', epadSize:'8×6', heatSourceSize:'20×20' });
     const coin = { Component:'PA' };
     sgDeriveFromSpec(coin, { timType:'Grease', heatDirection:'Copper Coin', heatSourceSize:'12×10' });
+    const icTop = { Component:'LNA' };
+    sgDeriveFromSpec(icTop, { timType:'Pad', heatDirection:'IC top', heatSourceSize:'6×6' });
     const none = { Component:'X', Board_Type:'Thermal Via', Pad_L:1, Pad_W:2 };
     sgDeriveFromSpec(none, { timType:'Pad' });     // 沒選主散熱路徑 → 不動 Board_Type/Pad
-    return { via:[via.Board_Type, via.Pad_L, via.Pad_W, via.TIM_Type],
+    return { via:[via.Board_Type, via.Pad_L, via.Pad_W, via.TIM_Type], viaMark:via._bt_from,
              coin:[coin.Board_Type, coin.Pad_L, coin.Pad_W],
-             none:[none.Board_Type, none.Pad_L, none.Pad_W, none.TIM_Type] };
+             icTop:[icTop.Board_Type, icTop.Pad_L, icTop.Pad_W], icTopPadFrom:icTop._pad_from,
+             none:[none.Board_Type, none.Pad_L, none.Pad_W, none.TIM_Type], noneMark:none._bt_from };
   });
   ok('Thermal Via → Board_Type/Pad 取 E-PAD 大小，TIM 照寫',
      r6.via.join(',') === 'Thermal Via,8,6,Putty', r6.via);
   ok('Copper Coin → Pad 取元件大小', r6.coin.join(',') === 'Copper Coin,12,10', r6.coin);
-  ok('沒選主散熱路徑 → 不動 Board_Type/Pad，但 TIM 照寫', r6.none.join(',') === 'Thermal Via,1,2,Pad', r6.none);
+  ok('IC top → Board_Type 就是 IC top（不再壓成 None），Pad 取元件大小',
+     r6.icTop.join(',') === 'IC top,6,6' && r6.icTopPadFrom === 'heatSourceSize', r6);
+  ok('寫 Board_Type 時留下來源標記 _bt_from（5G-RRU 端用來標「推導值」）',
+     r6.viaMark === 'heatDirection', r6.viaMark);
+  ok('沒選主散熱路徑 → 不動 Board_Type/Pad，也不標記', r6.none.join(',') === 'Thermal Via,1,2,Pad' && r6.noneMark === undefined, r6.none);
 
   console.log('\n[5] 整批推導');
   const r7 = await page.evaluate(() => {

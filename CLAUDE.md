@@ -139,7 +139,7 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
 |---|---|---|
 | `Copper Coin` | `Copper Coin` | `heatSourceSize`（元件大小）|
 | `Thermal Via` | `Thermal Via` | `epadSize`（**E-PAD 大小**，選此值才出現的分支欄）|
-| `IC top` | `None` | `heatSourceSize`（不穿板；5G-RRU 會退回以元件上表面積算 `R_TIM`）|
+| `IC top` | `IC top` | `heatSourceSize`（不穿板：5G-RRU 端 `R_int = 0`、`R_TIM` 以元件上表面積 `Pad_L×Pad_W` 計算）|
 | `None` | `None` | `0` |
 
 - `Pad_L`/`Pad_W` 是 **E-PAD（散熱焊墊）尺寸，不是 IC 外型尺寸**。Copper Coin 也需要它
@@ -148,6 +148,15 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
 - 未選主散熱路徑，或尺寸解析不出來 → **不寫任何 key**（不寫半套、不寫 `''`）。
 - 舊值 `IC bot`/`雙向` 在新選項無對應（資料裡看不出是 Coin 還是 Via）→ 載入時顯示空白＋
   琥珀色「需重選」提示（`HEAT_PATH_LEGACY`），匯出也不輸出該值。
+- 寫 `Board_Type` 時一併寫 `comp._bt_from = 'heatDirection'`（Pad 則是既有的 `comp._pad_from`
+  = `epadSize`／`heatSourceSize`／`none`，`R_jc` 是 `comp._rjc_from`）。這三個是**來源標記**，
+  5G-RRU 端據此在元件清單把該欄標成「AI-Thermal 推導值」（欄位左側藍邊＋tooltip），
+  提醒 RRU 端改了會被下次存檔覆寫。標記是內部欄位（底線開頭），不列入 carry 白名單。
+- ⚠ `IC top` 原本壓成 `Board_Type='None'`，5G-RRU 因此分不出「不穿板但從上表面散熱」與
+  「不計基板路徑」，且它的 `None` 會把接觸面積算成 `(Pad_L+Thick)×(Pad_W+Thick)`（高估面積
+  ＝低估 `R_TIM`）。5G-RRU 已新增同名的 `IC top` 選項，此處才改為直接寫 `'IC top'`。
+  既有以 `IC top` 推導出的元件在下次存檔時會由 `None` 變成 `IC top`，該元件的 `R_TIM`
+  會**變大**（面積改回 `Pad_L×Pad_W`）——方向是保守的，屬修正。
 - 推導時機在 `saveAllTabs`（`sgDeriveAllFromSpecs`）。⚠ `thermal_specs` 與 `rf_data` 同屬一個
   專案 document，但 Tab1/Tab2 各有獨立的專案選單且各持一份 `rf_data` 副本，所以只在
   「同一專案的兩半都在記憶體裡」時推導：兩頁同專案 → 推到 **Tab1 的副本**（否則 Tab1 的
