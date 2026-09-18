@@ -7920,8 +7920,10 @@ const SG_VARIANT_CARRY = [
   'Type', 'Qty', 'Power(W)', 'Power_RT(W)', 'TV_ID_mil', 'TV_Qty',
   'Temp_Sensor', 'Local_Qty', 'Remote_Qty', 'note',
   'Rth', 'SpecFile',
+  // Tab2 推導出來的欄位（也要帶，否則快選複製的元件會掉掉這些值）
+  'Board_Type', 'Pad_L', 'Pad_W', 'R_jc', 'TIM_Model',
   // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
-  'Height(mm)', 'Pad_L', 'Pad_W', 'Thick(mm)', 'Board_Type', 'Limit(C)', 'R_jc', 'TIM_Type',
+  'Height(mm)', 'Thick(mm)', 'Limit(C)', 'TIM_Type',
 ];
 
 /* 依白名單抄出來源元件的欄位。物件／陣列（Rth、SpecFile）必須深拷貝，
