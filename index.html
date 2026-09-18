@@ -6630,7 +6630,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="editable-col boss-surface-col">凸台表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
-          <th class="editable-col heat-dir-col" title="元件的主要散熱路徑，對應 5G-RRU 體積評估的「導熱方式」，並決定 E-PAD／元件大小要帶哪一個過去">主散熱路徑</th>
+          <th class="editable-col heat-dir-col" title="元件的主要散熱路徑。存檔時寫成 5G-RRU 元件清單的「導熱方式」（Copper Coin／Thermal Via／IC top／None 同名對應），並決定 Pad 尺寸要帶 E-PAD 大小還是元件大小過去">主散熱路徑</th>
           <th class="editable-col ic-hsk-col">IC 距離<br>HSK</th>
           <th class="editable-col note-col">備註</th>
         </tr></thead>`;
@@ -8292,14 +8292,15 @@ function sgSyncRjcAll(projectData) {
    主散熱路徑同時決定導熱方式與 Pad 面積要取哪個尺寸：
      Copper Coin → Board_Type='Copper Coin'，Pad = 元件大小
      Thermal Via → Board_Type='Thermal Via'，Pad = E-PAD 大小（分支欄）
-     IC top      → Board_Type='None'（不穿板，5G-RRU 會退回以元件上表面積算 R_TIM），Pad = 元件大小
+     IC top      → Board_Type='IC top'（不穿板：5G-RRU 端 R_int=0、R_TIM 以元件上表面積
+                   Pad_L×Pad_W 計算，不加板厚的擴散面積），Pad = 元件大小
      None        → Board_Type='None'，Pad = 0
    未選主散熱路徑（含清空的舊值 IC bot/雙向）→ 不寫任何 key，留給 5G-RRU 端的閘門檢查，
    不可寫 '' —— 空字串會覆蓋掉 5G-RRU 自己的預設值並讓它的計算變成 NaN 或靜默的 0。 */
 const HEAT_PATH_MAP = {
   'Copper Coin': { board: 'Copper Coin', pad: 'elem' },
   'Thermal Via': { board: 'Thermal Via', pad: 'epad' },
-  'IC top':      { board: 'None',        pad: 'elem' },
+  'IC top':      { board: 'IC top',      pad: 'elem' },
   'None':        { board: 'None',        pad: 'zero' },
 };
 
@@ -8358,6 +8359,8 @@ function sgDeriveFromSpec(comp, spec) {
   const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
   if (!cfg) return changed;            // 未選主散熱路徑 → 不寫 Board_Type/Pad
   if (comp.Board_Type !== cfg.board) { comp.Board_Type = cfg.board; changed = true; }
+  // 來源標記：5G-RRU 端用它在「導熱方式」欄標出這是推導值（改了會被下次存檔覆寫）
+  if (comp._bt_from !== 'heatDirection') { comp._bt_from = 'heatDirection'; changed = true; }
 
   let lw = null;
   if (cfg.pad === 'zero') lw = { L: 0, W: 0 };
