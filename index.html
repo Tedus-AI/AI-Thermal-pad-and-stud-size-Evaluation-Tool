@@ -1474,6 +1474,17 @@
     padding: 3px 7px; cursor: pointer; font-size: 0.8rem; line-height: 1;
   }
   .tim-lib-del:hover { background: #fbc9c9; }
+  /* 自動帶入的填縫厚度：白底黑字純文字（不用反灰 input）＋ ✂ 解鎖逃生口 */
+  .tim-lib-mirror {
+    display: inline-block; padding: 4px 6px; background: #fff; color: #333;
+    font-size: 0.8rem; font-weight: 600; cursor: help;
+  }
+  .tim-lib-cut {
+    border: none; background: #eef2f7; color: #475569; border-radius: 5px;
+    padding: 2px 5px; margin-left: 4px; cursor: pointer; font-size: 0.78rem; line-height: 1;
+  }
+  .tim-lib-cut:hover { background: #dde5ee; }
+  .tim-lib-req { color: #0277bd; margin-left: 2px; }
   .tim-lib-empty { color: #94a3b8; font-size: 0.82rem; padding: 10px 6px; }
   .tim-lib-status { font-size: 0.8rem; min-height: 1.2em; }
   .tim-lib-status.err { color: #c0392b; font-weight: 600; }
@@ -4654,17 +4665,23 @@
     <h3 class="lock-modal-title">&#129517; TIM 型號庫</h3>
     <p class="lock-modal-hint">
       這份型號庫<b>全工具共用、不屬於任何專案</b>，之後新開的專案也能選用同一份型號。
-      填了 k 值與預設厚度，5G-RRU 端就能用同一顆 Pad 的真實 k 值算 R_TIM，
-      不必再靠 <code>Pad</code> / <code>Pad2</code> 兩個選項硬分。
+      填了 k 值與填縫厚度，5G-RRU 端就能用同一顆 Pad 的真實值算 R_TIM，
+      不必再靠 <code>Pad</code> / <code>Pad2</code> 兩個選項硬分。<br>
+      <b>兩個厚度不一樣</b>：「預設厚度」是材料原始片厚（Pad 買來 2.5mm），只供規格書參考；
+      <b>「填縫厚度」是壓縮後實際填在縫隙裡的厚度</b>，對應 5G-RRU 參數控制台的
+      <code>t (Pad)</code> / <code>t (Putty)</code> / <code>t (Grease)</code>，
+      公式為 <code>R_TIM = 填縫厚度 ÷ (k × 接觸面積)</code>。
+      Grease / Putty 沒有原始片厚的概念，兩欄自動同步（可按 <b>✂</b> 解鎖分開填）。
     </p>
     <div style="max-height:52vh;overflow:auto;">
       <table class="tim-lib-table">
         <thead><tr>
-          <th style="width:22%">型號</th>
-          <th style="width:12%">TIM 類型</th>
-          <th style="width:13%">k (W/m·K)</th>
-          <th style="width:13%">預設厚度(mm)</th>
-          <th style="width:15%">廠商</th>
+          <th style="width:19%">型號</th>
+          <th style="width:11%">TIM 類型</th>
+          <th style="width:11%" title="導熱係數。對應 5G-RRU 參數控制台的「K (Pad)」/「K (Putty)」/「K (Grease)」">k (W/m·K)</th>
+          <th style="width:12%" title="材料原始片厚（如 Pad 買來是 2.5mm）。僅供規格書參考，不進 5G-RRU 的熱阻計算">預設厚度(mm)</th>
+          <th style="width:13%" title="組裝壓縮後實際填在縫隙裡的厚度。這一欄才是 5G-RRU 參數控制台的「t (Pad)」/「t (Putty)」/「t (Grease)」，R_TIM = 填縫厚度 ÷ (k × 接觸面積)">填縫厚度(mm)<span class="tim-lib-req">＊</span></th>
+          <th style="width:12%">廠商</th>
           <th>備註</th>
           <th style="width:38px"></th>
         </tr></thead>
@@ -8417,10 +8434,19 @@ function sgRthSave() {
    （CLAUDE.md 共用 DB 規則第 3 條）：天然與 5G-RRU 對 projects 的寫入隔離，
    不必擔心 shallow merge 把別人的欄位吃掉。
 
-   資料形狀：tim_library[<id>] = { model, timType, k, thickness, vendor, note, at, by }
-     - id     內部用的隨機鍵，不顯示；改型號名不會換 id
-     - model  型號名，跨工具參照就是用這個字串（之後元件上的 TIM_Model 存它）
-     - k      W/m·K；thickness mm
+   資料形狀：tim_library[<id>] = { model, timType, k, thickness, gapThickness,
+                                   gapUnlock, vendor, note, at, by }
+     - id            內部用的隨機鍵，不顯示；改型號名不會換 id
+     - model         型號名，跨工具參照就是用這個字串（之後元件上的 TIM_Model 存它）
+     - k             導熱係數 W/m·K，對應 5G-RRU 的 K_Pad / K_Putty / K_Grease
+     - thickness     「預設厚度」= 材料原始片厚（Pad 買來 2.5mm），僅供規格書參考
+     - gapThickness  「填縫厚度」= 壓縮後實際填在縫隙裡的厚度 (mm)
+                     ⚠ 這一欄才是 5G-RRU 算 R_TIM 用的厚度，對應其參數控制台的
+                       t_Pad / t_Putty / t_Grease（calcRow：rt = (t/1000)/(k×面積)）。
+                       佐證：5G-RRU 預設 t_Pad=1.7，等於本工具 Tab2 的「IC 距離 HSK」，
+                       而不是「TIM 厚度 2.5」—— 它要的是壓縮後的縫隙厚度。
+     - gapUnlock     Grease/Putty 本來兩欄同步（無原始片厚的概念），此旗標為 true
+                     表示使用者按 ✂ 解鎖、要分開填
 
    寫入策略：視窗內編輯先暫存在 _timLibRows，按「儲存型號庫」才一次寫入
    （set 用 writeBatch 合併成單一 flush，刪除另走 deleteDoc —— writeBatch 不支援 delete）。
@@ -8431,6 +8457,21 @@ let _timLibRows = [];         // 視窗內的暫存列（含 _id；新列的 _id
 
 /* 型號庫只登錄「有 k 值可查」的介面材料；None 不需要型號 */
 const TIM_LIB_TYPES = ['Grease', 'Pad', 'Putty'];
+
+/* Grease / Putty 是填滿縫隙的材料，沒有「原始片厚」的概念 → 預設厚度＝填縫厚度。
+   Pad 是固定片厚被壓縮，兩者必然不同（5G-RRU 預設 t_Pad=1.7 vs 片厚 2.5），故不同步。 */
+const TIM_LIB_GAP_SYNCED = ['Grease', 'Putty'];
+function timLibGapSynced(row) {
+  return !!row && TIM_LIB_GAP_SYNCED.includes(row.timType) && !row.gapUnlock;
+}
+/* 套用同步（填縫厚度 ← 預設厚度）；有改動回 true */
+function timLibApplyGapSync(row) {
+  if (!timLibGapSynced(row)) return false;
+  const v = (row.thickness === '' || row.thickness == null) ? '' : String(row.thickness);
+  if (String(row.gapThickness == null ? '' : row.gapThickness) === v) return false;
+  row.gapThickness = v;
+  return true;
+}
 
 function timLibGenId() {
   return 'tim_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
@@ -8469,9 +8510,12 @@ async function timLibOpen() {
     _id: r._id,
     model: r.model || '', timType: r.timType || 'Pad',
     k: (r.k == null ? '' : r.k), thickness: (r.thickness == null ? '' : r.thickness),
+    gapThickness: (r.gapThickness == null ? '' : r.gapThickness),
+    gapUnlock: !!r.gapUnlock,
     vendor: r.vendor || '', note: r.note || '',
     at: r.at || '', by: r.by || '',
   }));
+  _timLibRows.forEach(timLibApplyGapSync);   // 舊資料（只有預設厚度）進來時補上填縫厚度
   timLibSetStatus('');
   timLibRender();
   const ro = isProtected;                       // 未解鎖 → 可檢視不可編輯（UX 慣例 9）
@@ -8507,12 +8551,13 @@ function timLibRender() {
       ? ('登錄於 ' + new Date(r.at).toLocaleString('zh-TW') + (r.by ? ('（' + r.by + '）') : ''))
       : '尚未儲存';
     return `<tr>
-      <td><input type="text" value="${escapeAttr(r.model)}" placeholder="如 TG-A6200" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'model',this.value)"></td>
+      <td><input type="text" data-libfield="model" value="${escapeAttr(r.model)}" placeholder="如 TG-A6200" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'model',this.value)"></td>
       <td><select ${ro ? 'disabled' : ''} onchange="timLibEdit(${k},'timType',this.value)">${
         TIM_LIB_TYPES.map(t => `<option value="${t}" ${r.timType === t ? 'selected' : ''}>${t}</option>`).join('')
       }</select></td>
-      <td><input type="number" step="any" min="0" value="${escapeAttr(r.k)}" placeholder="如 6.2" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'k',this.value)"></td>
-      <td><input type="number" step="any" min="0" value="${escapeAttr(r.thickness)}" placeholder="如 2.5" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'thickness',this.value)"></td>
+      <td><input type="number" step="any" min="0" data-libfield="k" value="${escapeAttr(r.k)}" placeholder="如 6.2" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'k',this.value)"></td>
+      <td><input type="number" step="any" min="0" data-libfield="thickness" value="${escapeAttr(r.thickness)}" placeholder="如 2.5" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'thickness',this.value)"></td>
+      <td>${timLibGapCell(r, k, ro)}</td>
       <td><input type="text" value="${escapeAttr(r.vendor)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'vendor',this.value)"></td>
       <td><input type="text" value="${escapeAttr(r.note)}" title="${escapeAttr(meta)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'note',this.value)"></td>
       <td style="text-align:center">${ro ? '' : `<button class="tim-lib-del" title="刪除此型號" onclick="timLibDelRow(${k})">&#10005;</button>`}</td>
@@ -8522,9 +8567,43 @@ function timLibRender() {
   timLibMarkInvalid();
 }
 
+/* 填縫厚度欄。Grease/Putty 未解鎖時＝預設厚度的鏡像：顯示白底黑字純文字＋✂ 解鎖口
+   （UX 慣例 2：自動帶入一律鎖定＋逃生口，純參照值不用反灰 disabled input）。 */
+function timLibGapCell(r, k, ro) {
+  if (timLibGapSynced(r)) {
+    const shown = (r.gapThickness === '' || r.gapThickness == null) ? '—' : String(r.gapThickness);
+    const cut = ro ? '' :
+      `<button class="tim-lib-cut" title="解鎖：讓填縫厚度與預設厚度分開填（${escapeAttr(r.timType)} 一般兩者相同，通常不需要）" onclick="timLibGapUnlock(${k})">&#9986;</button>`;
+    return `<span class="tim-lib-mirror" title="自動帶入＝預設厚度（${escapeAttr(r.timType)} 沒有原始片厚的概念）">${escapeHtml(shown)}</span>${cut}`;
+  }
+  return `<input type="number" step="any" min="0" data-libfield="gapThickness" value="${escapeAttr(r.gapThickness)}" placeholder="如 1.7" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'gapThickness',this.value)">`;
+}
+
+function timLibGapUnlock(k) {
+  if (isProtected) return;
+  const r = _timLibRows[k];
+  if (!r) return;
+  r.gapUnlock = true;
+  timLibRender();
+}
+
 function timLibEdit(k, field, v) {
   if (isProtected) return;
-  if (_timLibRows[k]) _timLibRows[k][field] = v;
+  const r = _timLibRows[k];
+  if (!r) return;
+  r[field] = v;
+  // 改類型或預設厚度時，同步中的填縫厚度要跟著走（UX 慣例 2：來源值變動，鎖定欄位跟隨）
+  if (field === 'timType') {
+    timLibApplyGapSync(r);
+    timLibRender();                    // 同步與否會換整格樣式（鏡像 ↔ 輸入框），需重繪
+    return;
+  }
+  if (field === 'thickness' && timLibApplyGapSync(r)) {
+    // 只更新那一格的鏡像文字，不整區重繪（游標不會跳開）
+    const cell = document.querySelectorAll('#tim-lib-rows tr')[k];
+    const span = cell && cell.querySelector('.tim-lib-mirror');
+    if (span) span.textContent = (r.gapThickness === '' ? '\u2014' : String(r.gapThickness));
+  }
   timLibMarkInvalid();                 // 只改標記，不整區重繪（游標不會跳開）
 }
 
@@ -8564,7 +8643,14 @@ function timLibValidate() {
     }
     if (r.thickness !== '' && r.thickness != null) {
       const tv = parseFloat(r.thickness);
-      if (isNaN(tv) || tv < 0) errs.push({ k, field: 'thickness', msg: '型號「' + model + '」的厚度不是有效數字' });
+      if (isNaN(tv) || tv < 0) errs.push({ k, field: 'thickness', msg: '型號「' + model + '」的預設厚度不是有效數字' });
+    }
+    // 填縫厚度必填：它是 5G-RRU 算 R_TIM 的分子，t=0 會讓 R_TIM 直接變 0（低估熱阻）
+    const gv = parseFloat(r.gapThickness);
+    if (r.gapThickness === '' || r.gapThickness == null || isNaN(gv) || gv <= 0) {
+      errs.push({ k, field: 'gapThickness',
+        msg: '型號「' + model + '」的填縫厚度必須是大於 0 的數字'
+           + (timLibGapSynced(r) ? '（此型號與預設厚度同步，請填預設厚度）' : '') });
     }
   });
   return errs;
@@ -8575,12 +8661,16 @@ function timLibMarkInvalid() {
   const bad = new Set(errs.map(e => e.k + ':' + e.field));
   const rows = document.querySelectorAll('#tim-lib-rows tr');
   rows.forEach((tr, k) => {
-    // model=第1個 input、k=第2個、thickness=第3個（select 不算 input）
-    const inputs = tr.querySelectorAll('input');
-    ['model', 'k', 'thickness'].forEach((f, i) => {
-      const inp = inputs[i];
+    // 以 data-field 定位，不靠 input 的順序 —— 同步中的填縫厚度那格是純文字沒有 input
+    ['model', 'k', 'thickness', 'gapThickness'].forEach(f => {
+      const inp = tr.querySelector('[data-libfield="' + f + '"]');
       if (inp) inp.classList.toggle('tim-lib-invalid', bad.has(k + ':' + f));
     });
+    // 同步中的填縫厚度出錯時，把紅框打在來源的「預設厚度」上（那才是使用者要改的地方）
+    if (bad.has(k + ':gapThickness') && !tr.querySelector('[data-libfield="gapThickness"]')) {
+      const src = tr.querySelector('[data-libfield="thickness"]');
+      if (src) src.classList.add('tim-lib-invalid');
+    }
   });
 }
 
@@ -8607,6 +8697,8 @@ async function timLibSave() {
       timType: r.timType || 'Pad',
       k: parseFloat(r.k),
       thickness: (r.thickness === '' || r.thickness == null) ? '' : parseFloat(r.thickness),
+      gapThickness: parseFloat(r.gapThickness),   // 5G-RRU 算 R_TIM 用的厚度（t_Pad 等）
+      gapUnlock: !!r.gapUnlock,
       vendor: String(r.vendor || '').trim(),
       note: String(r.note || '').trim(),
       at: prev.at || now,                  // 首次登錄時間保留

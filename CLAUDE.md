@@ -26,7 +26,8 @@
     }
   },
   "feedback_items":  { ... },   // AI-Thermal Tab5
-  "tim_library":     { "<id>": { model, timType, k, thickness, vendor, note, at, by, updatedAt, updatedBy } },
+  "tim_library":     { "<id>": { model, timType, k, thickness, gapThickness, gapUnlock,
+                                 vendor, note, at, by, updatedAt, updatedBy } },
                                 // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護）
   "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
   "version":         <number>
@@ -47,6 +48,28 @@
 > 重存不覆蓋；`updatedAt`/`updatedBy` 記錄最後修改。
 > ⚠ **尚未接上元件**：把元件的 `TIM_Model` 指向型號名、並把 5G-RRU 的 `Pad2` 收斂成
 > 「`Pad` + 型號」，需要 5G-RRU 端同步實作（第二階段）。
+
+##### ⚠ 兩個厚度不是同一件事（`thickness` vs `gapThickness`）
+
+| 欄位 | UI 標題 | 意義 | 對應 5G-RRU |
+|---|---|---|---|
+| `thickness` | 預設厚度(mm) | 材料**原始片厚**（Pad 買來 2.5mm） | 無（僅供規格書參考）|
+| `gapThickness` | 填縫厚度(mm) | **壓縮後實際填在縫隙裡**的厚度 | `t_Pad` / `t_Putty` / `t_Grease` |
+| `k` | k (W/m·K) | 導熱係數 | `K_Pad` / `K_Putty` / `K_Grease` |
+
+5G-RRU 的 `calcRow` 是 `rt = (ti.t / 1000) / (ti.k × ta)`，`ti.t` 取自 `global_params` 的
+`t_<Type>`（參數控制台標題就叫 `t (Pad)`、`t (Putty)`、`t (Grease)`、`t (Pad 2)`、`t (錫片)`），
+單位 mm。**要餵給它的是 `gapThickness`，不是 `thickness`。**
+
+佐證（兩邊預設值互相對照）：5G-RRU `t_Pad = 1.7` 等於本工具 Tab2 的「IC 距離 HSK = 1.7」，
+而不是「TIM 厚度 = 2.5」→ 它要的就是壓縮後的縫隙厚度。Putty（0.5）與 Grease（0.05）
+兩邊數字一致，因為這類材料填滿縫隙、沒有原始片厚的概念。
+
+因此：**`timType` 為 `Grease`/`Putty` 時 `gapThickness` 自動同步為 `thickness`**
+（`TIM_LIB_GAP_SYNCED`／`timLibApplyGapSync`），畫面上顯示為白底黑字純文字＋`✂` 解鎖口
+（UX 慣例 2）；按 `✂` 後 `gapUnlock = true`，兩欄改為各自獨立。`Pad` 一律獨立輸入。
+`gapThickness` **必填且須 > 0**（它是 R_TIM 的分子，留空會讓 5G-RRU 的 R_TIM 變 0 ＝ 低估熱阻）；
+同步中的列若缺值，錯誤訊息與紅框會導向來源的「預設厚度」欄。
 
 #### 元件物件（`rf_data` / `digital_data` / `pwr_data` 的每一筆）欄位歸屬
 
