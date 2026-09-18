@@ -602,9 +602,13 @@
   }
   .comp-table th.readonly-col { background: #e8f0f8; }
   .comp-table th.editable-col { background: #fff3e0; color: #e65100; }
-  .comp-table .heat-source-col { width: 180px; max-width: 180px; }
+  /* ⚠ 這兩欄原本寫 width:180px + max-width:180px，但本表是 table-layout:auto 且
+     min-width:1400px 撐在 overflow-x:auto 的外框裡 —— 空間不足時 `width` 只是建議值，
+     會被壓到表頭的 min-content（實測 60px），把「10×10」截成「10×1C」。
+     改用 min-width：它會拉高欄位的最小寬度，不會被壓縮，足夠放到「12.5×12.5」。 */
+  .comp-table .heat-source-col { min-width: 96px; }
   .comp-table .heat-source-height-col { min-width: 90px; }
-  .comp-table .boss-size-col { width: 180px; max-width: 180px; }
+  .comp-table .boss-size-col { min-width: 96px; }
   .comp-table .boss-surface-col { min-width: 120px; }
   .comp-table .tim-type-col { min-width: 100px; }
   .comp-table .tim-thickness-col { min-width: 140px; }
@@ -1041,6 +1045,8 @@
   .btn-export.ee-export:hover { background: #4a148c; }
   .btn-export.ee-import { background: #00695c; }
   .btn-export.ee-import:hover { background: #004d40; }
+  .btn-export.tim-lib { background: #0277bd; }
+  .btn-export.tim-lib:hover { background: #01579b; }
   .btn-export:disabled { background: #b0c4de; cursor: not-allowed; opacity: 0.7; }
 
   @media (max-width: 900px) {
@@ -1448,6 +1454,30 @@
   .sg-rth-btn.has-rth:hover { background: #ede9fe; border-color: #c4b5fd; }
   /* 熱阻編輯視窗的表格 */
   .sg-rth-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 4px; }
+  /* TIM 型號庫（頂層 collection tim_library，全工具共用、不屬於任何專案） */
+  .tim-lib-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 4px; }
+  .tim-lib-table th {
+    text-align: left; font-weight: 600; color: #475569; padding: 4px 6px;
+    border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  }
+  .tim-lib-table td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .tim-lib-table input, .tim-lib-table select {
+    width: 100%; box-sizing: border-box; padding: 4px 6px; font-size: 0.8rem;
+    border: 1.5px solid #e0e0e0; border-radius: 5px; background: #fff;
+  }
+  .tim-lib-table input:focus, .tim-lib-table select:focus {
+    outline: none; border-color: #0277bd; box-shadow: 0 0 0 2px rgba(2,119,189,0.15);
+  }
+  .tim-lib-table input.tim-lib-invalid { border-color: #c0392b; background: #fff5f5; }
+  .tim-lib-del {
+    border: none; background: #fde2e2; color: #b91c1c; border-radius: 5px;
+    padding: 3px 7px; cursor: pointer; font-size: 0.8rem; line-height: 1;
+  }
+  .tim-lib-del:hover { background: #fbc9c9; }
+  .tim-lib-empty { color: #94a3b8; font-size: 0.82rem; padding: 10px 6px; }
+  .tim-lib-status { font-size: 0.8rem; min-height: 1.2em; }
+  .tim-lib-status.err { color: #c0392b; font-weight: 600; }
+  .tim-lib-status.ok { color: #217346; font-weight: 600; }
   .sg-rth-table th {
     text-align: left; font-weight: 600; color: #475569; padding: 4px 6px;
     border-bottom: 1px solid #e2e8f0; white-space: nowrap;
@@ -4617,6 +4647,42 @@
   </div>
 </div>
 
+<!-- TIM 型號庫（頂層 collection tim_library）：全工具共用，不屬於任何專案，
+     所有專案（含之後新開的）都能選用同一份型號。由 Tab2 匯出工具列的「🧪 TIM 型號庫」開啟。 -->
+<div id="tim-lib-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)timLibClose()">
+  <div class="lock-modal-box" style="max-width:860px;width:96vw;">
+    <h3 class="lock-modal-title">&#129517; TIM 型號庫</h3>
+    <p class="lock-modal-hint">
+      這份型號庫<b>全工具共用、不屬於任何專案</b>，之後新開的專案也能選用同一份型號。
+      填了 k 值與預設厚度，5G-RRU 端就能用同一顆 Pad 的真實 k 值算 R_TIM，
+      不必再靠 <code>Pad</code> / <code>Pad2</code> 兩個選項硬分。
+    </p>
+    <div style="max-height:52vh;overflow:auto;">
+      <table class="tim-lib-table">
+        <thead><tr>
+          <th style="width:22%">型號</th>
+          <th style="width:12%">TIM 類型</th>
+          <th style="width:13%">k (W/m·K)</th>
+          <th style="width:13%">預設厚度(mm)</th>
+          <th style="width:15%">廠商</th>
+          <th>備註</th>
+          <th style="width:38px"></th>
+        </tr></thead>
+        <tbody id="tim-lib-rows"></tbody>
+      </table>
+      <div id="tim-lib-empty" class="tim-lib-empty" style="display:none;">目前型號庫是空的，按「＋ 新增型號」開始建立。</div>
+    </div>
+    <div class="lock-modal-actions" style="margin-top:8px;">
+      <button id="tim-lib-add" onclick="timLibAddRow()" class="lock-modal-btn">&#10133; 新增型號</button>
+      <span id="tim-lib-status" class="tim-lib-status"></span>
+    </div>
+    <div class="lock-modal-actions">
+      <button id="tim-lib-save" onclick="timLibSave()" class="lock-modal-btn lock-modal-teams-btn">&#128190; 儲存型號庫</button>
+      <button onclick="timLibClose()" class="lock-modal-btn">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- 備註編輯視窗（Tab1 元件清單的「備註」欄改為 icon 按鈕，點開才編輯，以縮小欄寬） -->
 <div id="sg-note-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)sgNoteClose()">
   <div class="lock-modal-box">
@@ -4851,6 +4917,7 @@
       <button class="btn-export excel" onclick="exportExcel()">&#128202; 匯出 Excel</button>
       <span style="font-size:0.82rem;color:#888;">（被勾選「隱藏」的元件不會出現在匯出表格中）</span>
       <span style="flex:1;"></span>
+      <button class="btn-export tim-lib" onclick="timLibOpen()" title="維護 TIM 型號庫（k 值與預設厚度）。全工具共用，所有專案都能選用；未解鎖時可檢視">&#129517; TIM 型號庫</button>
       <button class="btn-export ee-export" onclick="eeExportExcel()">&#128202; EE 匯出 Excel</button>
       <button class="btn-export ee-import" id="ee-import-btn" onclick="document.getElementById('ee-import-file').click()" disabled title="需先解鎖密碼保護才能使用">&#128229; EE 匯入 Excel</button>
       <input type="file" id="ee-import-file" accept=".xlsx,.xls" style="display:none;" onchange="eeImportExcel(this)">
@@ -8340,6 +8407,233 @@ function sgRthSave() {
   const y = window.scrollY;
   sgRenderProjectComponents();
   window.scrollTo(0, y);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TIM 型號庫（頂層 collection `tim_library`）
+   --------------------------------------------------------------
+   全工具共用、**不屬於任何專案**：一顆 Pad 的 k 值與預設厚度只登錄一次，
+   所有專案（含之後新開的）都選用同一份型號。放頂層 collection 是刻意的
+   （CLAUDE.md 共用 DB 規則第 3 條）：天然與 5G-RRU 對 projects 的寫入隔離，
+   不必擔心 shallow merge 把別人的欄位吃掉。
+
+   資料形狀：tim_library[<id>] = { model, timType, k, thickness, vendor, note, at, by }
+     - id     內部用的隨機鍵，不顯示；改型號名不會換 id
+     - model  型號名，跨工具參照就是用這個字串（之後元件上的 TIM_Model 存它）
+     - k      W/m·K；thickness mm
+
+   寫入策略：視窗內編輯先暫存在 _timLibRows，按「儲存型號庫」才一次寫入
+   （set 用 writeBatch 合併成單一 flush，刪除另走 deleteDoc —— writeBatch 不支援 delete）。
+   ══════════════════════════════════════════════════════════════ */
+let timLibrary = {};          // { id: {...} } 讀進來的快取
+let timLibLoaded = false;
+let _timLibRows = [];         // 視窗內的暫存列（含 _id；新列的 _id 為 null）
+
+/* 型號庫只登錄「有 k 值可查」的介面材料；None 不需要型號 */
+const TIM_LIB_TYPES = ['Grease', 'Pad', 'Putty'];
+
+function timLibGenId() {
+  return 'tim_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+}
+
+async function timLibLoad(force) {
+  if (timLibLoaded && !force) return;
+  if (!dbAdapter.isReady()) { timLibrary = {}; timLibLoaded = false; return; }
+  try {
+    const col = await dbAdapter.getCollection('tim_library');
+    timLibrary = (col && typeof col === 'object') ? col : {};
+    timLibLoaded = true;
+  } catch (e) {
+    console.error('[timLibLoad]', e);
+    timLibrary = {};
+  }
+}
+
+/* 供其他頁面/第二階段取用：依 TIM 類型列出型號（按型號名排序） */
+function timLibListByType(timType) {
+  return Object.entries(timLibrary)
+    .filter(([, v]) => v && (!timType || v.timType === timType))
+    .map(([id, v]) => Object.assign({ _id: id }, v))
+    .sort((a, b) => String(a.model || '').localeCompare(String(b.model || '')));
+}
+
+async function timLibOpen() {
+  if (!dbAdapter.isReady()) {
+    alert(dbAdapter.isSharePointMode()
+      ? '資料庫尚未連線，請先登入 SharePoint。'
+      : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。');
+    return;
+  }
+  await timLibLoad(true);                       // 每次開啟重讀，避免看到別人改過前的舊值
+  _timLibRows = timLibListByType(null).map(r => ({
+    _id: r._id,
+    model: r.model || '', timType: r.timType || 'Pad',
+    k: (r.k == null ? '' : r.k), thickness: (r.thickness == null ? '' : r.thickness),
+    vendor: r.vendor || '', note: r.note || '',
+    at: r.at || '', by: r.by || '',
+  }));
+  timLibSetStatus('');
+  timLibRender();
+  const ro = isProtected;                       // 未解鎖 → 可檢視不可編輯（UX 慣例 9）
+  const addBtn = document.getElementById('tim-lib-add');
+  const saveBtn = document.getElementById('tim-lib-save');
+  if (addBtn) addBtn.style.display = ro ? 'none' : '';
+  if (saveBtn) saveBtn.style.display = ro ? 'none' : '';
+  if (ro) timLibSetStatus('未解鎖：唯讀檢視（解鎖後才能新增/修改型號）', '');
+  const m = document.getElementById('tim-lib-modal');
+  if (m) m.style.display = 'flex';
+}
+
+function timLibClose() {
+  const m = document.getElementById('tim-lib-modal');
+  if (m) m.style.display = 'none';
+  _timLibRows = [];
+}
+
+function timLibSetStatus(msg, cls) {
+  const el = document.getElementById('tim-lib-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.className = 'tim-lib-status' + (cls ? ' ' + cls : '');
+}
+
+function timLibRender() {
+  const tb = document.getElementById('tim-lib-rows');
+  const empty = document.getElementById('tim-lib-empty');
+  if (!tb) return;
+  const ro = isProtected;
+  tb.innerHTML = _timLibRows.map((r, k) => {
+    const meta = r.at
+      ? ('登錄於 ' + new Date(r.at).toLocaleString('zh-TW') + (r.by ? ('（' + r.by + '）') : ''))
+      : '尚未儲存';
+    return `<tr>
+      <td><input type="text" value="${escapeAttr(r.model)}" placeholder="如 TG-A6200" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'model',this.value)"></td>
+      <td><select ${ro ? 'disabled' : ''} onchange="timLibEdit(${k},'timType',this.value)">${
+        TIM_LIB_TYPES.map(t => `<option value="${t}" ${r.timType === t ? 'selected' : ''}>${t}</option>`).join('')
+      }</select></td>
+      <td><input type="number" step="any" min="0" value="${escapeAttr(r.k)}" placeholder="如 6.2" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'k',this.value)"></td>
+      <td><input type="number" step="any" min="0" value="${escapeAttr(r.thickness)}" placeholder="如 2.5" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'thickness',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(r.vendor)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'vendor',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(r.note)}" title="${escapeAttr(meta)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'note',this.value)"></td>
+      <td style="text-align:center">${ro ? '' : `<button class="tim-lib-del" title="刪除此型號" onclick="timLibDelRow(${k})">&#10005;</button>`}</td>
+    </tr>`;
+  }).join('');
+  if (empty) empty.style.display = _timLibRows.length ? 'none' : '';
+  timLibMarkInvalid();
+}
+
+function timLibEdit(k, field, v) {
+  if (isProtected) return;
+  if (_timLibRows[k]) _timLibRows[k][field] = v;
+  timLibMarkInvalid();                 // 只改標記，不整區重繪（游標不會跳開）
+}
+
+function timLibAddRow() {
+  if (isProtected) return;
+  _timLibRows.push({ _id: null, model: '', timType: 'Pad', k: '', thickness: '', vendor: '', note: '', at: '', by: '' });
+  timLibRender();
+  // 聚焦新列的型號欄（每列第一個 input）
+  const rows = document.querySelectorAll('#tim-lib-rows tr');
+  const last = rows[rows.length - 1];
+  if (last) { const inp = last.querySelector('input'); if (inp) inp.focus(); }
+}
+
+function timLibDelRow(k) {
+  if (isProtected) return;
+  const r = _timLibRows[k];
+  if (!r) return;
+  if (r._id && !confirm('確定要刪除型號「' + (r.model || '(未命名)') + '」嗎？\n\n' +
+      '⚠ 這份型號庫是全工具共用的，刪除後所有專案都選不到此型號。')) return;
+  _timLibRows.splice(k, 1);
+  timLibRender();
+}
+
+/* 驗證：型號必填、k 必須是正數、同類型下型號不可重複（跨工具是用型號名參照的） */
+function timLibValidate() {
+  const errs = [];
+  const seen = new Map();
+  _timLibRows.forEach((r, k) => {
+    const model = String(r.model || '').trim();
+    if (!model) { errs.push({ k, field: 'model', msg: '第 ' + (k + 1) + ' 列：型號必填' }); return; }
+    const key = r.timType + '\u0000' + model.toLowerCase();
+    if (seen.has(key)) errs.push({ k, field: 'model', msg: '型號「' + model + '」在 ' + r.timType + ' 下重複' });
+    else seen.set(key, k);
+    const kv = parseFloat(r.k);
+    if (r.k === '' || r.k == null || isNaN(kv) || kv <= 0) {
+      errs.push({ k, field: 'k', msg: '型號「' + model + '」的 k 值必須是大於 0 的數字' });
+    }
+    if (r.thickness !== '' && r.thickness != null) {
+      const tv = parseFloat(r.thickness);
+      if (isNaN(tv) || tv < 0) errs.push({ k, field: 'thickness', msg: '型號「' + model + '」的厚度不是有效數字' });
+    }
+  });
+  return errs;
+}
+
+function timLibMarkInvalid() {
+  const errs = timLibValidate();
+  const bad = new Set(errs.map(e => e.k + ':' + e.field));
+  const rows = document.querySelectorAll('#tim-lib-rows tr');
+  rows.forEach((tr, k) => {
+    // model=第1個 input、k=第2個、thickness=第3個（select 不算 input）
+    const inputs = tr.querySelectorAll('input');
+    ['model', 'k', 'thickness'].forEach((f, i) => {
+      const inp = inputs[i];
+      if (inp) inp.classList.toggle('tim-lib-invalid', bad.has(k + ':' + f));
+    });
+  });
+}
+
+async function timLibSave() {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  if (!dbAdapter.isReady()) return;
+  const errs = timLibValidate();
+  timLibMarkInvalid();
+  if (errs.length) { timLibSetStatus('⚠ ' + errs[0].msg, 'err'); return; }
+  // 寫入前驗鎖（H-4）：鎖已逾時/被接手 → 擋下
+  if (!(await _ensureLockBeforeWrite('儲存 TIM 型號庫'))) return;
+
+  const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
+  const who = (acct && acct.name) || '';
+  const now = new Date().toISOString();
+  const keptIds = new Set();
+  const ops = [];
+  _timLibRows.forEach(r => {
+    const id = r._id || timLibGenId();
+    keptIds.add(id);
+    const prev = timLibrary[id] || {};
+    ops.push({ type: 'set', col: 'tim_library', id, data: {
+      model: String(r.model || '').trim(),
+      timType: r.timType || 'Pad',
+      k: parseFloat(r.k),
+      thickness: (r.thickness === '' || r.thickness == null) ? '' : parseFloat(r.thickness),
+      vendor: String(r.vendor || '').trim(),
+      note: String(r.note || '').trim(),
+      at: prev.at || now,                  // 首次登錄時間保留
+      by: prev.by || who,
+      updatedAt: now,
+      updatedBy: who,
+    } });
+    r._id = id;
+  });
+  const removed = Object.keys(timLibrary).filter(id => !keptIds.has(id));
+
+  const saveBtn = document.getElementById('tim-lib-save');
+  if (saveBtn) saveBtn.disabled = true;
+  timLibSetStatus('儲存中…', '');
+  try {
+    if (ops.length) await dbAdapter.writeBatch(ops);
+    // writeBatch 不支援 delete，被移除的型號逐筆刪
+    for (const id of removed) { try { await dbAdapter.deleteDoc('tim_library', id); } catch (e) { console.warn('[timLib] 刪除失敗', id, e); } }
+    await timLibLoad(true);
+    timLibRender();
+    timLibSetStatus('✅ 已儲存 ' + ops.length + ' 筆型號' + (removed.length ? ('，刪除 ' + removed.length + ' 筆') : ''), 'ok');
+  } catch (e) {
+    console.error('[timLibSave]', e);
+    timLibSetStatus('⚠ 儲存失敗：' + (e.message || e), 'err');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 
 /* ── 備註編輯視窗 ──

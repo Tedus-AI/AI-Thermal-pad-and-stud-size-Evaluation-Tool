@@ -26,6 +26,8 @@
     }
   },
   "feedback_items":  { ... },   // AI-Thermal Tab5
+  "tim_library":     { "<id>": { model, timType, k, thickness, vendor, note, at, by, updatedAt, updatedBy } },
+                                // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護）
   "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
   "version":         <number>
 }
@@ -34,6 +36,17 @@
 > `login_history`：登入時節流(同 email 60 分鐘一筆)逐筆 `setDoc` 一個唯一 id doc，超過上限刪最舊；
 > 系統管理員面板「🕘 使用者登入紀錄」讀出依時間列出。頂層 collection 天然與其他工具寫入隔離；
 > **僅本工具會寫**，要含 5G-RRU 端登入需 5G-RRU 同步記錄到同一 collection。
+
+> `tim_library`：TIM 型號庫（型號 → k 值 / 預設厚度 / 廠商）。**刻意放頂層 collection、
+> 不掛在 `projects[id]` 底下**（共用 DB 規則第 3 條）：一顆 Pad 的 k 值只登錄一次，
+> 所有專案（含之後新開的）都選用同一份，且天然與 5G-RRU 對 `projects` 的寫入隔離。
+> 由 Tab2 匯出工具列的「🧪 TIM 型號庫」維護（`timLibOpen`）；未解鎖時可檢視不可編輯，
+> 寫入前過 `_ensureLockBeforeWrite`。新增/修改用 `writeBatch`（單次 flush），刪除另走
+> `deleteDoc`（`writeBatch` 不支援 delete）。驗證：型號必填、k 必須 > 0、同一 `timType`
+> 下型號不可重複（跨工具是用**型號名字串**參照，不是 id）。`at`/`by` 是首次登錄、
+> 重存不覆蓋；`updatedAt`/`updatedBy` 記錄最後修改。
+> ⚠ **尚未接上元件**：把元件的 `TIM_Model` 指向型號名、並把 5G-RRU 的 `Pad2` 收斂成
+> 「`Pad` + 型號」，需要 5G-RRU 端同步實作（第二階段）。
 
 #### 元件物件（`rf_data` / `digital_data` / `pwr_data` 的每一筆）欄位歸屬
 
@@ -107,7 +120,8 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
   「同一專案的兩半都在記憶體裡」時推導：兩頁同專案 → 推到 **Tab1 的副本**（否則 Tab1 的
   寫入會蓋回去）；Tab2 單獨載入別的專案 → 推到 Tab2 的副本並把三個陣列補進 Tab2 的寫入。
 - `TIM_Type` 尚未連動（第二階段：Tab2 的 `timType` → `TIM_Type`，並把 5G-RRU 的 `Pad2`
-  收斂成「`Pad` + 型號」，型號→{k, 厚度} 對照表放頂層 collection `tim_library`）。
+  收斂成「`Pad` + 型號」）。型號→{k, 厚度} 對照表已就位：頂層 collection `tim_library`，
+  維護介面在 Tab2 匯出工具列（見上方 `tim_library` 說明）。
 
 ### 規則
 
