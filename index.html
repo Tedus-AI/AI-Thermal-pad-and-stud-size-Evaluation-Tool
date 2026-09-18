@@ -608,7 +608,22 @@
   .comp-table .boss-surface-col { min-width: 120px; }
   .comp-table .tim-type-col { min-width: 100px; }
   .comp-table .tim-thickness-col { min-width: 140px; }
-  .comp-table .heat-dir-col { min-width: 100px; }
+  /* 選項字串比舊的「IC top/IC bot/雙向」長（Thermal Via / Copper Coin），要夠寬才不會
+     把目前選到的值截斷；本表外層本來就是 overflow-x:auto，多這點寬度只是多捲一點。 */
+  .comp-table .heat-dir-col { min-width: 120px; }
+  /* E-PAD 大小：主散熱路徑 = Thermal Via 時，長在「元件大小」格底下的分支欄 */
+  .comp-table .epad-sub { margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e1; }
+  .comp-table .epad-label {
+    display: block; font-size: 0.7rem; font-weight: 700; color: #2e6bb5;
+    margin-bottom: 2px; cursor: help;
+  }
+  /* 舊的「散熱方向」值(IC bot/雙向)在新選項沒有對應 → 琥珀色提示請使用者重選。
+     琥珀不用紅：紅色保留給 Fail/錯誤（UX 慣例 5-1）。 */
+  .comp-table td.heat-dir-legacy { background: #fff8e1 !important; }
+  .comp-table .heat-dir-legacy-hint {
+    margin-top: 3px; font-size: 0.68rem; line-height: 1.25;
+    color: #8a6100; cursor: help;
+  }
   .comp-table .ic-hsk-col { min-width: 90px; }
   .comp-table .note-col { min-width: 150px; }
   .comp-table .power-col { min-width: 90px; }
@@ -1154,6 +1169,30 @@
   .sg-comp-list-table .sg-cell-input:focus {
     border-color: #2e6bb5;
     box-shadow: 0 0 0 2px rgba(46,107,181,0.15);
+  }
+  /* Qty 欄只放個位數/兩位數：輸入框收到與表頭「Qty」三個字元相當的寬度，欄本身縮到
+     min-content（width:1% + nowrap），把回收的空間讓給元件名稱等內容欄。
+     number 的上下箭頭會吃掉窄欄的空間，故一併隱藏（Qty 一向是直接打字）。 */
+  .sg-comp-list-table th.sg-qty-col,
+  .sg-comp-list-table td.sg-qty-col { width: 1%; white-space: nowrap; }
+  .sg-comp-list-table td.sg-qty-col .sg-cell-input {
+    width: 2.4em; padding-left: 2px; padding-right: 2px; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .sg-comp-list-table td.sg-qty-col .sg-cell-input::-webkit-outer-spin-button,
+  .sg-comp-list-table td.sg-qty-col .sg-cell-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  /* 限溫（°C）：datasheet 值，最多三位數 */
+  .sg-comp-list-table th.sg-limit-col,
+  .sg-comp-list-table td.sg-limit-col { width: 1%; white-space: nowrap; }
+  .sg-comp-list-table td.sg-limit-col .sg-cell-input {
+    width: 3.2em; padding-left: 2px; padding-right: 2px; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .sg-comp-list-table td.sg-limit-col .sg-cell-input::-webkit-outer-spin-button,
+  .sg-comp-list-table td.sg-limit-col .sg-cell-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
   }
   .sg-comp-list-table .sg-cell-input.comp-name {
     text-align: left;
@@ -5825,8 +5864,16 @@ const CATEGORIES = {
   PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',   icon: '&#9889;',   css: 'pwr' }
 };
 
-/* 散熱方向選項 */
-const HEAT_DIR_OPTIONS = ['IC top', 'IC bot', '雙向'];
+/* 主散熱路徑選項（原「散熱方向」）。
+   直接對應 5G-RRU 的 Board_Type（導熱方式），同時決定 Pad_L/Pad_W 取哪個尺寸：
+     Copper Coin  → Board_Type='Copper Coin'，Pad = 元件大小
+     Thermal Via  → Board_Type='Thermal Via'，Pad = E-PAD 大小（本欄選此值才出現的分支欄）
+     IC top       → Board_Type='None'（不穿板），Pad = 元件大小 → 5G-RRU 以上表面積算 R_TIM
+     None         → Board_Type='None'，Pad = 0
+   ⚠ 舊值 'IC bot' / 'IC 雙向' 在新設計沒有對應（資料裡看不出是 Coin 還是 Via），
+     載入時一律清空讓使用者重選；HEAT_PATH_LEGACY 用於辨識這些舊值。 */
+const HEAT_DIR_OPTIONS = ['Copper Coin', 'Thermal Via', 'IC top', 'None'];
+const HEAT_PATH_LEGACY = ['IC bot', '雙向'];
 
 /* TIM 種類選項 */
 const TIM_TYPE_OPTIONS = ['Grease', 'Pad', 'Putty', 'None'];
@@ -6438,6 +6485,7 @@ function getCustomComponents(catKey) {
 function renderAllCategories() {
   const container = document.getElementById('comp-container');
   const exportToolbar = document.getElementById('export-toolbar');
+  const scrollY = window.scrollY;   // 重繪不可把使用者彈回頁面頂端（UX 慣例 1-2）
 
   let html = '';
 
@@ -6455,6 +6503,7 @@ function renderAllCategories() {
         <p>\u6b64\u5c08\u6848\u5c1a\u7121\u5143\u4ef6\u8cc7\u6599\u3002</p>
       </div>`;
     exportToolbar.style.display = 'none';
+    window.scrollTo(0, scrollY);
     return;
   }
   html += `<div style="margin-top:16px;padding:10px 16px;font-size:0.95rem;font-weight:700;color:#c0392b;">
@@ -6463,6 +6512,7 @@ function renderAllCategories() {
   container.innerHTML = html;
   exportToolbar.style.display = 'flex';
   applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
+  window.scrollTo(0, scrollY);
 }
 
 /* ---- 渲染單一分類表格 ---- */
@@ -6483,7 +6533,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="editable-col boss-surface-col">凸台表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
-          <th class="editable-col heat-dir-col">散熱方向</th>
+          <th class="editable-col heat-dir-col" title="元件的主要散熱路徑，對應 5G-RRU 體積評估的「導熱方式」，並決定 E-PAD／元件大小要帶哪一個過去">主散熱路徑</th>
           <th class="editable-col ic-hsk-col">IC 距離<br>HSK</th>
           <th class="editable-col note-col">備註</th>
         </tr></thead>`;
@@ -6549,7 +6599,22 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const timType      = spec.timType        || '';
     const timThickness = spec.timThickness   || '';
     const timSize      = spec.timSize        || '';
-    const heatDir      = spec.heatDirection  || '';
+    // 主散熱路徑（原散熱方向）。舊值 IC bot / 雙向 在新設計無對應 → 顯示為空白，請使用者重選。
+    const heatDirRaw   = spec.heatDirection  || '';
+    const heatDir      = HEAT_PATH_LEGACY.includes(heatDirRaw) ? '' : heatDirRaw;
+    const heatDirLegacy = heatDirRaw && heatDir === '';
+    // E-PAD 大小：只有主散熱路徑 = Thermal Via 才需要（5G-RRU 的 Pad_L/Pad_W 取此值）。
+    // 切走時值保留不刪，只是不顯示，切回來不用重打。
+    const epadSize     = spec.epadSize       || '';
+    const epadInner    = (heatDir === 'Thermal Via')
+      ? `<div class="epad-sub">
+           <label class="epad-label" title="E-PAD 大小（mm）：IC 的散熱焊墊長×寬，不是元件外型尺寸。主散熱路徑為 Thermal Via 時，5G-RRU 以此面積算基板熱阻與 TIM 熱阻">E-PAD</label>
+           <input class="cell-input" type="text"
+             data-comp="${escapeAttr(specKey)}" data-field="epadSize"
+             value="${escapeAttr(epadSize)}"
+             placeholder="L×W" onchange="onCellChange(this)">
+         </div>`
+      : '';
     const icToHSK      = spec.icToHSK        || '';
     const icHskPresets = ['0.5', '1', '1.7', '\u76f4\u89f8'];
     const icHskIsCustom = icToHSK && !icHskPresets.includes(icToHSK);
@@ -6614,6 +6679,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 data-comp="${escapeAttr(specKey)}" data-field="heatSourceSize"
                 value="${escapeAttr(heatSrcSize)}"
                 placeholder="L\u00d7W" onchange="onCellChange(this)">
+              ${epadInner}
             </td>
             <td class="editable-cell heat-source-height-col">
               <input class="cell-input" type="text"
@@ -6635,7 +6701,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
             <td class="editable-cell boss-surface-col">${bossSurfaceInner}</td>
             <td class="editable-cell tim-thickness-col">${timThickInner}</td>
             <td class="editable-cell tim-size-col">${timSizeInner}</td>
-            <td class="editable-cell heat-dir-col">
+            <td class="editable-cell heat-dir-col${heatDirLegacy ? ' heat-dir-legacy' : ''}">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
                 onchange="onCellChange(this)">
@@ -6644,6 +6710,9 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                   `<option value="${o}" ${heatDir === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
               </select>
+              ${heatDirLegacy
+                ? `<div class="heat-dir-legacy-hint" title="\u820a\u6b04\u4f4d\u300c\u6563\u71b1\u65b9\u5411\u300d\u7684\u503c\u300c${escapeAttr(heatDirRaw)}\u300d\u5728\u65b0\u7684\u300c\u4e3b\u6563\u71b1\u8def\u5f91\u300d\u6c92\u6709\u5c0d\u61c9\uff08\u770b\u4e0d\u51fa\u662f Copper Coin \u9084\u662f Thermal Via\uff09\uff0c\u8acb\u91cd\u65b0\u9078\u64c7">\u26a0 \u820a\u503c\u300c${escapeHtml(heatDirRaw)}\u300d\u9700\u91cd\u9078</div>`
+                : ''}
             </td>
             <td class="editable-cell ic-hsk-col">${icCellInner}</td>
             <td class="editable-cell note-col">
@@ -6699,6 +6768,10 @@ function onCellChange(el) {
       renderAllCategories();
     }
   }
+
+  // 主散熱路徑改變 → Thermal Via 才有的「E-PAD 大小」分支欄要跟著出現/隱藏。
+  // 這是 select 的 onchange(提交事件)，重繪不會打斷打字；捲動位置由 renderAllCategories 還原。
+  if (field === 'heatDirection') renderAllCategories();
 }
 
 /* ---- IC距離HSK 下拉變更（支援自訂） ---- */
@@ -6904,13 +6977,17 @@ function collectExportDataByCategory() {
         qty: comp.Qty || '—',
         power: comp['Power(W)'] || '—',
         heatSourceSize: spec.heatSourceSize || '-',
+        // E-PAD 大小只在主散熱路徑 = Thermal Via 時有意義，其餘情況不輸出殘值
+        epadSize: (spec.heatDirection === 'Thermal Via' && spec.epadSize) ? spec.epadSize : '-',
         heatSourceHeight: spec.heatSourceHeight || '-',
         bossSize: bossSizeDisplay,
         bossSurface: spec.bossSurface || '-',
         timType: spec.timType || '-',
         timThickness: spec.timThickness || '-',
         timSize: spec.timSize || '-',
-        heatDirection: spec.heatDirection || '-',
+        // 舊值 IC bot/雙向 在新選項無對應，畫面顯示為待重選 → 匯出也不輸出該值
+        heatDirection: (spec.heatDirection && !HEAT_PATH_LEGACY.includes(spec.heatDirection))
+          ? spec.heatDirection : '-',
         icToHSK: spec.icToHSK || '-',
         note: spec.note || '-'
       });
@@ -6941,12 +7018,12 @@ function exportExcel() {
   const categories = collectExportDataByCategory();
   if (categories.length === 0) { alert('沒有可匯出的元件（全部被隱藏或無資料）'); return; }
 
-  const headers = ['#', '元件名稱', '數量', '發熱瓦數(W)', '元件大小(mm)', '元件高度(max)(mm)', '凸台大小(mm)', '凸台表面處理',
-    'TIM Type', 'TIM 厚度(mm)', 'TIM Size(mm)', '散熱方向', 'IC距離HSK', '備註'];
+  const headers = ['#', '元件名稱', '數量', '發熱瓦數(W)', '元件大小(mm)', 'E-PAD 大小(mm)', '元件高度(max)(mm)', '凸台大小(mm)', '凸台表面處理',
+    'TIM Type', 'TIM 厚度(mm)', 'TIM Size(mm)', '主散熱路徑', 'IC距離HSK', '備註'];
 
   const wsData = [
     [getExportTitle()],
-    ['案名：' + getProjectName(), '', '', '', '', '', '', '', '', '', '', '', '', '日期：' + getDateString()],
+    ['案名：' + getProjectName(), '', '', '', '', '', '', '', '', '', '', '', '', '', '日期：' + getDateString()],
     []
   ];
 
@@ -6955,7 +7032,7 @@ function exportExcel() {
     wsData.push(headers);
     cat.rows.forEach(r => {
       wsData.push([r.index, r.component, r.qty, r.power,
-        r.heatSourceSize, r.heatSourceHeight, r.bossSize, r.bossSurface, r.timType, r.timThickness, r.timSize,
+        r.heatSourceSize, r.epadSize, r.heatSourceHeight, r.bossSize, r.bossSurface, r.timType, r.timThickness, r.timSize,
         r.heatDirection, r.icToHSK, r.note]);
     });
     wsData.push([]);
@@ -6967,13 +7044,13 @@ function exportExcel() {
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
   ws['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 13 } }
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 14 } }
   ];
 
   ws['!cols'] = [
     { wch: 4 }, { wch: 22 }, { wch: 6 }, { wch: 10 },
-    { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
-    { wch: 10 }, { wch: 10 }, { wch: 16 }
+    { wch: 12 }, { wch: 13 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+    { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, '總表');
@@ -7129,13 +7206,14 @@ function buildPdfHtml(categories) {
               <th style="border:1px solid #c5d9ee;padding:6px 4px;color:#1a3a6b;font-size:10px;">數量</th>
               <th style="border:1px solid #c5d9ee;padding:6px 4px;color:#1a3a6b;font-size:10px;">發熱瓦數(W)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">元件大小(mm)</th>
+              <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">E-PAD 大小(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">元件高度(max)(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">凸台大小(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">凸台表面處理</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM Type</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM 厚度(mm)</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">TIM Size(mm)</th>
-              <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">散熱方向</th>
+              <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">主散熱路徑</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">IC距離HSK</th>
               <th style="border:1px solid #ffcc80;padding:6px 4px;color:#e65100;font-size:10px;background:#fff3e0;">備註</th>
             </tr>
@@ -7150,6 +7228,7 @@ function buildPdfHtml(categories) {
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${escapeHtml(r.qty)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;background:#fafbfc;">${escapeHtml(r.power)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatSourceSize)}</td>
+              <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.epadSize)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatSourceHeight)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.bossSize)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.bossSurface)}</td>
@@ -7247,12 +7326,9 @@ async function exportPDF() {
 let sgProjectId = null;
 let sgProjectData = null;
 
-/* ---- Default values by component type ---- */
-const SG_DEFAULTS = {
-  RF:      { height: 250, padL: 10, padW: 10, thick: 2.5, boardType: 'Copper Coin', limit: 200, rjc: 1.5, timType: 'Grease' },
-  Digital: { height: 50,  padL: 10, padW: 10, thick: 0,   boardType: 'Thermal Via', limit: 100, rjc: 0.5, timType: 'Putty' },
-  PWR:     { height: 30,  padL: 20, padW: 20, thick: 0,   boardType: 'None',        limit: 95,  rjc: 0,   timType: 'Grease' }
-};
+/* 註：原本這裡有一份 SG_DEFAULTS（RF/Digital/PWR 的 Height/Pad/Thick/Board_Type/
+   Limit/R_jc/TIM_Type 罐頭值），與 5G-RRU 的 RF_DEFAULT/DIG_DEFAULT/PWR_DEFAULT 完全同值。
+   已移除：本工具不再捏造 5G-RRU 專屬欄位（詳見 sgMakeComp 的註解）。 */
 
 /* ---- doc_id generator (same rule as RRU tool) ---- */
 function toDocId(name) {
@@ -7414,7 +7490,7 @@ function sgRenderProjectComponents() {
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
-          <th>Component</th><th>Type</th><th>Qty</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>熱阻<br>(°C/W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>規格書</th><th>備註</th><th></th>
+          <th>Component</th><th>Type</th><th class="sg-qty-col">Qty</th><th class="sg-limit-col">限溫<br>(°C)</th><th>Pd@${escapeHtml(tempLabel)}°C(W)</th><th>Pd@25°C(W)</th><th>熱阻<br>(°C/W)</th><th>TH Via內徑(mil)<br>貫穿型</th><th>TH Via Qty</th><th>Temp Sensor</th><th>規格書</th><th>備註</th><th></th>
         </tr></thead><tbody>`;
 
     items.forEach((comp, idx) => {
@@ -7488,7 +7564,8 @@ function sgRenderProjectComponents() {
       html += `<tr>
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
-        <td class="sg-edit-cell"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell sg-qty-col"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell sg-limit-col"><input class="sg-cell-input" type="number" step="any" min="0" value="${escapeAttr(comp['Limit(C)'] ?? '')}" placeholder="—" title="元件允許的最高運作溫度（datasheet）。5G-RRU 以此算裕度：Allowed_dT = 限溫 − 內部溫降 − 局部環溫" data-cat="${c}" data-idx="${i}" data-field="Limit(C)" onchange="sgOnCompEdit(this)"></td>
         <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}${measBadge('hot')}</td>
         <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}${measBadge('rt')}</td>
         <td class="sg-edit-cell sg-rth-cell">${rthCell}</td>
@@ -7675,6 +7752,14 @@ function sgOnCompEdit(el) {
     const oldName = sgProjectData[fieldKey][idx].Component;
     const newName = val;
     if (oldName && oldName !== newName) tcpRenameComponentRef(cat, oldName, newName);
+  }
+
+  // Limit(C) 是共用欄位（5G-RRU 也讀它算裕度）：清空時要「刪掉 key」而不是寫 ''。
+  // 空字串會覆蓋掉 5G-RRU 自己的預設值，而它的 `Limit − Drop − Loc_Amb` 會把 '' 當 0，
+  // 算出一個超大負裕度，看起來像元件要燒掉而不是「還沒填」。
+  if (field === 'Limit(C)' && (val === '' || val === null || (typeof val === 'number' && isNaN(val)))) {
+    delete sgProjectData[fieldKey][idx][field];
+    return;
   }
 
   sgProjectData[fieldKey][idx][field] = val;
@@ -7877,14 +7962,24 @@ async function sgDebugVariants(category = 'RF') {
 }
 window.sgDebugVariants = sgDebugVariants;
 
-/* 依分類預設建立一顆元件物件（可帶 overrides），供新增空白列 / 從資料庫快選共用 */
+/* 依分類建立一顆元件物件（可帶 overrides），供新增空白列 / 從資料庫快選共用。
+   ⚠ 這裡**不再捏造 5G-RRU 專屬欄位的罐頭值**（Height/Pad_L/Pad_W/Thick/Board_Type/
+     Limit(C)/R_jc/TIM_Type）。原本的 SG_DEFAULTS 與 5G-RRU 的 RF_DEFAULT/DIG_DEFAULT/
+     PWR_DEFAULT 完全同值，等於本工具先塞一份假資料、5G-RRU 端再也分不出「工程師真的填了
+     250」還是「AI-Thermal 自動塞的 250」。
+   改為「key 整個不寫」（不是寫空字串）：
+     - 5G-RRU 快選是 Object.assign({}, RF_DEFAULT, src)，key 不存在 → 套它自己的預設，
+       行為與過去完全相同；寫成 '' 反而會覆蓋掉預設值，讓 Height×Slope 變 NaN。
+     - sgCarrySrc 會跳過 undefined，所以本工具的快選也不受影響。
+   各欄位之後的來源：
+     Board_Type / Pad_L / Pad_W ← Tab2「主散熱路徑」＋元件大小／E-PAD 大小（存檔時推導）
+     R_jc                       ← Tab1 熱阻表的 θJC（存檔時推導）
+     Limit(C)                   ← Tab1「限溫(°C)」欄，使用者自行填寫
+     Height(mm) / Thick(mm)     ← 5G-RRU 端自行設定，本工具一律不寫 */
 function sgMakeComp(cat, overrides) {
-  const d = SG_DEFAULTS[cat];
   return Object.assign({
     Component: '', Type: '', Qty: 1, 'Power(W)': '', 'Power_RT(W)': '',
     TV_ID_mil: 'N/A', TV_Qty: 'N/A',
-    'Height(mm)': d.height, Pad_L: d.padL, Pad_W: d.padW, 'Thick(mm)': d.thick,
-    Board_Type: d.boardType, 'Limit(C)': d.limit, R_jc: d.rjc, TIM_Type: d.timType,
     Temp_Sensor: 'N', Local_Qty: '', Remote_Qty: '',
   }, overrides || {});
 }
@@ -8078,6 +8173,78 @@ function sgSyncRjcAll(projectData) {
   ['rf_data', 'digital_data', 'pwr_data'].forEach(f => {
     (Array.isArray(projectData[f]) ? projectData[f] : []).forEach(sgSyncRjc);
   });
+}
+
+/* ── Tab2「主散熱路徑」→ 5G-RRU 的 Board_Type / Pad_L / Pad_W ──
+   主散熱路徑同時決定導熱方式與 Pad 面積要取哪個尺寸：
+     Copper Coin → Board_Type='Copper Coin'，Pad = 元件大小
+     Thermal Via → Board_Type='Thermal Via'，Pad = E-PAD 大小（分支欄）
+     IC top      → Board_Type='None'（不穿板，5G-RRU 會退回以元件上表面積算 R_TIM），Pad = 元件大小
+     None        → Board_Type='None'，Pad = 0
+   未選主散熱路徑（含清空的舊值 IC bot/雙向）→ 不寫任何 key，留給 5G-RRU 端的閘門檢查，
+   不可寫 '' —— 空字串會覆蓋掉 5G-RRU 自己的預設值並讓它的計算變成 NaN 或靜默的 0。 */
+const HEAT_PATH_MAP = {
+  'Copper Coin': { board: 'Copper Coin', pad: 'elem' },
+  'Thermal Via': { board: 'Thermal Via', pad: 'epad' },
+  'IC top':      { board: 'None',        pad: 'elem' },
+  'None':        { board: 'None',        pad: 'zero' },
+};
+
+/* 解析 "L×W"（也吃 x / X / *）；只填一個數字視為正方形；解析不出來回 null */
+function sgParseLW(s) {
+  const t = String(s == null ? '' : s).trim();
+  if (!t) return null;
+  const m = t.match(/(\d+\.?\d*)\s*[×xX*]\s*(\d+\.?\d*)/);
+  if (m) return { L: parseFloat(m[1]), W: parseFloat(m[2]) };
+  const one = t.match(/^(\d+\.?\d*)$/);
+  if (one) { const v = parseFloat(one[1]); return { L: v, W: v }; }
+  return null;
+}
+
+/* Tab2 的 thermal_specs key（與 renderComponentRow 同一套規則） */
+function sgSpecKey(name) {
+  return String(name || '').replace(/ /g, '_').replace(/\//g, '-');
+}
+
+/* 把單一元件的 Board_Type / Pad_L / Pad_W 依 spec 推導；有變更回 true */
+function sgDeriveFromSpec(comp, spec) {
+  if (!comp) return false;
+  const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
+  if (!cfg) return false;              // 未選主散熱路徑 → 什麼都不寫
+  let changed = false;
+  if (comp.Board_Type !== cfg.board) { comp.Board_Type = cfg.board; changed = true; }
+
+  let lw = null;
+  if (cfg.pad === 'zero') lw = { L: 0, W: 0 };
+  else lw = sgParseLW(cfg.pad === 'epad' ? spec.epadSize : spec.heatSourceSize);
+  if (!lw) return changed;             // 尺寸還沒填/解析不出來 → 保留原值，不寫半套
+
+  if (comp.Pad_L !== lw.L) { comp.Pad_L = lw.L; changed = true; }
+  if (comp.Pad_W !== lw.W) { comp.Pad_W = lw.W; changed = true; }
+  comp._pad_from = cfg.pad === 'epad' ? 'epadSize' : (cfg.pad === 'zero' ? 'none' : 'heatSourceSize');
+  return changed;
+}
+
+/* 熱阻表 → Excel 的一格文字。一顆元件可有多筆標法，逐筆列出並以 ★ 標「主要」。 */
+function sgRthExportText(comp) {
+  const arr = Array.isArray(comp && comp.Rth) ? comp.Rth : [];
+  const rows = arr.filter(r => r && r.value !== '' && r.value != null);
+  if (!rows.length) return '';
+  return rows.map(r =>
+    (r.primary ? '★' : '') + rthShort(r) + '=' + r.value + (r.cond ? '(' + r.cond + ')' : '')
+  ).join('; ');
+}
+
+/* 整批推導。projectData 的三個陣列與 specs 必須同屬一個專案 document。有變更回 true */
+function sgDeriveAllFromSpecs(projectData, specs) {
+  if (!projectData || !specs) return false;
+  let changed = false;
+  ['rf_data', 'digital_data', 'pwr_data'].forEach(f => {
+    (Array.isArray(projectData[f]) ? projectData[f] : []).forEach(comp => {
+      if (sgDeriveFromSpec(comp, specs[sgSpecKey(comp && comp.Component)])) changed = true;
+    });
+  });
+  return changed;
 }
 
 let _sgRthTarget = null;
@@ -9914,6 +10081,25 @@ async function saveAllTabs() {
     // 熱阻的 θJC 同步到 R_jc(5G-RRU 讀這個欄位算 Tj);直接新增/快選/舊資料統一在這裡對齊
     if (hasSg) sgSyncRjcAll(sgProjectData);
 
+    // Tab2 的「主散熱路徑」+ 元件大小/E-PAD → 元件物件上的 Board_Type / Pad_L / Pad_W。
+    // thermal_specs 與 rf_data 同屬一個專案 document,但 Tab1/Tab2 各有獨立的專案選單,
+    // 所以只在「同一個專案的兩半都在記憶體裡」時推導:
+    //   (a) 兩頁同專案(最常見) → 推到 Tab1 的副本,跟著 Tab1 既有的寫入一起存;
+    //       不可推到 Tab2 的副本 —— 兩頁各自持有一份 rf_data,Tab1 的寫入會蓋回去。
+    //   (b) Tab2 單獨載入別的專案 → 推到 Tab2 的副本,並把三個陣列補進 Tab2 的寫入。
+    let clDerivedComps = null;
+    if (hasCl && hasSg && currentProjectId === sgProjectId) {
+      sgDeriveAllFromSpecs(sgProjectData, thermalSpecs);
+    } else if (hasCl && currentProjectData) {
+      if (sgDeriveAllFromSpecs(currentProjectData, thermalSpecs)) {
+        clDerivedComps = {
+          rf_data: currentProjectData.rf_data || [],
+          digital_data: currentProjectData.digital_data || [],
+          pwr_data: currentProjectData.pwr_data || [],
+        };
+      }
+    }
+
     // 把三頁的寫入合併成單一批次(每頁寫回各自的專案 id)
     const ops = [];
     if (hasSg) {
@@ -9934,10 +10120,10 @@ async function saveAllTabs() {
       // 停掉自動 upsert 可避免累積孤兒、也不再無聲覆寫共用目錄。
     }
     if (hasCl) {
-      ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: {
+      ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: Object.assign({
         thermal_specs: thermalSpecs,
         hidden_components: hiddenComponents
-      } });
+      }, clDerivedComps || {}) });
     }
     if (hasVd) {
       ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: {
@@ -10106,10 +10292,11 @@ function sgExportExcel() {
   const tempLabel = selTemp === 'custom' ? (sgProjectData.param_temp_custom || '??') : selTemp;
   for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
     const items = sgProjectData[catInfo.field] || [];
-    const headers = ['Component','Type','Qty',`Pd@${tempLabel}°C(W)`,'Pd@25°C(W)','Thermal Via 內徑(mil)','Thermal Via Qty','Temp Sensor','備註'];
+    // 欄位順序與畫面一致（PDF 是畫面截圖，故三方同步只需顧 Excel）
+    const headers = ['Component','Type','Qty','限溫(°C)',`Pd@${tempLabel}°C(W)`,'Pd@25°C(W)','熱阻(°C/W)','Thermal Via 內徑(mil)','Thermal Via Qty','Temp Sensor','備註'];
     const rows = items.map(c => [
-      c.Component||'', c.Type||'', c.Qty??'', c['Power(W)']??'', c['Power_RT(W)']??'',
-      c.TV_ID_mil||'', c.TV_Qty||'', c.Temp_Sensor||'', c.note||''
+      c.Component||'', c.Type||'', c.Qty??'', c['Limit(C)']??'', c['Power(W)']??'', c['Power_RT(W)']??'',
+      sgRthExportText(c), c.TV_ID_mil||'', c.TV_Qty||'', c.Temp_Sensor||'', c.note||''
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     XLSX.utils.book_append_sheet(wb, ws, catKey);
