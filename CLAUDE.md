@@ -82,6 +82,7 @@
 | `Limit(C)` | 兩邊 | AI-Thermal 在 Tab1「限溫(°C)」欄（Qty 右側）|
 | `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
 | `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
+| `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
 | `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
 | `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」 |
 
@@ -142,9 +143,31 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
   專案 document，但 Tab1/Tab2 各有獨立的專案選單且各持一份 `rf_data` 副本，所以只在
   「同一專案的兩半都在記憶體裡」時推導：兩頁同專案 → 推到 **Tab1 的副本**（否則 Tab1 的
   寫入會蓋回去）；Tab2 單獨載入別的專案 → 推到 Tab2 的副本並把三個陣列補進 Tab2 的寫入。
-- `TIM_Type` 尚未連動（第二階段：Tab2 的 `timType` → `TIM_Type`，並把 5G-RRU 的 `Pad2`
-  收斂成「`Pad` + 型號」）。型號→{k, 厚度} 對照表已就位：頂層 collection `tim_library`，
-  維護介面在 Tab2 匯出工具列（見上方 `tim_library` 說明）。
+#### `TIM_Model`：Tab2 的 TIM 選型
+
+Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` 中 `timType` 相符的型號
+（`timLibModelCell` / `onTimModelChange`），存 `thermal_specs[key].timModel`（型號名）。
+存檔時 `sgDeriveFromSpec` 寫成 `comp.TIM_Model`；取消選型則 `delete` 該 key（不寫 `''`）。
+
+- **選了型號 → Tab2 的「TIM 厚度」改由該型號的 `thickness`（預設厚度）帶入並鎖定**，
+  優先於 `TIM_PRESETS` 的分類預設，且不再受 `TIM_THICKNESS_OPTIONS` 固定清單限制
+  （型號可能是 1.2mm 這種清單裡沒有的值）。鎖定值顯示為純文字＋`✂`，tooltip 標明來源型號。
+- 換型號會 `delete padUnlock.timThickness`，讓新型號的厚度生效（來源變動要跟隨）。
+  換 TIM 類型會 `delete spec.timModel` —— 型號隸屬於某個類型。
+- 型號庫裡沒有該類型的型號時，顯示「型號庫無 X 型號」並指路到工具列按鈕，不給空下拉。
+- 型號在庫裡被刪掉時，下拉仍把舊值列出來並標「（已從型號庫移除）」＋琥珀色，
+  **不靜默改掉使用者填的內容**。
+- 型號庫是頂層 collection、與專案無關，但選型下拉需要它 → Tab2 載入專案後背景
+  `timLibLoad()`，讀完再 `renderAllCategories()` 一次。
+
+⚠ **`TIM_Type` 目前刻意不從 Tab2 覆寫到元件上**。5G-RRU 有本工具沒有的 `'Pad2'`，
+貿然覆寫會把它的 `K_Pad2`/`t_Pad2` 換成 `K_Pad`/`t_Pad`（靜默改變計算結果）。
+`TIM_Type` 的連動與 `Pad2` 收斂成「`Pad` + 型號」必須兩邊一起改，含既有
+`TIM_Type: 'Pad2'` 的資料遷移。
+
+**5G-RRU 端待實作**：`calcRow` 取 TIM 的 k / t 時，先看 `row.TIM_Model` ——
+在 `tim_library` 查到該型號就用它的 `k` 與 `gapThickness`，否則沿用 `global_params` 的
+`K_<Type>` / `t_<Type>`。fallback 不可省，否則型號庫還沒建完的專案會整批算不出來。
 
 ### 規則
 
