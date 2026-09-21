@@ -126,6 +126,19 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 > `SpecFile` 是檔案參照不是複本（實體檔在來源專案的 `SPEC/<專案名>/` 底下）。快選帶入時
 > 會標 `SpecFile._from = <來源專案名>`，本專案刪除／換檔時只解除參照，不得刪來源檔。
 
+> **快選是「一次性快照」，不是 live link**：`sgPickerAdd` 把來源元件的欄位整份抄進本專案，
+> 之後兩邊各走各的（唯一真的連動的是 `SpecFile` 的路徑與 `tim_library` 的型號）。
+> 來源後來補了熱阻，本專案不會自己變 → `sgRefSyncBadge` 每次重繪拿 `sgProjectTreeCache`
+> （快選面板本來就讀好的全專案元件，不必多讀 DB）比對 `SG_REF_SPEC_FIELDS`
+> （`Rth`／`SpecFile`／`Limit(C)`／`Type`／`Temp_Sensor`／`Local_Qty`／`Remote_Qty`
+> —— 只有「屬於這顆料本身」的欄位），有差異就在元件名稱下方標「↻ 來源有更新 (n)」，
+> 點開 `sgRefSyncOpen` 列出「目前 vs 來源」逐欄勾選套用。守則：
+> **絕不自動覆蓋**（本專案可能刻意填不同值）；功耗／E-Pad 尺寸／導熱方式／TIM／備註
+> **不在同步範圍**（跟著各專案自己的工況與散熱設計）；來源已清空的欄位**預設不勾**，
+> 勾了是 `delete` key 而非寫 `''`；套用物件欄位要深拷貝（否則與 `sgProjectTreeCache` 共用參照）；
+> `SpecFile` 套用後要重標 `_from`；改到 `Rth` 就呼叫 `sgSyncRjc(comp)` 讓 `R_jc` 跟著重算。
+> 來源專案或同名元件不見了 → 顯示「來源已不存在」，不給更新鈕也不報錯。
+
 > **規格書線上預覽（Tab1 規格書欄的 👁）**：`sgSpecView` 用 `dbAdapter.getSpecMeta(path)`
 > 取回 `downloadUrl`／`webUrl`，把 bytes 抓下來做成 blob URL 就地顯示 —— PDF 走 iframe
 > （瀏覽器內建檢視器）、圖片走 `<img>`、純文字逸出後放 `<pre>`；Office 檔瀏覽器沒有檢視器，

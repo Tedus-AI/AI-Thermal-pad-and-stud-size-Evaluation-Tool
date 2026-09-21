@@ -1637,6 +1637,31 @@
     background: #fff; color: #b45309; cursor: pointer; white-space: nowrap;
   }
   .sg-ref-detach-btn:hover { background: #fef3c7; border-color: #f59e0b; }
+  /* 來源專案的規格類欄位有更新 → 提示按鈕（琥珀色：提醒不是錯誤，紅色保留給 Fail） */
+  .sg-ref-sync-btn {
+    border: 1px solid #f59e0b; background: #fffbeb; color: #b45309;
+    border-radius: 4px; font-size: 0.68rem; font-weight: 700; padding: 0 6px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .sg-ref-sync-btn:hover { background: #fef3c7; border-color: #d97706; }
+  .sg-ref-gone { color: #9ca3af; font-size: 0.68rem; }
+  /* 差異視窗 */
+  /* 這個視窗要列「目前 vs 來源」兩欄值 → 比 .lock-modal-box 的 460px 寬（不然欄位名會折行） */
+  .sg-refsync-box { width: min(780px, 94vw); max-width: min(780px, 94vw); max-height: 86vh; }
+  /* 來源有更新是「提醒」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail） */
+  .sg-refsync-box .lock-modal-title { color: #b45309; }
+  .sg-refsync-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 6px; }
+  .sg-refsync-table th {
+    text-align: left; font-weight: 600; color: #475569; padding: 5px 6px;
+    border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+  }
+  .sg-refsync-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #1e293b; }
+  .sg-refsync-table td.sv-now { color: #64748b; }
+  .sg-refsync-table td.sv-new { color: #0f172a; font-weight: 600; }
+  .sg-refsync-table .sv-empty { color: #cbd5e1; }
+  .sg-refsync-table tr.sv-clear td.sv-new { color: #b45309; }
+  .sg-refsync-scroll { overflow: auto; max-height: 52vh; }
+  .sg-refsync-note { color: #475569; font-size: 0.82rem; line-height: 1.7; margin: 2px 0 8px; }
   /* 參照鎖定的瓦數：白底黑字純文字、不可編輯、無輸入框 */
   .sg-locked-val {
     display: inline-block; padding: 2px 4px; min-width: 40px;
@@ -4783,6 +4808,26 @@
   </div>
 </div>
 
+<!-- 快選參照：來源專案的規格類欄位有更新 → 列出「目前 vs 來源」逐欄勾選套用（不自動覆蓋） -->
+<div id="sg-refsync-modal" class="lock-modal-overlay" style="display:none"
+     onclick="if(event.target===this)sgRefSyncClose()">
+  <div class="lock-modal-box sg-refsync-box">
+    <h3 class="lock-modal-title">&#8635; 來源專案有更新</h3>
+    <div id="sg-refsync-who" class="lock-modal-text" style="font-weight:600;"></div>
+    <p class="sg-refsync-note">這顆元件是從別的專案快選帶入的。下面是<b>屬於這顆料本身</b>的欄位
+      （熱阻／規格書／限溫／類型／Temp Sensor）在兩邊的差異 —— 勾選要採用來源值的欄位再套用；
+      功耗、E-Pad 尺寸、導熱方式、TIM 這些跟著各專案自己的設計走，不在同步範圍。</p>
+    <div id="sg-refsync-body"></div>
+    <div id="sg-refsync-lock" class="lock-modal-hint" style="display:none;">（未解鎖，僅供檢視；要套用請先解除密碼保護）</div>
+    <div class="lock-modal-actions">
+      <button class="lock-modal-btn" onclick="sgRefSyncAll(true)">全選</button>
+      <button class="lock-modal-btn" onclick="sgRefSyncAll(false)">全不選</button>
+      <button id="sg-refsync-apply" class="lock-modal-btn lock-modal-teams-btn" onclick="sgRefSyncApply()">套用選取的欄位</button>
+      <button class="lock-modal-btn" onclick="sgRefSyncClose()">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- 規格書線上預覽：PDF／圖片／純文字直接在視窗裡看，Office 檔給 Office Online 連結。
      只讀不寫 → 未解鎖（唯讀）時也能用。 -->
 <div id="sg-specview-modal" class="lock-modal-overlay" style="display:none"
@@ -7741,8 +7786,8 @@ function sgRenderProjectComponents() {
         `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '') + specRef) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
         `</div>`;
       const refBadge = refLocked
-        ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button></div>`
-        : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}</div>` : '');
+        ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button>${sgRefSyncBadge(comp, c, i)}</div>`
+        : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}${sgRefSyncBadge(comp, c, i)}</div>` : '');
       const pwCell = (fieldName, val) => refLocked
         ? `<span class="sg-locked-val" title="瓦數已鎖定，請先按「解除參照」">${escapeHtml(String(val ?? ''))}</span>`
         : `<input class="sg-cell-input" type="number" step="any" value="${escapeAttr(val ?? '')}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
@@ -8976,6 +9021,11 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); sgSpecViewClose(); }
     return;
   }
+  const rs = document.getElementById('sg-refsync-modal');
+  if (rs && rs.style.display !== 'none' && rs.style.display !== '') {
+    if (e.key === 'Escape') { e.preventDefault(); sgRefSyncClose(); }
+    return;
+  }
   const rth = document.getElementById('sg-rth-modal');
   if (rth && rth.style.display !== 'none' && rth.style.display !== '') {
     if (e.key === 'Escape') { e.preventDefault(); sgRthClose(); }
@@ -9322,6 +9372,169 @@ function sgApplyMeasured(cat, idx, field) {
   const y = window.scrollY;
   sgRenderProjectComponents();
   window.scrollTo(0, y);
+}
+
+/* ── 快選參照：來源專案的「規格類欄位」有更新時提示＋一鍵套用 ─────────
+   快選（sgPickerAdd）是**一次性快照**：抄完之後兩邊各走各的。但熱阻、規格書這類
+   欄位屬於「這顆料本身」，來源專案後來補齊了，本專案不該還停在舊的空值。
+   → 每次重繪時拿 sgProjectTreeCache（本來就為了快選面板讀好的全專案元件，不必多讀 DB）
+     比對來源，有差異就在元件名稱下方標一顆 ↻，點開列出「目前 vs 來源」讓使用者逐欄勾選套用。
+   ⚠ 一律不自動覆蓋：本專案可能刻意填了不同的值（UX 慣例：建議值 click-to-apply，
+     不直接改使用者輸入）。功耗／E-Pad 尺寸／導熱方式／TIM／備註都**不在**同步範圍 ——
+     那些跟著各專案自己的工況與散熱設計走。 */
+const SG_REF_SPEC_FIELDS = [
+  { key: 'Rth',         label: '熱阻（θ/Ψ）' },
+  { key: 'SpecFile',    label: '規格書' },
+  { key: 'Limit(C)',    label: '限溫 (°C)' },
+  { key: 'Type',        label: '元件類型' },
+  { key: 'Temp_Sensor', label: 'Temp Sensor' },
+  { key: 'Local_Qty',   label: 'Local 數量' },
+  { key: 'Remote_Qty',  label: 'Remote 數量' },
+];
+
+/* 來源元件（同一個專案 id ＋ 同名）。回傳 null = 沒有參照；{gone:true} = 來源已不在。 */
+function sgRefSource(comp, cat) {
+  const pid = comp && comp._ref_origin_id;
+  if (!pid) return null;
+  const groups = (sgProjectTreeCache && sgProjectTreeCache[cat]) || null;
+  if (!groups) return { pending: true };          // 快取還沒讀好 → 這次不判斷
+  const g = groups.find(x => x.projId === pid);
+  const name = String(comp.Component || '').trim();
+  const hit = g && g.comps.find(x => x.name === name);
+  if (!hit) return { gone: true };
+  return { group: g, src: hit.src || {} };
+}
+
+function _sgRefNorm(v) {
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v === 'object') { try { return JSON.stringify(v); } catch (e) { return String(v); } }
+  return String(v);
+}
+
+/* 把值變成看得懂的一行字（熱阻是陣列、規格書是物件） */
+function sgRefValText(key, v) {
+  if (v === undefined || v === null || v === '') return '';
+  if (key === 'Rth') {
+    const arr = Array.isArray(v) ? v.filter(r => r && r.value !== '' && r.value != null) : [];
+    if (!arr.length) return '';
+    return arr.map(r => (r.primary ? '★' : '') + rthShort(r) + '=' + r.value
+                        + (r.cond ? '（' + r.cond + '）' : '')).join('；');
+  }
+  if (key === 'SpecFile') return (v && v.name) ? v.name : (v && v.path ? v.path : '');
+  return String(v);
+}
+
+/* 目前值 vs 來源值的差異清單（只看規格類欄位） */
+function sgRefDiff(comp, cat) {
+  const r = sgRefSource(comp, cat);
+  if (!r || r.pending || r.gone) return [];
+  const out = [];
+  SG_REF_SPEC_FIELDS.forEach(f => {
+    const mine = comp[f.key], theirs = r.src[f.key];
+    if (_sgRefNorm(mine) === _sgRefNorm(theirs)) return;
+    const myText = sgRefValText(f.key, mine), thText = sgRefValText(f.key, theirs);
+    if (myText === thText) return;               // 例如 [] vs undefined：看起來一樣就不算差異
+    out.push({ key: f.key, label: f.label, myText, thText,
+               srcVal: theirs, clears: _sgRefNorm(theirs) === '' });
+  });
+  return out;
+}
+
+function sgRefSyncBadge(comp, cat, idx) {
+  const r = sgRefSource(comp, cat);
+  if (!r || r.pending) return '';
+  if (r.gone) {
+    return `<span class="sg-ref-gone" title="${escapeAttr('來源專案裡已經找不到同名元件（可能被改名或刪除）。本專案的資料不受影響，只是無法再比對來源。')}">・來源已不存在</span>`;
+  }
+  const diff = sgRefDiff(comp, cat);
+  if (!diff.length) return '';
+  const tip = '來源專案的規格類欄位有更新：' + diff.map(d => d.label).join('、')
+            + '\n點一下可以看「目前 vs 來源」並選擇要不要套用（不會自動改）。';
+  return `<button class="sg-ref-sync-btn" title="${escapeAttr(tip)}" onclick="sgRefSyncOpen('${cat}',${idx})">↻ 來源有更新 (${diff.length})</button>`;
+}
+
+let _sgRefSyncTarget = null;   // { cat, idx, diff }
+
+function sgRefSyncOpen(cat, idx) {
+  const comp = sgProjectData?.[SG_CAT_MAP[cat]?.field]?.[idx];
+  if (!comp) return;
+  const diff = sgRefDiff(comp, cat);
+  if (!diff.length) { alert('這顆元件與來源專案目前沒有差異。'); return; }
+  _sgRefSyncTarget = { cat, idx, diff };
+  const m = document.getElementById('sg-refsync-modal');
+  const who = document.getElementById('sg-refsync-who');
+  const body = document.getElementById('sg-refsync-body');
+  const applyBtn = document.getElementById('sg-refsync-apply');
+  if (who) {
+    who.textContent = '元件：' + (comp.Component || '(未命名)')
+      + '　·　來源專案：' + (comp._ref_origin_project || comp._ref_origin_id || '');
+  }
+  if (body) {
+    let h = '<div class="sg-refsync-scroll"><table class="sg-refsync-table"><thead><tr>' +
+            '<th style="width:34px;"></th><th style="width:22%">欄位</th>' +
+            '<th style="width:39%">目前（本專案）</th><th style="width:39%">來源專案</th>' +
+            '</tr></thead><tbody>';
+    diff.forEach((d, n) => {
+      // 來源被清空的那幾筆預設不勾：多半是來源改錯或還沒填，不該順手把本專案的值清掉
+      const checked = d.clears ? '' : ' checked';
+      h += `<tr class="${d.clears ? 'sv-clear' : ''}">` +
+           `<td><input type="checkbox" id="sg-refsync-ck-${n}"${checked}></td>` +
+           `<td><label for="sg-refsync-ck-${n}">${escapeHtml(d.label)}</label></td>` +
+           `<td class="sv-now">${d.myText ? escapeHtml(d.myText) : '<span class="sv-empty">（空）</span>'}</td>` +
+           `<td class="sv-new">${d.thText ? escapeHtml(d.thText) : '<span class="sv-empty">（來源已清空）</span>'}</td>` +
+           `</tr>`;
+    });
+    body.innerHTML = h + '</tbody></table></div>';
+  }
+  if (applyBtn) applyBtn.style.display = isProtected ? 'none' : '';
+  const lockNote = document.getElementById('sg-refsync-lock');
+  if (lockNote) lockNote.style.display = isProtected ? '' : 'none';
+  if (m) m.style.display = 'flex';
+}
+
+function sgRefSyncClose() {
+  const m = document.getElementById('sg-refsync-modal');
+  if (m) m.style.display = 'none';
+  _sgRefSyncTarget = null;
+}
+
+function sgRefSyncAll(on) {
+  const t = _sgRefSyncTarget;
+  if (!t) return;
+  t.diff.forEach((d, n) => {
+    const ck = document.getElementById('sg-refsync-ck-' + n);
+    if (ck) ck.checked = !!on;
+  });
+}
+
+function sgRefSyncApply() {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  const t = _sgRefSyncTarget;
+  if (!t) return;
+  const comp = sgProjectData?.[SG_CAT_MAP[t.cat]?.field]?.[t.idx];
+  if (!comp) { sgRefSyncClose(); return; }
+  const origin = comp._ref_origin_project || '';
+  let n = 0;
+  t.diff.forEach((d, i) => {
+    const ck = document.getElementById('sg-refsync-ck-' + i);
+    if (!ck || !ck.checked) return;
+    if (d.clears) { delete comp[d.key]; n++; return; }      // 空值不寫 ''，直接 delete key
+    let v = d.srcVal;
+    if (v && typeof v === 'object') {
+      try { v = JSON.parse(JSON.stringify(v)); } catch (e) { return; }   // 深拷貝：不可與快取共用參照
+    }
+    // 規格書是「參照」不是複本：實體檔仍在來源專案底下 → 重新標來源
+    if (d.key === 'SpecFile' && v && v.path && origin) v._from = origin;
+    comp[d.key] = v;
+    n++;
+  });
+  if (!n) { sgRefSyncClose(); return; }
+  sgSyncRjc(comp);                 // 熱阻改了 → R_jc（5G-RRU 讀的那個欄位）跟著重算
+  sgRefSyncClose();
+  const y = window.scrollY;
+  sgRenderProjectComponents();
+  window.scrollTo(0, y);
+  roToast('↻ 已套用 ' + n + ' 個欄位，請記得按「儲存元件變更」');
 }
 
 /* 解除參照：解鎖瓦數使其可編輯；保留 _ref_origin_* 以淡灰「曾參照自 X」追溯。 */
