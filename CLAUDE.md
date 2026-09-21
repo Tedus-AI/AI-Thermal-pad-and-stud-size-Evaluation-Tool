@@ -126,6 +126,16 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 > `SpecFile` 是檔案參照不是複本（實體檔在來源專案的 `SPEC/<專案名>/` 底下）。快選帶入時
 > 會標 `SpecFile._from = <來源專案名>`，本專案刪除／換檔時只解除參照，不得刪來源檔。
 
+> **規格書線上預覽（Tab1 規格書欄的 👁）**：`sgSpecView` 用 `dbAdapter.getSpecMeta(path)`
+> 取回 `downloadUrl`／`webUrl`，把 bytes 抓下來做成 blob URL 就地顯示 —— PDF 走 iframe
+> （瀏覽器內建檢視器）、圖片走 `<img>`、純文字逸出後放 `<pre>`；Office 檔瀏覽器沒有檢視器，
+> 改給 SharePoint `webUrl`（Office Online，一樣不必下載），其餘格式說明不能預覽並指向下載。
+> ⚠ **blob 的 MIME 一律由副檔名決定，不可改用伺服器回的 content-type**：blob: URL 會繼承本頁
+> origin，讓瀏覽器把某個上傳檔當成 HTML 解析，等於給它在本站 origin 執行腳本的機會。
+> 預覽只讀不寫 → 按鈕標 `sg-spec-ro`，未解鎖（唯讀）時照樣能看；關閉時要 `revokeObjectURL`
+> 並以序號讓仍在飛的非同步結果失效。`graphDb.getSpecSrc` 現在是 `getSpecMeta` 的薄包裝
+> （單一事實來源）。
+
 > `R_jc` 由 AI-Thermal 的熱阻表自動推導（見下節），不是使用者在 AI-Thermal 直接填的。
 
 #### `R_jc` 的單一事實來源：AI-Thermal 的 `comp.Rth`

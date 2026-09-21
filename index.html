@@ -1450,6 +1450,44 @@
   .sg-spec-btn:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-spec-btn.danger:hover:not(:disabled) { background: #fee2e2; border-color: #f5b5b5; }
   .sg-spec-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+  /* 線上預覽（👁）：最常用的動作放第一顆，有檔案時給藍色識別 */
+  .sg-spec-btn.sg-spec-view.has-file { color: #0b5ed7; border-color: #bfdbfe; background: #eff6ff; }
+  .sg-spec-btn.sg-spec-view.has-file:hover:not(:disabled) { background: #dbeafe; border-color: #93c5fd; }
+  /* 規格書線上預覽視窗：大面積內容區，PDF/圖片直接看，不必下載 */
+  .sg-specview-box {
+    background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(15,23,42,0.32);
+    width: min(1120px, 94vw); height: min(90vh, 940px); display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sg-specview-head {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex: 0 0 auto;
+  }
+  .sg-specview-head .sv-title { font-weight: 700; color: #0f172a; font-size: 0.98rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sg-specview-head .sv-sub { color: #64748b; font-size: 0.78rem; white-space: nowrap; }
+  .sg-specview-head .sv-spacer { flex: 1; }
+  .sg-specview-body { flex: 1; min-height: 0; background: #f1f5f9; position: relative; display: flex; }
+  .sg-specview-body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+  .sg-specview-body img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+  .sg-specview-text {
+    margin: 0; padding: 16px 18px; width: 100%; overflow: auto; background: #fff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem; line-height: 1.6; color: #1e293b; white-space: pre-wrap; word-break: break-word;
+  }
+  .sg-specview-msg {
+    margin: auto; text-align: center; color: #475569; font-size: 0.92rem; line-height: 1.8; padding: 24px;
+  }
+  .sg-specview-msg .sv-ico { font-size: 2.4rem; display: block; margin-bottom: 8px; }
+  .sg-specview-msg b { color: #0f172a; }
+  .sg-specview-btn {
+    border: 1px solid #cbd5e1; background: #fff; color: #1e293b; border-radius: 8px;
+    padding: 7px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  }
+  .sg-specview-btn:hover { background: #eef2f7; border-color: #94a3b8; }
+  .sg-specview-btn.primary { background: #0b5ed7; border-color: #0b5ed7; color: #fff; }
+  .sg-specview-btn.primary:hover { background: #0a52bb; }
   /* 熱阻欄：一顆窄按鈕，顯示「主要」那筆 + 其餘數量 */
   .sg-rth-cell { text-align: center; white-space: nowrap; }
   .sg-rth-btn {
@@ -4745,6 +4783,27 @@
   </div>
 </div>
 
+<!-- 規格書線上預覽：PDF／圖片／純文字直接在視窗裡看，Office 檔給 Office Online 連結。
+     只讀不寫 → 未解鎖（唯讀）時也能用。 -->
+<div id="sg-specview-modal" class="lock-modal-overlay" style="display:none"
+     onclick="if(event.target===this)sgSpecViewClose()">
+  <div class="sg-specview-box">
+    <div class="sg-specview-head">
+      <div style="min-width:0;">
+        <div class="sv-title" id="sg-specview-title">規格書</div>
+        <div class="sv-sub" id="sg-specview-sub"></div>
+      </div>
+      <div class="sv-spacer"></div>
+      <button class="sg-specview-btn" id="sg-specview-newtab" onclick="sgSpecViewNewTab()"
+              title="在瀏覽器新分頁開啟（不下載）">↗ 新分頁</button>
+      <button class="sg-specview-btn" id="sg-specview-dl" onclick="sgSpecViewDownload()"
+              title="下載到電腦">⬇ 下載</button>
+      <button class="sg-specview-btn primary" onclick="sgSpecViewClose()">關閉</button>
+    </div>
+    <div class="sg-specview-body" id="sg-specview-body"></div>
+  </div>
+</div>
+
 <!-- 規格書上傳用的隱藏檔案輸入：放在頂層（不可放進 #sg-project-components，
      否則未解鎖時會被唯讀鎖 disabled，連解鎖後的 .click() 都觸發不了） -->
 <input type="file" id="sg-spec-file-input" style="display:none"
@@ -7675,6 +7734,7 @@ function sgRenderProjectComponents() {
         `onclick="sgNoteOpen('${c}',${i})">📝</button>`;
       const specCell =
         `<div class="sg-spec-btns">` +
+        `<button class="sg-spec-btn sg-spec-view sg-spec-ro${spec ? ' has-file' : ''}" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('線上瀏覽：' + specName + specRef + '（不必下載）') : '尚未上傳規格書')}" onclick="sgSpecView('${c}',${i})">👁</button>` +
         `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
         `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
         `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ((specRef ? '移除規格書參照：' : '刪除規格書：') + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
@@ -8911,6 +8971,11 @@ function sgNoteSave() {
 /* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出）。
    熱阻視窗：Esc 取消（多列表單，不用 Enter 直接送出以免誤存）。 */
 document.addEventListener('keydown', (e) => {
+  const sv = document.getElementById('sg-specview-modal');
+  if (sv && sv.style.display !== 'none' && sv.style.display !== '') {
+    if (e.key === 'Escape') { e.preventDefault(); sgSpecViewClose(); }
+    return;
+  }
   const rth = document.getElementById('sg-rth-modal');
   if (rth && rth.style.display !== 'none' && rth.style.display !== '') {
     if (e.key === 'Escape') { e.preventDefault(); sgRthClose(); }
@@ -9039,6 +9104,191 @@ function sgSpecInfo(cat, idx) {
   alert('元件：' + (comp.Component || '') + '\n檔案：' + (spec.name || '') +
         '\n上傳時間：' + at + (spec.by ? '\n上傳者：' + spec.by : '') +
         (spec._from ? '\n來源：快選自專案「' + spec._from + '」（檔案存放於該專案，本專案只保留參照）' : ''));
+}
+
+/* ── 規格書線上預覽（👁）──────────────────────────────────
+   「不必下載就能看」：把檔案 bytes 抓下來做成 blob URL 就地顯示。
+   - PDF → iframe（瀏覽器內建 PDF 檢視器）
+   - 圖片 → img
+   - 純文字（txt/csv/log/md/json/xml）→ 逸出後放 <pre>
+   - Office（doc/xls/ppt…）→ 瀏覽器沒有內建檢視器 → 給 SharePoint webUrl 用 Office Online 開（仍是線上看）
+   - 其他（zip…）→ 說明不能預覽，給下載
+   ⚠ blob 的 MIME 一律由「副檔名」決定，不採用伺服器回的 content-type：blob: URL 會繼承本頁 origin，
+   若讓瀏覽器把某個檔當成 HTML 解析，上傳的檔案就能在本站 origin 執行腳本。固定成 application/pdf
+   / image/* / text/plain 就沒有這條路。
+   只讀不寫 → 按鈕標 sg-spec-ro，未解鎖（唯讀）時照樣能看。 */
+const SG_SPEC_VIEW_IMG = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg',
+                           gif:'image/gif', webp:'image/webp', bmp:'image/bmp' };
+const SG_SPEC_VIEW_TEXT = ['txt','csv','log','md','json','xml'];
+const SG_SPEC_VIEW_OFFICE = ['doc','docx','xls','xlsx','ppt','pptx'];
+const SG_SPEC_TEXT_MAX = 512 * 1024;      // 純文字預覽上限，超過只顯示前半段並註明
+let _sgSpecViewState = null;              // { cat, idx, name, blobUrl, webUrl, downloadUrl, seq }
+let _sgSpecViewSeq = 0;                   // 併發序號：關閉或換檔後，舊的非同步結果一律丟掉
+
+function _sgSpecExt(name) {
+  const m = String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : '';
+}
+
+function _sgSpecViewKind(name) {
+  const ext = _sgSpecExt(name);
+  if (ext === 'pdf') return { kind: 'pdf', mime: 'application/pdf' };
+  if (SG_SPEC_VIEW_IMG[ext]) return { kind: 'image', mime: SG_SPEC_VIEW_IMG[ext] };
+  if (SG_SPEC_VIEW_TEXT.includes(ext)) return { kind: 'text', mime: 'text/plain' };
+  if (SG_SPEC_VIEW_OFFICE.includes(ext)) return { kind: 'office', mime: '' };
+  return { kind: 'other', mime: '' };
+}
+
+function _sgSpecSize(n) {
+  const v = Number(n);
+  if (!isFinite(v) || v <= 0) return '';
+  if (v < 1024) return v + ' B';
+  if (v < 1024 * 1024) return (v / 1024).toFixed(0) + ' KB';
+  return (v / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+/* 外部 fetch 一律 timeout + retry（網路抖動不該讓使用者看到空白視窗） */
+async function _sgSpecFetch(url, tries) {
+  let lastErr = null;
+  for (let i = 0; i < (tries || 2); i++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 30000);
+    try {
+      const resp = await fetch(url, { signal: ctl.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp;
+    } catch (e) {
+      clearTimeout(timer);
+      lastErr = e;
+      if (i === 0) await new Promise(r => setTimeout(r, 800));
+    }
+  }
+  throw lastErr || new Error('讀取失敗');
+}
+
+function _sgSpecViewBody(html) {
+  const b = document.getElementById('sg-specview-body');
+  if (b) b.innerHTML = html;
+}
+
+async function sgSpecView(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  const spec = comp && comp.SpecFile;
+  if (!spec || !spec.path) { alert('此元件尚未上傳規格書。'); return; }
+  if (!dbAdapter.isSharePointMode || !dbAdapter.isSharePointMode()) {
+    alert('規格書存放在 SharePoint；目前是本機／離線模式，無法線上瀏覽。');
+    return;
+  }
+  const seq = ++_sgSpecViewSeq;
+  const name = spec.name || '規格書';
+  _sgSpecViewRelease();
+  _sgSpecViewState = { cat, idx, name, blobUrl: null, webUrl: null, downloadUrl: null, seq };
+
+  const modal = document.getElementById('sg-specview-modal');
+  const title = document.getElementById('sg-specview-title');
+  const sub = document.getElementById('sg-specview-sub');
+  if (title) title.textContent = name;
+  if (sub) {
+    sub.textContent = '元件：' + (comp.Component || '(未命名)')
+      + (spec.at ? '　·　上傳於 ' + new Date(spec.at).toLocaleString('zh-TW') : '')
+      + (spec._from ? '　·　參照自專案「' + spec._from + '」' : '');
+  }
+  if (modal) modal.style.display = 'flex';
+  _sgSpecViewBody('<div class="sg-specview-msg"><span class="sv-ico">⏳</span>讀取中…</div>');
+
+  try {
+    const meta = await dbAdapter.getSpecMeta(spec.path);
+    if (seq !== _sgSpecViewSeq) return;                 // 使用者已關閉或換看別的檔
+    if (!meta || !meta.downloadUrl) throw new Error('取不到檔案連結');
+    _sgSpecViewState.webUrl = meta.webUrl || null;
+    _sgSpecViewState.downloadUrl = meta.downloadUrl;
+    const info = _sgSpecViewKind(name);
+    const sizeTxt = _sgSpecSize(meta.size);
+    if (sub && sizeTxt) sub.textContent += '　·　' + sizeTxt;
+
+    if (info.kind === 'office' || info.kind === 'other') {
+      _sgSpecViewBody(_sgSpecViewFallback(info.kind, name, meta.webUrl));
+      return;
+    }
+
+    const resp = await _sgSpecFetch(meta.downloadUrl, 2);
+    if (seq !== _sgSpecViewSeq) return;
+
+    if (info.kind === 'text') {
+      let txt = await resp.text();
+      if (seq !== _sgSpecViewSeq) return;
+      let note = '';
+      if (txt.length > SG_SPEC_TEXT_MAX) {
+        txt = txt.slice(0, SG_SPEC_TEXT_MAX);
+        note = '\n\n─── 檔案過大，僅顯示前 ' + _sgSpecSize(SG_SPEC_TEXT_MAX) + '，完整內容請下載 ───';
+      }
+      _sgSpecViewBody('<pre class="sg-specview-text">' + escapeHtml(txt + note) + '</pre>');
+      return;
+    }
+
+    const buf = await resp.arrayBuffer();
+    if (seq !== _sgSpecViewSeq) return;
+    const url = URL.createObjectURL(new Blob([buf], { type: info.mime }));
+    _sgSpecViewState.blobUrl = url;
+    if (info.kind === 'image') {
+      _sgSpecViewBody('<img src="' + url + '" alt="' + escapeAttr(name) + '">');
+    } else {
+      _sgSpecViewBody('<iframe src="' + url + '" title="' + escapeAttr(name) + '"></iframe>');
+    }
+  } catch (e) {
+    if (seq !== _sgSpecViewSeq) return;
+    console.error('[spec] 預覽失敗', e);
+    _sgSpecViewBody('<div class="sg-specview-msg"><span class="sv-ico">⚠️</span>' +
+      '無法線上預覽：<b>' + escapeHtml(e.message || String(e)) + '</b><br>' +
+      '可以改用上方的「⬇ 下載」開啟這份規格書。</div>');
+  }
+}
+
+function _sgSpecViewFallback(kind, name, webUrl) {
+  if (kind === 'office') {
+    return '<div class="sg-specview-msg"><span class="sv-ico">📄</span>' +
+      '<b>' + escapeHtml(name) + '</b><br>Office 檔案瀏覽器無法就地顯示，' +
+      (webUrl
+        ? '可用 <b>Office Online</b> 直接線上開啟（一樣不必下載）。<br><br>' +
+          '<a class="sg-specview-btn primary" href="' + escapeAttr(webUrl) + '" target="_blank" rel="noopener">🌐 用 Office Online 開啟</a>'
+        : '且這份檔案取不到 SharePoint 連結 → 請改用上方的「⬇ 下載」。') +
+      '</div>';
+  }
+  return '<div class="sg-specview-msg"><span class="sv-ico">📦</span>' +
+    '<b>' + escapeHtml(name) + '</b><br>這個格式無法線上預覽。' +
+    (webUrl ? '<br><br><a class="sg-specview-btn" href="' + escapeAttr(webUrl) + '" target="_blank" rel="noopener">🌐 在 SharePoint 開啟</a>' : '') +
+    '<br><br>或用上方的「⬇ 下載」取得檔案。</div>';
+}
+
+function _sgSpecViewRelease() {
+  if (_sgSpecViewState && _sgSpecViewState.blobUrl) {
+    try { URL.revokeObjectURL(_sgSpecViewState.blobUrl); } catch (e) {}
+  }
+}
+
+function sgSpecViewClose() {
+  _sgSpecViewSeq++;                    // 讓仍在飛的非同步結果失效
+  _sgSpecViewRelease();
+  _sgSpecViewState = null;
+  const m = document.getElementById('sg-specview-modal');
+  if (m) m.style.display = 'none';
+  _sgSpecViewBody('');
+}
+
+/* 新分頁：有 blob（PDF/圖片/文字）就開 blob，Office 檔開 SharePoint 連結 */
+function sgSpecViewNewTab() {
+  const st = _sgSpecViewState;
+  if (!st) return;
+  const url = st.blobUrl || st.webUrl || st.downloadUrl;
+  if (!url) { alert('檔案尚未讀取完成。'); return; }
+  window.open(url, '_blank', 'noopener');
+}
+
+function sgSpecViewDownload() {
+  const st = _sgSpecViewState;
+  if (!st) return;
+  sgSpecDownload(st.cat, st.idx);
 }
 
 /* 讀取某元件（同專案「模擬與實測驗證」）的實測 Pd。實測值與 rf_data 同存於專案文件，

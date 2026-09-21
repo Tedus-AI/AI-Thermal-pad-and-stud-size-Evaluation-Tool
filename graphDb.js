@@ -600,7 +600,9 @@ const graphDb = {
     return `${folder}/${filename}`;
   },
 
-  async getSpecSrc(path) {
+  /* 線上預覽／下載都走這裡：一次取回下載連結（短效預簽章網址，瀏覽器可直接 fetch）
+     ＋ SharePoint 的 webUrl（Office 檔案用 Office Online 開，不必下載）＋ 檔名/大小/MIME。 */
+  async getSpecMeta(path) {
     if (!_siteId) await this._resolveDriveItemId();
     const token = await this._getAccessToken(true);
     const resp = await fetch(
@@ -609,7 +611,18 @@ const graphDb = {
     );
     if (!resp.ok) throw new Error('規格書讀取失敗 ' + resp.status);
     const item = await resp.json();
-    return item['@microsoft.graph.downloadUrl'] || null;
+    return {
+      downloadUrl: item['@microsoft.graph.downloadUrl'] || null,
+      webUrl: item.webUrl || null,
+      name: item.name || '',
+      size: item.size || 0,
+      mimeType: (item.file && item.file.mimeType) || '',
+    };
+  },
+
+  async getSpecSrc(path) {
+    const meta = await this.getSpecMeta(path);
+    return (meta && meta.downloadUrl) || null;
   },
 
   async deleteSpec(path) {
