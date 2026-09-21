@@ -208,6 +208,22 @@ Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` �
 > 以該專案殘留的 `K_Pad2`/`t_Pad2` 計算，並在畫面上提示改用「`Pad` ＋型號」；
 > 它的參數控制台已不再有 `K_Pad2` / `t_Pad2` 欄位（也不再寫入這兩個 key，但既有專案的值保留）。
 
+#### 專案「改名」只改 `project_name`，**絕不動 document id**
+
+Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProject`）只寫
+`updateDoc('projects', id, { project_name })`。
+
+- **id 是所有東西的錨點**：三個頁籤的專案選單、標註圖片路徑（`tcp_images/<projectId>_…`）、
+  跨頁載入都靠它。改 id 等於搬家，必須整批搬移參照 —— 所以不做。
+- **不要順手更新 `meta`**：它是 nested object，shallow merge 會整顆換掉 5G-RRU 寫的內容。
+- 改完**不可呼叫 `sgLoadProjects()`** 來刷新下拉 —— 它會 `dbAdapter.refresh()` 重讀磁碟，
+  把使用者尚未儲存的元件編輯整個丟掉。改為 `_sgApplyRenameToUI()` 就地換掉三個下拉的
+  `<option>` 文字，並同步三份已載入的 `*ProjectData.project_name`。
+- 驗證：名稱不可空白；**不可與其他專案同名** —— 規格書路徑是 `SPEC/<專案名>/…`，
+  撞名會讓兩個專案共用同一個資料夾。
+- ⚠ **既有規格書檔案不會跟著搬**：每顆元件的 `SpecFile.path` 存的是完整路徑，所以下載
+  照常；只有改名後「新上傳」的檔案會進新資料夾。這點在彈窗說明裡有明講，不要拿掉。
+
 ### 規則
 
 1. **存 project 一律用 `updateDoc('projects', id, fields)`，不要用 `setDoc`。**

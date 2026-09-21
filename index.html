@@ -760,7 +760,8 @@
   /* 鎖定時「+ 新增專案」反灰（覆寫 inline 綠色背景） */
   /* 新增專案已改用 .btn-primary（與載入專案同色），停用樣式交給通用 .btn:disabled，
      這裡只保留游標提示，避免舊的淺藍配色蓋掉通用停用灰。 */
-  #sg-new-project-btn:disabled { cursor: not-allowed; }
+  #sg-new-project-btn:disabled,
+  #sg-rename-project-btn:disabled { cursor: not-allowed; }
 
   .loading-spinner {
     display: inline-block;
@@ -4278,6 +4279,27 @@
     box-shadow: 0 8px 28px rgba(0,0,0,0.2); padding: 10px 12px; width: max-content;
   }
   .sg-del-popover .sg-del-hint { font-size: 0.74rem; color: #b91c1c; font-weight: 700; }
+  /* 重新命名彈窗：非破壞性操作 → 用中性藍，不用紅（紅色保留給 Fail/錯誤） */
+  .sg-rename-popover {
+    position: fixed; z-index: 400; display: none; flex-direction: column; gap: 6px;
+    background: #fff; border: 1px solid #b6cdf0; border-radius: 8px;
+    padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.16); width: 300px;
+  }
+  .sg-rename-popover .sg-rename-hint { font-size: 0.74rem; color: #1a3a6b; font-weight: 700; }
+  .sg-rename-popover .sg-rename-row { display: flex; align-items: center; gap: 6px; }
+  .sg-rename-popover input {
+    flex: 1; padding: 5px 8px; font-size: 0.82rem;
+    border: 1.5px solid #d6e0ee; border-radius: 6px; outline: none;
+  }
+  .sg-rename-popover input:focus { border-color: #2e6bb5; }
+  .sg-rename-popover input.sg-rename-invalid { border-color: #c0392b; background: #fff5f5; }
+  .sg-rename-popover button {
+    padding: 5px 12px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    background: #2e6bb5; color: #fff; border: none; border-radius: 6px; white-space: nowrap;
+  }
+  .sg-rename-popover button:hover { background: #24548f; }
+  .sg-rename-popover .sg-rename-note { font-size: 0.7rem; line-height: 1.35; color: #64748b; }
+  .sg-rename-popover .sg-rename-note.err { color: #c0392b; font-weight: 600; }
   .sg-del-popover .sg-del-row { display: flex; align-items: center; gap: 6px; }
   .sg-del-popover input {
     width: 130px; padding: 6px 9px; border: 1.5px solid #d0d8e0;
@@ -4986,6 +5008,7 @@
           <div class="sg-proj-actions">
             <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
             <button class="btn btn-primary" id="sg-new-project-btn" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
+            <button class="btn" id="sg-rename-project-btn" style="background:#e8f0fe;color:#1a3a6b;border:1px solid #b6cdf0;" onclick="sgAskRenameProject()" disabled title="需先解鎖密碼保護才能修改專案名稱">✏️ 重新命名</button>
             <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
             <button class="btn btn-primary" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" disabled>儲存元件變更</button>
             <span id="sg-comp-save-status" class="save-status"></span>
@@ -5431,6 +5454,8 @@ function _applyUnlockedUI() {
   if (vdSaveBtn) vdSaveBtn.disabled = false;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = false; sgNewProjBtn.title = '新增專案'; }
+  const sgRenameBtn = document.getElementById('sg-rename-project-btn');
+  if (sgRenameBtn) { sgRenameBtn.disabled = false; sgRenameBtn.title = '修改目前選擇的專案名稱。只改顯示名稱，專案 ID 與所有資料不動'; }
   if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
   applyReadonlyLock();
@@ -5457,6 +5482,9 @@ function relock() {
   if (vdSaveBtn) vdSaveBtn.disabled = true;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = true; sgNewProjBtn.title = '需先解鎖密碼保護才能新增專案'; }
+  const sgRenameBtn = document.getElementById('sg-rename-project-btn');
+  if (sgRenameBtn) { sgRenameBtn.disabled = true; sgRenameBtn.title = '需先解鎖密碼保護才能修改專案名稱'; }
+  sgRenameClose();                       // 鎖回去時把改名彈窗一併收掉
   if (typeof tcpSyncPlacementBtns === 'function') tcpSyncPlacementBtns();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
   applyReadonlyLock();
@@ -10881,6 +10909,127 @@ async function sgCreateProject() {
 /* ---- 刪除專案（Tab1）：密碼 0420 → Enter 即刪 ----
    刪除整個專案文件(含其元件/設定)＋清掉它在 SharePoint 的標註圖片。
    ⚠ projects 為與 5G-RRU 共用，刪除後兩個工具都會看不到。需先解鎖(寫入權限)。 */
+/* ══════════════════════════════════════════════════════════════
+   重新命名專案
+   --------------------------------------------------------------
+   只改 `project_name`（顯示名稱），**專案 ID（document id）一律不動**。
+   ID 是所有東西的錨點：Tab2/Tab3 的專案選單、標註圖片路徑
+   （`tcp_images/<projectId>_…`）、跨頁載入都靠它，改 id 等於搬家。
+
+   寫入用 `updateDoc('projects', id, { project_name })` —— shallow merge，
+   不會碰到 5G-RRU 寫的 meta/global_params/rf_data，也不碰 `meta`
+   （nested object，shallow merge 會整顆換掉）。
+
+   ⚠ 規格書（SPEC）檔案路徑含專案名稱：`SPEC/<專案名>/<類別>/<檔名>`。
+   改名後**既有檔案仍留在舊資料夾**，但每顆元件的 `SpecFile.path` 存的是
+   完整路徑，所以下載照常；只有改名後「新上傳」的檔案會進新資料夾。
+   這點在彈窗裡會明講，不讓使用者以為檔案會跟著搬。
+   ══════════════════════════════════════════════════════════════ */
+function sgAskRenameProject() {
+  if (!sgProjectId) { alert('請先在上方下拉選擇要改名的專案'); return; }
+  if (isProtected) { alert('請先解鎖資料庫保護後才能修改專案名稱'); return; }
+  const pop = document.getElementById('sg-rename-popover');
+  const btn = document.getElementById('sg-rename-project-btn');
+  if (!pop || !btn) return;
+
+  const cur = (sgProjectData && sgProjectData.project_name) || sgProjectId;
+  const hint = document.getElementById('sg-rename-hint');
+  if (hint) hint.textContent = '將「' + cur + '」改名為：';
+  const note = document.getElementById('sg-rename-note');
+  if (note) {
+    note.className = 'sg-rename-note';
+    note.textContent = '專案 ID（' + sgProjectId + '）與所有元件資料都不會變動。'
+      + '已上傳的規格書檔案仍留在原資料夾（下載不受影響），改名後新上傳的才會進新資料夾。';
+  }
+  const inp = document.getElementById('sg-rename-input');
+  if (inp) { inp.value = cur; inp.classList.remove('sg-rename-invalid'); }
+
+  const r = btn.getBoundingClientRect();
+  pop.style.display = 'flex';
+  // 先顯示才量得到寬度，再 clamp 在 viewport 內（UX 慣例：浮動框不可跑出畫面）
+  const w = pop.offsetWidth || 300;
+  pop.style.top  = (r.bottom + 6) + 'px';
+  pop.style.left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8)) + 'px';
+  if (inp) setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  setTimeout(() => document.addEventListener('mousedown', sgRenameOutsideClose), 0);
+}
+
+function sgRenameClose() {
+  const pop = document.getElementById('sg-rename-popover');
+  if (pop) pop.style.display = 'none';
+  document.removeEventListener('mousedown', sgRenameOutsideClose);
+}
+
+function sgRenameOutsideClose(e) {
+  const pop = document.getElementById('sg-rename-popover');
+  const btn = document.getElementById('sg-rename-project-btn');
+  if (!pop) return;
+  if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
+  sgRenameClose();
+}
+
+function _sgRenameErr(msg) {
+  const note = document.getElementById('sg-rename-note');
+  const inp = document.getElementById('sg-rename-input');
+  if (note) { note.className = 'sg-rename-note err'; note.textContent = '⚠ ' + msg; }
+  if (inp) { inp.classList.add('sg-rename-invalid'); inp.focus(); }
+}
+
+/* 改名後把三個頁籤下拉的選項文字就地換掉，並同步各自已載入的專案資料。
+   ⚠ 不可呼叫 sgLoadProjects() —— 它會 dbAdapter.refresh() 重讀磁碟，
+   把使用者尚未儲存的元件編輯整個丟掉。 */
+function _sgApplyRenameToUI(projId, newName) {
+  ['sg-project-select', 'project-select', 'vd-project-select'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const opt = sel.querySelector('option[value="' + CSS.escape(projId) + '"]');
+    if (opt) opt.textContent = newName;
+  });
+  if (sgProjectId === projId && sgProjectData) sgProjectData.project_name = newName;
+  if (typeof currentProjectId !== 'undefined' && currentProjectId === projId && currentProjectData) {
+    currentProjectData.project_name = newName;
+  }
+  if (typeof vdProjectId !== 'undefined' && vdProjectId === projId && vdProjectData) {
+    vdProjectData.project_name = newName;
+  }
+}
+
+async function sgConfirmRenameProject() {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  if (!sgProjectId) { sgRenameClose(); return; }
+  const inp = document.getElementById('sg-rename-input');
+  const newName = (inp ? inp.value : '').trim();
+  const cur = (sgProjectData && sgProjectData.project_name) || sgProjectId;
+
+  if (!newName) { _sgRenameErr('專案名稱不可空白'); return; }
+  if (newName === cur) { sgRenameClose(); return; }          // 沒改就當取消，不必寫入
+
+  // 同名檢查：名稱是 SPEC 資料夾的一部分，撞名會讓兩個專案共用同一個資料夾
+  let projects;
+  try { projects = await dbAdapter.getCollection('projects'); }
+  catch (e) { _sgRenameErr('讀取專案列表失敗：' + (e.message || e)); return; }
+  const clash = Object.entries(projects || {}).find(([pid, p]) =>
+    pid !== sgProjectId && String((p && p.project_name) || '').trim() === newName);
+  if (clash) { _sgRenameErr('已有專案叫「' + newName + '」（ID：' + clash[0] + '），請換一個名稱'); return; }
+
+  if (!(await _ensureLockBeforeWrite('重新命名專案'))) return;   // 寫入前驗鎖（H-4）
+
+  try {
+    // 只寫 project_name：shallow merge，不動 meta/global_params/rf_data 等其他工具的欄位
+    await dbAdapter.updateDoc('projects', sgProjectId, { project_name: newName });
+    _sgApplyRenameToUI(sgProjectId, newName);
+    sgRenameClose();
+    sgShowStatus('專案已改名為「' + newName + '」（ID 未變：' + sgProjectId + '）', 'success');
+  } catch (e) {
+    if (e instanceof ConflictError) {
+      showConflictWarning();
+      _sgRenameErr('版本衝突，請重新載入專案後再試');
+    } else {
+      _sgRenameErr('改名失敗：' + (e.message || e));
+    }
+  }
+}
+
 function sgAskDeleteProject() {
   if (!sgProjectId) { alert('請先在上方下拉選擇要刪除的專案'); return; }
   if (isProtected) { alert('請先解鎖資料庫保護後才能刪除專案'); return; }
@@ -12495,6 +12644,16 @@ function fbShowShadowReadReport() {
 </div>
 
 <!-- 刪除專案：浮動密碼框（位置由 JS 依刪除鈕動態定位） -->
+<div id="sg-rename-popover" class="sg-rename-popover" style="display:none;">
+  <div class="sg-rename-hint" id="sg-rename-hint">修改專案名稱</div>
+  <div class="sg-rename-row">
+    <input type="text" id="sg-rename-input" placeholder="輸入新的專案名稱"
+           onkeydown="if(event.key==='Enter')sgConfirmRenameProject(); if(event.key==='Escape')sgRenameClose();">
+    <button type="button" onclick="sgConfirmRenameProject()">確定</button>
+  </div>
+  <div class="sg-rename-note" id="sg-rename-note"></div>
+</div>
+
 <div id="sg-del-popover" class="sg-del-popover" style="display:none;">
   <div class="sg-del-hint" id="sg-del-hint">刪除專案？輸入密碼</div>
   <div class="sg-del-row">
