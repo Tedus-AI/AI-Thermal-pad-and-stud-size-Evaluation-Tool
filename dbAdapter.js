@@ -415,6 +415,12 @@ const dbAdapter = {
     return await graphDb.getSpecSrc(path);
   },
 
+  /* 線上預覽用：downloadUrl（抓 bytes 就地顯示）＋ webUrl（Office Online）＋ 檔名/大小/MIME */
+  async getSpecMeta(path) {
+    if (!this.isSharePointMode()) return null;
+    return await graphDb.getSpecMeta(path);
+  },
+
   async deleteSpec(path) {
     if (!this.isSharePointMode()) return null;
     return await graphDb.deleteSpec(path);
