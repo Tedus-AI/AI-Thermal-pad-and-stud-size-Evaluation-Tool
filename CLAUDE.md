@@ -97,7 +97,7 @@
 | `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
 | `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
 | `TIM_Type` | 兩邊（AI-Thermal Tab2 有選類型時覆寫）| 見下方「`TIM_Type` 也由 Tab2 推導」的兩個守則 |
-| `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節 |
+| `R_jc` | AI-Thermal **推導**（Tab1）| 由熱阻表的 θJC 推導，見下節。⚠ 5G-RRU 端**已改成鎖定不可編輯**（有 `_rjc_from` 就顯示白底黑字純文字＋🔒，tooltip 指路回本工具的熱阻表）—— 熱阻是規格書的值，編輯入口只留這裡一個 |
 | `Height(mm)`、`Thick(mm)` | **只有 5G-RRU** | ⚠ AI-Thermal **一律不寫這兩個 key**，見下方「不捏造」。`Thick(mm)` 在 5G-RRU 端已改為由它參數控制台的「PCB 板厚度」(`t_PCB`) 與「銅塊厚度」(`Coin_T_Setting`) 依 `Board_Type` 推導（`IC top`/`None` 則為 0），本工具更不該碰它 |
 
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
@@ -148,6 +148,9 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
   `Tc = T_hsk + P×(R_int + R_TIM)`，其「殼」是元件底面 → 對應 θJC,bottom；
   θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數，硬塞會讓 Tj 重複計算而失真。
 - 沒有任何 θJC 時不動 `R_jc`（保留既有值），只清掉 `_rjc_from`。
+  ⚠ 這也是 5G-RRU 端**唯一**還能自行輸入 Rjc 的情況：它以 `_rjc_from` 判斷要不要鎖欄位，
+  沒有標記就當成「本工具沒推導過」而開放輸入。所以不要為了「清乾淨」而在沒有 θJC 時
+  順手寫 `R_jc = 0` —— 那會把對方填的值洗掉，且方向是低估熱阻。
 
 #### `Board_Type` / `Pad_L` / `Pad_W` 的單一事實來源：Tab2「主散熱路徑」
 
