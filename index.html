@@ -1608,9 +1608,30 @@
   .sg-picker-trigger { padding: 5px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; cursor: pointer; font-size: 0.85rem; color: #1a3a6b; }
   .sg-picker-trigger:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-picker-caret { font-size: 0.7rem; color: #64748b; }
-  .sg-picker-pop { position: absolute; z-index: 200; top: calc(100% + 4px); left: 0; width: 360px; max-width: 92vw; background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,0.16); padding: 8px; }
-  .sg-picker-search { width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px; }
-  .sg-picker-list { max-height: 340px; overflow-y: auto; }
+  /* 面板可拖曳右下角調整大小（清單很長時捲很久）：resize 需要 overflow != visible，
+     並且面板要 flex 直排 —— 搜尋框與底部提示固定高，清單 flex:1 吃掉剩下的高度，
+     這樣拉高面板時真正變長的是清單本身。尺寸記在 localStorage（每次重繪都會重建面板）。 */
+  .sg-picker-pop {
+    position: absolute; z-index: 200; top: calc(100% + 4px); left: 0;
+    width: 360px; height: 420px;
+    min-width: 260px; min-height: 200px; max-width: 92vw; max-height: 82vh;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.16); padding: 8px;
+    display: none; flex-direction: column; resize: both; overflow: hidden;
+  }
+  .sg-picker-search { width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px; flex: none; }
+  .sg-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* 底部提示列：也是原生 resize 把手的所在（右下角），順手給一個「重設大小」 */
+  .sg-pk-footer {
+    flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 18px 0 2px;
+    border-top: 1px solid #f1f5f9; margin-top: 4px; font-size: 0.68rem; color: #94a3b8;
+    user-select: none;
+  }
+  .sg-pk-footer .sg-pk-reset {
+    margin-left: auto; border: none; background: transparent; color: #64748b;
+    font-size: 0.68rem; text-decoration: underline; cursor: pointer; padding: 0;
+  }
+  .sg-pk-footer .sg-pk-reset:hover { color: #1a3a6b; }
   .sg-pk-group { border-bottom: 1px solid #f1f5f9; }
   .sg-pk-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #1a3a6b; user-select: none; }
   .sg-pk-head:hover { background: #f8fafc; }
@@ -7839,7 +7860,9 @@ function sgRenderProjectComponents() {
            <div class="sg-picker-pop" id="sg-picker-pop-${catKey}" style="display:none">
              <input type="text" class="sg-picker-search" id="sg-picker-search-${catKey}" placeholder="🔍 搜尋元件 / 瓦數 / 專案（可只打片段，如 2160）" oninput="sgPickerFilter('${catKey}')" autocomplete="off">
              <div class="sg-picker-list" id="sg-picker-list-${catKey}"></div>
-           </div>
+             <div class="sg-pk-footer">↘ 拖曳右下角可調整大小
+               <button type="button" class="sg-pk-reset" onclick="sgPickerResetSize('${catKey}')" title="回到預設大小（360 × 420）">重設大小</button>
+             </div>
          </div>`;
 
     html += `</tbody></table>
@@ -8234,6 +8257,66 @@ function sgMakeComp(cat, overrides) {
 /* ── 從資料庫快選：可搜尋 + 專案分組收合面板（B 模式：每專案列出其元件）──
    父列＝專案（預設收合、顯示元件數），點開才展開子列（元件）；搜尋框子字串比對
    名稱/瓦數/專案（不分大小寫），命中群組自動展開；點元件即加入。 */
+/* 快選面板尺寸記憶：面板是 sgRenderProjectComponents 重繪時重建的，
+   使用者拖大之後不記下來就每次都跳回預設 → 存 localStorage（三個分類共用一組尺寸，
+   拖一次就好）。讀寫一律 try/catch：擋 storage 的瀏覽器不能因此開不了面板。 */
+const SG_PK_SIZE_LS = 'sgThermal.pickerSize';
+const SG_PK_MIN_W = 260, SG_PK_MIN_H = 200;
+
+function _sgPkSizeGet() {
+  try {
+    const raw = localStorage.getItem(SG_PK_SIZE_LS);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    const w = parseInt(v && v.w, 10), h = parseInt(v && v.h, 10);
+    if (!(w >= SG_PK_MIN_W) || !(h >= SG_PK_MIN_H)) return null;
+    return { w, h };
+  } catch (e) { return null; }
+}
+function _sgPkSizeSet(w, h) {
+  try { localStorage.setItem(SG_PK_SIZE_LS, JSON.stringify({ w: Math.round(w), h: Math.round(h) })); }
+  catch (e) {}
+}
+
+function sgPickerApplySize(pop) {
+  const sz = _sgPkSizeGet();
+  if (!sz) { pop.style.width = ''; pop.style.height = ''; return; }
+  // 夾在視窗內：換到小螢幕時不要還撐著大螢幕記下來的尺寸
+  pop.style.width = Math.min(sz.w, Math.round(window.innerWidth * 0.92)) + 'px';
+  pop.style.height = Math.min(sz.h, Math.round(window.innerHeight * 0.82)) + 'px';
+}
+
+/* 拖曳完把尺寸記下來。ResizeObserver 在面板開合（display:none → 0×0）也會觸發，
+   所以只在「面板開著且尺寸合理」時才寫入。 */
+function sgPickerWatchSize(pop) {
+  if (pop._sgSizeWatched || typeof ResizeObserver === 'undefined') return;
+  pop._sgSizeWatched = true;
+  try {
+    const ro = new ResizeObserver(() => {
+      if (pop.style.display === 'none') return;
+      // 「重設大小」把記憶清掉之後，接著會收到一次「回到預設尺寸」的通知 ——
+      // 那不是使用者拖的，不可把預設值又寫回記憶（否則按了重設等於沒清）。
+      // 只吃掉這一次；之後使用者真的去拖就照樣記下來。
+      if (pop._sgSkipSaveOnce) { pop._sgSkipSaveOnce = false; return; }
+      const w = pop.offsetWidth, h = pop.offsetHeight;
+      if (w >= SG_PK_MIN_W && h >= SG_PK_MIN_H) _sgPkSizeSet(w, h);
+    });
+    ro.observe(pop);
+  } catch (e) { pop._sgSizeWatched = false; }
+}
+
+function sgPickerResetSize(cat) {
+  const pop = document.getElementById('sg-picker-pop-' + cat);
+  if (pop) {
+    pop._sgSkipSaveOnce = true;
+    pop.style.width = ''; pop.style.height = '';
+    // 保險：本來就已經是預設尺寸時不會觸發 ResizeObserver，旗標要自己收掉，
+    // 否則會把使用者下一次真正的拖曳吃掉。
+    setTimeout(() => { pop._sgSkipSaveOnce = false; }, 250);
+  }
+  try { localStorage.removeItem(SG_PK_SIZE_LS); } catch (e) {}
+}
+
 function sgPickerToggle(cat) {
   if (isProtected) return;   // 未解鎖不可新增（trigger 本已被禁用，雙保險）
   const pop = document.getElementById('sg-picker-pop-' + cat);
@@ -8242,7 +8325,9 @@ function sgPickerToggle(cat) {
   ['RF', 'Digital', 'PWR'].forEach(k => { if (k !== cat) sgPickerClose(k); });
   if (!opening) { sgPickerClose(cat); return; }
   sgPickerState[cat] = { open: true, filter: '', expanded: new Set() };
-  pop.style.display = 'block';
+  pop.style.display = 'flex';          // flex 直排：清單才吃得到剩餘高度
+  sgPickerApplySize(pop);              // 套回上次拖曳的大小
+  sgPickerWatchSize(pop);              // 之後拖曳就記下來
   const listEl = document.getElementById('sg-picker-list-' + cat);
   if (listEl) listEl.onclick = (e) => sgPickerListClick(e, cat);
   sgPickerRender(cat);
