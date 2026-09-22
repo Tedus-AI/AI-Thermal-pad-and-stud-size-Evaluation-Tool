@@ -195,6 +195,29 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 > `SpecFile` 套用後要重標 `_from`；改到 `Rth` 就呼叫 `sgSyncRjc(comp)` 讓 `R_jc` 跟著重算。
 > 來源專案或同名元件不見了 → 顯示「來源已不存在」，不給更新鈕也不報錯。
 
+#### ⚠ 參照也涵蓋 Tab2 的「元件大小／元件高度」（值不在元件物件上）
+
+`heatSourceSize`（元件大小 L×W）與 `heatSourceHeight`（元件高度 max）是**這顆料的封裝規格**，
+不是各專案自己的散熱設計 → 列入 `SG_REF_SPEC2_FIELDS`，快選時一起帶、來源有更新也會出現在
+「↻ 來源有更新」清單裡（標「（TH/ME 頁）」）。凸台大小／TIM／E-PAD／IC 距離 HSK **不列入**。
+
+⚠ 這兩個值存在 `thermal_specs[sgSpecKey(元件名)]`（Tab2 的資料），**不在元件物件上**，
+而 Tab1/Tab2 各有獨立的專案選單 → 一律走 `sgApplySpec2(projId, compName, vals, force)`：
+
+- **(a) Tab2 正好載入同一個專案** → 直接寫進記憶體的 `thermalSpecs`，畫面即時反映。
+- **(b) 沒有** → 寫進 Tab2 的副本就是污染「別的專案」的資料 → 先存進 `sgPendingSpec2[projId]`，
+  由 `saveAllTabs` 讀回該專案現有的 `thermal_specs`、**只填空格**後併進 **Tab1 的那一筆 op**
+  （所以 Tab1 的存檔在這個情況下會寫 `thermal_specs`，是唯一的例外；讀-改-寫在持鎖狀態下進行）。
+  Tab1 換專案時 `sgPendingSpec2 = {}` —— 未存檔的快選元件本來就會一起被丟掉。
+- 快選帶入一律**只填空格**（本專案可能刻意量到不同尺寸）；`sgRefSyncApply` 是使用者逐欄勾選，
+  才用 `force=true` 覆蓋。來源沒填 → 什麼都不做（不寫 `''`、不建立空的 spec 物件）。
+- **差異比對只在「兩頁同專案」時進行**（`currentProjectId === sgProjectId`），否則本專案的現值
+  根本不在記憶體裡，比了就是誤報 —— 這條與 `sgDeriveAllFromSpecs` 的「兩半都在記憶體裡才推導」
+  是同一個道理。視窗說明文字有寫這個前提，不要拿掉。
+- 寫入 `heatSourceSize` 後要走 `applyHeatSourceSizeEffects(specKey)`（Pad → 重算凸台/TIM Size；
+  Putty ＋「自動帶入」→ 凸台同步）。這段是從 `onCellChange` 抽出來共用的，
+  **兩邊都要走同一個函式**，否則「手動改」與「參照帶入」的連動行為會分岔。
+
 > **規格書線上預覽（Tab1 規格書欄的 👁）**：`sgSpecView` 用 `dbAdapter.getSpecMeta(path)`
 > 取回 `downloadUrl`／`webUrl`，把 bytes 抓下來做成 blob URL 就地顯示 —— PDF 走 iframe
 > （瀏覽器內建檢視器）、圖片走 `<img>`、純文字逸出後放 `<pre>`；Office 檔瀏覽器沒有檢視器，
