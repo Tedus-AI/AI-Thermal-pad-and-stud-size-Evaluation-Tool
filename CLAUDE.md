@@ -126,14 +126,31 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 > `SpecFile` 是檔案參照不是複本（實體檔在來源專案的 `SPEC/<專案名>/` 底下）。快選帶入時
 > 會標 `SpecFile._from = <來源專案名>`，本專案刪除／換檔時只解除參照，不得刪來源檔。
 
-> **快選面板可調整大小**：`.sg-picker-pop` 是 `resize:both` ＋ flex 直排（搜尋框與底部提示
-> 固定高、`.sg-picker-list` 用 `flex:1; min-height:0` 吃掉剩餘高度），所以拉高面板時變長的是
-> 清單本身，而不是只把外框撐大。⚠ 面板由 `sgRenderProjectComponents` 重繪時**重建**，
+> **快選面板可調整大小**：`.sg-picker-pop` 是 flex 直排（搜尋框與底部把手固定高、
+> `.sg-picker-list` 用 `flex:1; min-height:0` 吃掉剩餘高度），所以拉高面板時變長的是
+> 清單本身，而不是只把外框撐大。開啟時的 `display` 必須是 `flex` 不能是 `block`
+> （否則清單吃不到剩餘高度）。⚠ 面板由 `sgRenderProjectComponents` 重繪時**重建**，
 > 尺寸一定要記在 localStorage（`sgThermal.pickerSize`，三個分類共用）並在開啟時
-> `sgPickerApplySize` 套回去，否則每次重繪就跳回預設。開啟時的 `display` 必須是 `flex`
-> 不能是 `block`（否則清單吃不到剩餘高度）。套回去時夾在 92vw／82vh 內（換小螢幕不會爆出畫面）。
-> 尺寸由 `ResizeObserver` 記錄，需兩個守衛：面板 `display:none` 時不存（否則存進 0×0）、
-> 「重設大小」後吃掉**一次**通知（否則剛清掉的記憶會立刻被預設值寫回）。
+> `sgPickerApplySize` 套回去，否則每次重繪就跳回預設；套回去時夾在 92vw／82vh 內
+> （換小螢幕不會爆出畫面）。
+>
+> ⚠ **面板必須 `position: fixed`，不可用 `absolute`**：外層 `.sg-panel` 是 `overflow: hidden`，
+> 元件表一長，動作列就落在 `.sg-panel` 底部，絕對定位的面板往下開出去的那一段
+> **會被整片裁掉**（連把手一起），使用者只看到半截面板、也按不到任何地方調大小
+> （實測 420px 高就被裁掉 78px、700px 高裁掉 358px；`elementFromPoint` 命中不到底部把手）。
+> `fixed` 只受 transform／filter 類 containing block 影響（本頁祖先都沒有），不吃 overflow 裁切。
+> 位置由 `sgPickerPlace()` 依觸發鈕算出並夾在視窗內（下方放不下就往上推、往左收，
+> UX 慣例 6）；`fixed` 不跟著頁面走 → 開啟時掛 `scroll`／`resize` → `sgPickerReflow()`，
+> 關閉時**必須移除**這兩個監聽。z-index 1200（在表格之上、各種 modal 1400+ 之下）。
+>
+> ⚠ **調整大小的把手要「看得見」，不要只靠 CSS `resize: both`**：原生把手只是右下角幾條
+> 淡斜線、又疊在內容上，使用者回報「沒有可以手動調整視窗大小的地方」。現在是兩個明確的
+> 把手：底部整列 `.sg-pk-footer`（`cursor: ns-resize` ＋文案＋`.sg-pk-grabber` 抓握紋路，
+> 往下拖＝拉高，最常用）與右下角 `.sg-pk-grip`（18px 斜線格柵、`cursor: nwse-resize`，
+> 寬高一起調），都走 `sgPickerDragStart(ev, cat, axis)`：拖曳中只改 inline style ＋
+> `sgPickerPlace()` 重夾（底部不可掉出視窗，否則把手又抓不到），**放手才寫 localStorage**
+> （不在 `mousemove` 裡碰 storage）。「重設大小」按鈕要 `onmousedown="event.stopPropagation()"`，
+> 否則點它會先被當成一次拖曳。已不再使用 `ResizeObserver`（原本的兩個守衛連同它一起移除）。
 
 > **快選是「一次性快照」，不是 live link**：`sgPickerAdd` 把來源元件的欄位整份抄進本專案，
 > 之後兩邊各走各的（唯一真的連動的是 `SpecFile` 的路徑與 `tim_library` 的型號）。

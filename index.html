@@ -1608,30 +1608,55 @@
   .sg-picker-trigger { padding: 5px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; cursor: pointer; font-size: 0.85rem; color: #1a3a6b; }
   .sg-picker-trigger:hover:not(:disabled) { background: #eef2f7; border-color: #94a3b8; }
   .sg-picker-caret { font-size: 0.7rem; color: #64748b; }
-  /* 面板可拖曳右下角調整大小（清單很長時捲很久）：resize 需要 overflow != visible，
-     並且面板要 flex 直排 —— 搜尋框與底部提示固定高，清單 flex:1 吃掉剩下的高度，
-     這樣拉高面板時真正變長的是清單本身。尺寸記在 localStorage（每次重繪都會重建面板）。 */
+  /* 面板可調整大小（清單很長時捲很久）：面板 flex 直排 —— 搜尋框與底部把手固定高，
+     清單 flex:1 吃掉剩下的高度，這樣拉高面板時真正變長的是清單本身。
+     ⚠ 原本用 CSS `resize:both`，但原生把手只是右下角幾條淡斜線、又疊在內容上，
+     使用者根本找不到（回報「沒有可以手動調整視窗大小的地方」）→ 改成兩個看得見的把手：
+     底部整列（往下拖＝拉高，最常用）＋右下角格柵（寬高一起調）。
+     尺寸記在 localStorage（面板每次重繪都會重建，不記就會跳回預設）。 */
+  /* ⚠ 一定要 position:fixed（原本是 absolute）：外層 `.sg-panel` 是 overflow:hidden，
+     絕對定位的面板會被它的下邊界「剪掉」—— 元件表一長，動作列就在 .sg-panel 底部，
+     面板往下開出去的部分（含底部把手）整片被裁掉、看不到也按不到，這就是
+     「沒有可以手動調整視窗大小的地方」的真正原因。fixed 只受 transform/filter 類
+     containing block 影響（本頁祖先都沒有），不吃 overflow 裁切；位置改由
+     sgPickerPlace() 依觸發鈕算出並夾在視窗內。z-index 低於各種 modal(1400+)。 */
   .sg-picker-pop {
-    position: absolute; z-index: 200; top: calc(100% + 4px); left: 0;
+    position: fixed; z-index: 1200; top: 0; left: 0;
     width: 360px; height: 420px;
     min-width: 260px; min-height: 200px; max-width: 92vw; max-height: 82vh;
     background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.16); padding: 8px;
-    display: none; flex-direction: column; resize: both; overflow: hidden;
+    display: none; flex-direction: column; overflow: hidden;
   }
   .sg-picker-search { width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 0.85rem; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 6px; flex: none; }
   .sg-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  /* 底部提示列：也是原生 resize 把手的所在（右下角），順手給一個「重設大小」 */
+  /* 底部把手列：整列都可以按住拖（負 margin 讓它貼齊面板左右下三邊，看起來就是一根把手） */
   .sg-pk-footer {
-    flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 18px 0 2px;
-    border-top: 1px solid #f1f5f9; margin-top: 4px; font-size: 0.68rem; color: #94a3b8;
-    user-select: none;
+    flex: none; display: flex; align-items: center; gap: 8px;
+    margin: 4px -8px -8px; padding: 5px 24px 5px 9px;
+    border-top: 1px solid #e2e8f0; background: #f1f5f9;
+    font-size: 0.7rem; color: #475569; user-select: none; cursor: ns-resize;
+  }
+  .sg-pk-footer:hover { background: #e6ebf2; }
+  .sg-pk-footer.dragging { background: #dbe3ec; }
+  .sg-pk-hint { white-space: nowrap; flex: none; }
+  .sg-pk-grabber {   /* ≡ 抓握紋路：一眼看出這一列可以拖 */
+    flex: 1 1 auto; min-width: 20px; height: 7px; border-radius: 3px;
+    background: repeating-linear-gradient(to bottom, #94a3b8 0 1.5px, transparent 1.5px 3.5px);
   }
   .sg-pk-footer .sg-pk-reset {
-    margin-left: auto; border: none; background: transparent; color: #64748b;
-    font-size: 0.68rem; text-decoration: underline; cursor: pointer; padding: 0;
+    flex: none; border: 1px solid #cbd5e1; background: #fff; color: #334155;
+    font-size: 0.7rem; border-radius: 4px; padding: 1px 7px; cursor: pointer; line-height: 1.5;
   }
-  .sg-pk-footer .sg-pk-reset:hover { color: #1a3a6b; }
+  .sg-pk-footer .sg-pk-reset:hover { background: #eef2f7; border-color: #94a3b8; color: #1a3a6b; }
+  /* 右下角格柵：寬高一起調（取代原生 resize 把手，畫得清楚看得見） */
+  .sg-pk-grip {
+    position: absolute; right: 1px; bottom: 1px; width: 18px; height: 18px; z-index: 2;
+    border-radius: 0 0 7px 0; cursor: nwse-resize; background-color: #cbd5e1;
+    background-image: repeating-linear-gradient(-45deg, #475569 0 1.5px, transparent 1.5px 4.5px);
+  }
+  .sg-pk-grip:hover { background-color: #94a3b8; }
+  body.sg-pk-resizing, body.sg-pk-resizing * { user-select: none !important; }
   .sg-pk-group { border-bottom: 1px solid #f1f5f9; }
   .sg-pk-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; color: #1a3a6b; user-select: none; }
   .sg-pk-head:hover { background: #f8fafc; }
@@ -7860,9 +7885,13 @@ function sgRenderProjectComponents() {
            <div class="sg-picker-pop" id="sg-picker-pop-${catKey}" style="display:none">
              <input type="text" class="sg-picker-search" id="sg-picker-search-${catKey}" placeholder="🔍 搜尋元件 / 瓦數 / 專案（可只打片段，如 2160）" oninput="sgPickerFilter('${catKey}')" autocomplete="off">
              <div class="sg-picker-list" id="sg-picker-list-${catKey}"></div>
-             <div class="sg-pk-footer">↘ 拖曳右下角可調整大小
-               <button type="button" class="sg-pk-reset" onclick="sgPickerResetSize('${catKey}')" title="回到預設大小（360 × 420）">重設大小</button>
+             <div class="sg-pk-footer" id="sg-pk-footer-${catKey}" onmousedown="sgPickerDragStart(event,'${catKey}','y')" title="按住這一列上下拖曳 → 調整面板高度">
+               <span class="sg-pk-hint">⇕ 拖曳這一列可拉高清單</span>
+               <span class="sg-pk-grabber"></span>
+               <button type="button" class="sg-pk-reset" onmousedown="event.stopPropagation()" onclick="sgPickerResetSize('${catKey}')" title="回到預設大小（360 × 420）">重設大小</button>
              </div>
+             <div class="sg-pk-grip" onmousedown="sgPickerDragStart(event,'${catKey}','both')" title="拖曳調整寬度與高度"></div>
+           </div>
          </div>`;
 
     html += `</tbody></table>
@@ -8278,6 +8307,35 @@ function _sgPkSizeSet(w, h) {
   catch (e) {}
 }
 
+/* 面板位置（fixed）：預設貼在觸發鈕下方，放不下就往上推、往左收，
+   整個夾在視窗內（UX 慣例 6：浮動框 clamp 在 viewport 內）。
+   拖大／視窗大小改變／頁面捲動都要重算，面板才不會飄到看不見的地方。 */
+const SG_PK_MARGIN = 8;
+function sgPickerPlace(pop, cat) {
+  const wrap = document.getElementById('sg-picker-' + cat);
+  if (!wrap) return;
+  const r = wrap.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight, M = SG_PK_MARGIN;
+  let top = r.bottom + 4;
+  if (top + h > window.innerHeight - M) top = window.innerHeight - M - h;  // 下方放不下 → 往上推
+  if (top < M) top = M;
+  let left = r.left;
+  if (left + w > window.innerWidth - M) left = window.innerWidth - M - w;
+  if (left < M) left = M;
+  pop.style.top = Math.round(top) + 'px';
+  pop.style.left = Math.round(left) + 'px';
+}
+
+/* 捲動／改視窗大小時跟著觸發鈕重算（面板是 fixed，不跟著頁面走） */
+function sgPickerReflow() {
+  ['RF', 'Digital', 'PWR'].forEach(cat => {
+    const st = sgPickerState[cat];
+    if (!st || !st.open) return;
+    const pop = document.getElementById('sg-picker-pop-' + cat);
+    if (pop && pop.style.display !== 'none') { sgPickerApplySize(pop); sgPickerPlace(pop, cat); }
+  });
+}
+
 function sgPickerApplySize(pop) {
   const sz = _sgPkSizeGet();
   if (!sz) { pop.style.width = ''; pop.style.height = ''; return; }
@@ -8286,33 +8344,44 @@ function sgPickerApplySize(pop) {
   pop.style.height = Math.min(sz.h, Math.round(window.innerHeight * 0.82)) + 'px';
 }
 
-/* 拖曳完把尺寸記下來。ResizeObserver 在面板開合（display:none → 0×0）也會觸發，
-   所以只在「面板開著且尺寸合理」時才寫入。 */
-function sgPickerWatchSize(pop) {
-  if (pop._sgSizeWatched || typeof ResizeObserver === 'undefined') return;
-  pop._sgSizeWatched = true;
-  try {
-    const ro = new ResizeObserver(() => {
-      if (pop.style.display === 'none') return;
-      // 「重設大小」把記憶清掉之後，接著會收到一次「回到預設尺寸」的通知 ——
-      // 那不是使用者拖的，不可把預設值又寫回記憶（否則按了重設等於沒清）。
-      // 只吃掉這一次；之後使用者真的去拖就照樣記下來。
-      if (pop._sgSkipSaveOnce) { pop._sgSkipSaveOnce = false; return; }
-      const w = pop.offsetWidth, h = pop.offsetHeight;
-      if (w >= SG_PK_MIN_W && h >= SG_PK_MIN_H) _sgPkSizeSet(w, h);
-    });
-    ro.observe(pop);
-  } catch (e) { pop._sgSizeWatched = false; }
+/* 看得見的把手拖曳。axis='y' 是底部整列（只調高度，最常用：清單捲太久要拉長），
+   axis='both' 是右下角格柵（寬高一起調）。拖曳中只寫 inline style，
+   放手才寫 localStorage —— 不在 mousemove 裡碰 storage。 */
+function sgPickerDragStart(ev, cat, axis) {
+  if (ev.button !== 0) return;                       // 只吃左鍵
+  const pop = document.getElementById('sg-picker-pop-' + cat);
+  if (!pop) return;
+  ev.preventDefault();                               // 不要順手選到字
+  const x0 = ev.clientX, y0 = ev.clientY;
+  const w0 = pop.offsetWidth, h0 = pop.offsetHeight;
+  const maxW = Math.round(window.innerWidth * 0.92), maxH = Math.round(window.innerHeight * 0.82);
+  const footer = document.getElementById('sg-pk-footer-' + cat);
+  if (footer) footer.classList.add('dragging');
+  document.body.classList.add('sg-pk-resizing');
+  // 游標要跟著把手（拖出面板外也維持），放手再還原
+  document.body.style.cursor = (axis === 'both') ? 'nwse-resize' : 'ns-resize';
+  const onMove = (e) => {
+    pop.style.height = Math.max(SG_PK_MIN_H, Math.min(maxH, h0 + (e.clientY - y0))) + 'px';
+    if (axis === 'both') pop.style.width = Math.max(SG_PK_MIN_W, Math.min(maxW, w0 + (e.clientX - x0))) + 'px';
+    sgPickerPlace(pop, cat);   // 變高之後底部不可掉出視窗（把手要一直抓得到）
+  };
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove, true);
+    document.removeEventListener('mouseup', onUp, true);
+    if (footer) footer.classList.remove('dragging');
+    document.body.classList.remove('sg-pk-resizing');
+    document.body.style.cursor = '';
+    _sgPkSizeSet(pop.offsetWidth, pop.offsetHeight);
+  };
+  document.addEventListener('mousemove', onMove, true);
+  document.addEventListener('mouseup', onUp, true);
 }
 
 function sgPickerResetSize(cat) {
   const pop = document.getElementById('sg-picker-pop-' + cat);
   if (pop) {
-    pop._sgSkipSaveOnce = true;
-    pop.style.width = ''; pop.style.height = '';
-    // 保險：本來就已經是預設尺寸時不會觸發 ResizeObserver，旗標要自己收掉，
-    // 否則會把使用者下一次真正的拖曳吃掉。
-    setTimeout(() => { pop._sgSkipSaveOnce = false; }, 250);
+    pop.style.width = ''; pop.style.height = '';   // 回到 CSS 的 360×420
+    sgPickerPlace(pop, cat);
   }
   try { localStorage.removeItem(SG_PK_SIZE_LS); } catch (e) {}
 }
@@ -8327,13 +8396,15 @@ function sgPickerToggle(cat) {
   sgPickerState[cat] = { open: true, filter: '', expanded: new Set() };
   pop.style.display = 'flex';          // flex 直排：清單才吃得到剩餘高度
   sgPickerApplySize(pop);              // 套回上次拖曳的大小
-  sgPickerWatchSize(pop);              // 之後拖曳就記下來
+  sgPickerPlace(pop, cat);             // 貼在觸發鈕下方並夾在視窗內
   const listEl = document.getElementById('sg-picker-list-' + cat);
   if (listEl) listEl.onclick = (e) => sgPickerListClick(e, cat);
   sgPickerRender(cat);
   const s = document.getElementById('sg-picker-search-' + cat);
   if (s) { s.value = ''; setTimeout(() => s.focus(), 30); }
   setTimeout(() => document.addEventListener('mousedown', sgPickerOutside, true), 0);
+  window.addEventListener('scroll', sgPickerReflow, true);
+  window.addEventListener('resize', sgPickerReflow);
 }
 
 function sgPickerClose(cat) {
@@ -8342,6 +8413,8 @@ function sgPickerClose(cat) {
   if (sgPickerState[cat]) sgPickerState[cat].open = false;
   if (!['RF', 'Digital', 'PWR'].some(k => sgPickerState[k] && sgPickerState[k].open)) {
     document.removeEventListener('mousedown', sgPickerOutside, true);
+    window.removeEventListener('scroll', sgPickerReflow, true);
+    window.removeEventListener('resize', sgPickerReflow);
   }
 }
 

@@ -85,6 +85,14 @@
 5. **浮動視窗（popover/密碼框）要防跑出畫面外**，定位計算要 clamp 在 viewport 內。
    （AI-Thermal PR #130）
 6. **側邊欄與主畫面不要放重複功能的按鈕。**（AI-Thermal PR #136）
+7. **浮動面板一律 `position: fixed` ＋ JS clamp，不要用 `absolute` 掛在卡片裡。**
+   卡片容器常有 `overflow: hidden`（圓角、陰影），絕對定位的面板超出容器的部分會被
+   **整片裁掉**（不是被遮住，是連點擊都收不到）；容器越長、面板越大越明顯。
+   （AI-Thermal：快選面板底部把手被 `.sg-panel` 裁掉，使用者回報「沒有可以調整大小的地方」）
+8. **可調整大小的面板要給「看得見」的把手。** CSS `resize: both` 的原生把手只是角落
+   幾條淡斜線、又疊在內容上，等於沒有；要自己畫（底部整列可拖 ＋ 角落格柵 ＋ 文案 ＋
+   `cursor` 提示），拖曳中改 inline style、放手才寫 localStorage。
+9. **把手列裡的按鈕要 `stopPropagation()`**，否則點按鈕會先被當成一次拖曳。
 
 ## 5. 顏色與視覺
 
