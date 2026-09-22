@@ -642,6 +642,8 @@
   .auto-calc-hint { background: #fffde7 !important; }
   .comp-table th.readonly-col.name-col { min-width: 220px; }
   .comp-table td.name-cell { min-width: 220px; }
+  /* 規格書欄：只有一顆 👁，給剛好的寬度就好（不要吃掉元件名稱的空間） */
+  .comp-table .spec-col { min-width: 56px; width: 56px; }
 
   .comp-table td {
     padding: 8px 6px;
@@ -1453,6 +1455,43 @@
   /* 線上預覽（👁）：最常用的動作放第一顆，有檔案時給藍色識別 */
   .sg-spec-btn.sg-spec-view.has-file { color: #0b5ed7; border-color: #bfdbfe; background: #eff6ff; }
   .sg-spec-btn.sg-spec-view.has-file:hover:not(:disabled) { background: #dbeafe; border-color: #93c5fd; }
+  /* 多份規格書的數量徽章：疊在 👁 上（不另外加按鈕，外層仍是五顆） */
+  .sg-spec-btn.sg-spec-view { position: relative; }
+  .sg-spec-n {
+    position: absolute; top: -5px; right: -5px; min-width: 13px; height: 13px;
+    padding: 0 2px; box-sizing: border-box; border-radius: 7px;
+    background: #0b5ed7; color: #fff; font-size: 0.58rem; font-weight: 700;
+    line-height: 13px; text-align: center; pointer-events: none;
+  }
+  /* 預覽視窗的檔案切換列：多份規格書時才出現 */
+  .sg-specview-tabs {
+    display: none; gap: 6px; padding: 7px 14px; overflow-x: auto;
+    background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex: none;
+  }
+  .sg-sv-tab {
+    flex: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 999px;
+    padding: 3px 11px; font-size: 0.76rem; cursor: pointer;
+  }
+  .sg-sv-tab:hover { background: #eef2f7; border-color: #94a3b8; }
+  .sg-sv-tab.active { background: #0b5ed7; border-color: #0b5ed7; color: #fff; font-weight: 600; }
+  /* 規格書清單視窗 */
+  .sg-speclist-box { width: min(760px, 94vw); max-width: min(760px, 94vw); max-height: 86vh; }
+  /* 規格書清單是「資料」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail） */
+  .sg-speclist-box .lock-modal-title { color: #1a3a6b; }
+  .sg-speclist-note { font-size: 0.8rem; color: #64748b; line-height: 1.7; margin: 6px 0 10px; }
+  .sg-speclist-empty { font-size: 0.85rem; color: #94a3b8; padding: 16px; text-align: center;
+    background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; }
+  .sg-speclist-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .sg-speclist-table th {
+    background: #1e3a5f; color: #f8fafc; font-weight: 600; font-size: 0.78rem;
+    padding: 6px 8px; text-align: left; border-bottom: 2px solid #00DFD8; white-space: nowrap;
+  }
+  .sg-speclist-table td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; color: #334155; vertical-align: middle; }
+  .sg-speclist-table td.fname { font-weight: 600; color: #0f172a; word-break: break-all; }
+  .sg-speclist-table td.acts { white-space: nowrap; text-align: right; }
+  .sg-speclist-table td.acts .sg-spec-btn { margin-left: 3px; }
+  .sg-speclist-ref { font-size: 0.7rem; font-weight: 500; color: #b45309; margin-top: 2px; }
   /* 規格書線上預覽視窗：大面積內容區，PDF/圖片直接看，不必下載 */
   .sg-specview-box {
     background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(15,23,42,0.32);
@@ -4891,7 +4930,29 @@
               title="下載到電腦">⬇ 下載</button>
       <button class="sg-specview-btn primary" onclick="sgSpecViewClose()">關閉</button>
     </div>
+    <!-- 多份規格書時的檔案切換列（單份時整列隱藏） -->
+    <div class="sg-specview-tabs" id="sg-specview-tabs" style="display:none"></div>
     <div class="sg-specview-body" id="sg-specview-body"></div>
+  </div>
+</div>
+
+<!-- 規格書清單：一顆元件的所有規格書（檢視／下載／取代／刪除＋上傳紀錄）。
+     未解鎖或從 TH/ME 頁開啟時只給檢視／下載。 -->
+<div id="sg-speclist-modal" class="lock-modal-overlay" style="display:none"
+     onclick="if(event.target===this)sgSpecListClose()">
+  <div class="lock-modal-box sg-speclist-box">
+    <div class="lock-modal-title">📑 規格書清單</div>
+    <div id="sg-speclist-who" class="lock-modal-text" style="font-weight:600;"></div>
+    <p class="sg-speclist-note">同一顆料常常有好幾份文件（datasheet／application note／errata）。
+      這裡可以逐份<b>檢視</b>、<b>下載</b>、用新檔<b>取代</b>或<b>刪除</b>；
+      上傳時可一次選多個檔案，<b>同檔名會取代原本那一份</b>。</p>
+    <div id="sg-speclist-body"></div>
+    <div id="sg-speclist-hint" class="lock-modal-hint" style="display:none;"></div>
+    <div class="lock-modal-actions">
+      <button id="sg-speclist-add" class="lock-modal-btn lock-modal-teams-btn" onclick="sgSpecListAdd()"
+              title="上傳規格書（可一次選多個檔案；同檔名會取代原本那一份）">＋ 上傳規格書</button>
+      <button class="lock-modal-btn" onclick="sgSpecListClose()">關閉</button>
+    </div>
   </div>
 </div>
 
@@ -6799,6 +6860,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="readonly-col hide-col">隱藏</th>
           <th class="readonly-col">#</th>
           <th class="readonly-col name-col">元件名稱</th>
+          <th class="readonly-col spec-col" title="規格書線上瀏覽（唯讀）。上傳／取代／刪除請到「EE/RF/PWR-專案元件清單」">規格書</th>
           <th class="readonly-col">數量</th>
           <th class="readonly-col power-col">發熱瓦數<br>(W)</th>
           <th class="editable-col heat-source-col">元件大小<br>(mm)</th>
@@ -6856,6 +6918,24 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
   return html;
 }
 
+
+/* TH/ME 頁的「規格書」欄：只把 Tab1 的「👁 線上瀏覽」搬過來（唯讀、免解鎖）。
+   上傳／取代／刪除維持只在 Tab1 —— 同一份檔案不開兩個寫入入口（UX 慣例 4：單一事實來源）。
+   ⚠ 讀的是本頁自己的專案副本（src='tab2'）：兩頁各有獨立的專案選單，可能載入不同專案。 */
+function th2SpecCell(comp, catKey, idx) {
+  const list = sgSpecList(comp);
+  const n = list.length;
+  const names = list.map((s, k) => (k + 1) + '. ' + sgSpecName(s) +
+    (s._from ? '（參照自「' + s._from + '」）' : '')).join('\n');
+  const tip = n === 0
+    ? '尚未上傳規格書（請到「EE/RF/PWR-專案元件清單」的規格書欄上傳）'
+    : (n === 1 ? ('線上瀏覽：' + sgSpecName(list[0]) +
+                  (list[0]._from ? '（參照自專案「' + list[0]._from + '」）' : '') + '（不必下載）')
+               : ('線上瀏覽（共 ' + n + ' 份，視窗上方可切換要看哪一份）：\n' + names));
+  return `<button class="sg-spec-btn sg-spec-view sg-spec-ro${n ? ' has-file' : ''}" ${n ? '' : 'disabled'} ` +
+         `title="${escapeAttr(tip)}" onclick="sgSpecView('${catKey}',${idx},0,'tab2')">👁` +
+         `${n > 1 ? '<span class="sg-spec-n">' + n + '</span>' : ''}</button>`;
+}
 
 /* ---- 渲染單一元件列 ---- */
 function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
@@ -6959,6 +7039,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
             <td class="name-cell readonly-cell">
               <span class="name-text">${escapeHtml(compName)}</span>
             </td>
+            <td class="readonly-cell spec-col">${th2SpecCell(comp, catKey, idx)}</td>
             <td class="readonly-cell">${escapeHtml(qty)}</td>
             <td class="readonly-cell power-col">${escapeHtml(power)}</td>
             <td class="editable-cell heat-source-col">
@@ -7791,12 +7872,34 @@ function sgRenderProjectComponents() {
       const customVisible = selectVal === '其他' ? ' visible' : '';
       const refLocked = !!comp._ref_locked;
       const refOrigin = comp._ref_origin_project || '';
-      // 規格書（SPEC）：上傳／下載／刪除／上傳時間四顆 icon，皆有 tooltip。
-      // 未上傳時下載與刪除停用；下載與時鐘標 sg-spec-ro → 唯讀(未解鎖)時仍可用。
-      const spec = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile : null;
-      const specName = spec ? (spec.name || '規格書') : '';
+      // 規格書（SPEC）：檢視／上傳／下載／刪除／清單五顆 icon（數量不變），皆有 tooltip。
+      // 一顆元件可以有多份規格書 → 一律用 sgSpecList() 正規化；多份時 👁 帶數量徽章，
+      // ↓／🗑 改開「規格書清單」讓使用者挑哪一份。未上傳時 👁／↓／🗑 停用；
+      // 👁／↓／🕘 標 sg-spec-ro → 唯讀(未解鎖)時仍可用。
+      const specs = sgSpecList(comp);
+      const specN = specs.length;
+      const spec = specs[0] || null;
+      const specName = spec ? sgSpecName(spec) : '';
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
       const specRef = (spec && spec._from) ? ('（參照自專案「' + spec._from + '」）') : '';
+      const specLines = specs.map((s, k) => (k + 1) + '. ' + sgSpecName(s) +
+        (s._from ? '（參照自「' + s._from + '」）' : '')).join('\n');
+      const specBadge = specN > 1 ? ('<span class="sg-spec-n">' + specN + '</span>') : '';
+      const specTipView = specN === 0 ? '尚未上傳規格書'
+        : (specN === 1 ? ('線上瀏覽：' + specName + specRef + '（不必下載）')
+                       : ('線上瀏覽（共 ' + specN + ' 份，視窗上方可切換要看哪一份）：\n' + specLines));
+      const specTipUp = specN === 0 ? '上傳規格書（可一次選多個檔案）'
+        : ('上傳規格書（可一次選多個檔案）：新檔加入清單，同檔名則取代原本那一份\n目前 ' +
+           specN + ' 份：\n' + specLines);
+      const specTipDown = specN === 0 ? '尚未上傳規格書'
+        : (specN === 1 ? ('下載規格書：' + specName + specRef)
+                       : ('下載規格書（共 ' + specN + ' 份）→ 開啟清單選要下載哪一份'));
+      const specTipDel = specN === 0 ? '尚未上傳規格書'
+        : (specN === 1 ? ((specRef ? '移除規格書參照：' : '刪除規格書：') + specName + specRef)
+                       : ('刪除規格書（共 ' + specN + ' 份）→ 開啟清單選要刪除哪一份'));
+      const specTipList = specN === 0 ? '尚無上傳紀錄'
+        : ('規格書清單（共 ' + specN + ' 份）：檢視／下載／取代／刪除，並列出每一份的上傳時間\n' +
+           '最新一份：' + specName + '　' + specAt + (spec && spec.by ? '（' + spec.by + '）' : ''));
       // 熱阻：一顆窄按鈕。有資料時優先顯示「主要」那筆（其餘以 +N 表示），
       // tooltip 列出全部。datasheet 的標法意義不同，故型別以固定清單記錄。
       const rthArr = Array.isArray(comp.Rth)
@@ -7825,11 +7928,11 @@ function sgRenderProjectComponents() {
         `onclick="sgNoteOpen('${c}',${i})">📝</button>`;
       const specCell =
         `<div class="sg-spec-btns">` +
-        `<button class="sg-spec-btn sg-spec-view sg-spec-ro${spec ? ' has-file' : ''}" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('線上瀏覽：' + specName + specRef + '（不必下載）') : '尚未上傳規格書')}" onclick="sgSpecView('${c}',${i})">👁</button>` +
-        `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(spec ? ('重新上傳規格書（會取代：' + specName + '）') : '上傳規格書')}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
-        `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ('下載規格書：' + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
-        `<button class="sg-spec-btn danger" ${spec ? '' : 'disabled'} title="${escapeAttr(spec ? ((specRef ? '移除規格書參照：' : '刪除規格書：') + specName + specRef) : '尚未上傳規格書')}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
-        `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(spec ? ('上傳時間：' + specAt + (spec.by ? '（' + spec.by + '）' : '') + specRef) : '尚無上傳紀錄')}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
+        `<button class="sg-spec-btn sg-spec-view sg-spec-ro${specN ? ' has-file' : ''}" ${specN ? '' : 'disabled'} title="${escapeAttr(specTipView)}" onclick="sgSpecView('${c}',${i})">👁${specBadge}</button>` +
+        `<button class="sg-spec-btn sg-spec-up" title="${escapeAttr(specTipUp)}" onclick="sgSpecUpload('${c}',${i})">↑</button>` +
+        `<button class="sg-spec-btn sg-spec-down sg-spec-ro" ${specN ? '' : 'disabled'} title="${escapeAttr(specTipDown)}" onclick="sgSpecDownload('${c}',${i})">↓</button>` +
+        `<button class="sg-spec-btn danger" ${specN ? '' : 'disabled'} title="${escapeAttr(specTipDel)}" onclick="sgSpecDelete('${c}',${i})">🗑</button>` +
+        `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(specTipList)}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
         `</div>`;
       const refBadge = refLocked
         ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button>${sgRefSyncBadge(comp, c, i)}</div>`
@@ -8110,6 +8213,14 @@ const SG_VARIANT_CARRY = [
   // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
   'Height(mm)', 'Thick(mm)', 'Limit(C)',
 ];
+
+/* 把（可能有多份的）規格書逐份標上來源專案：本專案只是參照，刪除時不可刪來源檔。
+   容器物件可以是元件本身，也可以是快選組出來的 overrides。 */
+function sgSpecMarkFrom(holder, projName) {
+  if (!holder || !holder.SpecFile || !projName) return;
+  const arr = Array.isArray(holder.SpecFile) ? holder.SpecFile : [holder.SpecFile];
+  arr.forEach(s => { if (s && s.path) s._from = projName; });
+}
 
 /* 依白名單抄出來源元件的欄位。物件／陣列（Rth、SpecFile）必須深拷貝，
    否則新元件與快選快取裡的來源元件共用同一份參照，改一邊會動到另一邊。 */
@@ -8508,7 +8619,8 @@ function sgPickerAdd(cat, projId, compName) {
   };
   // 規格書是「參照」不是複本：檔案仍在來源專案的 SPEC 資料夾底下。
   // 標記來源，讓本專案刪除時只解除參照、不會把來源專案的原始檔刪掉。
-  if (overrides.SpecFile && overrides.SpecFile.path) overrides.SpecFile._from = g.projName;
+  // ⚠ 一顆元件可能有多份規格書（SpecFile 為陣列）→ 每一份都要標。
+  sgSpecMarkFrom(overrides, g.projName);
   // 帶入該專案的實測 Pd 當起始估值（依 source；both = 高溫+常溫）
   if (c.pd_meas != null && c.pd_meas !== '') {
     if (c.pd_meas_source === 'both') {
@@ -9195,18 +9307,61 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sgNoteSave(); }
 });
 
-/* ── 元件規格書（SPEC）上傳／下載／刪除 ──
+/* ── 元件規格書（SPEC）上傳／取代／下載／刪除 ──────────────────────────
    檔案存到 SharePoint：<ToolDatabase>/SPEC/<專案名稱>/<元件類別>/<元件名>__<檔名>；
-   DB 只在該元件上記 comp.SpecFile = { path, name, at, by }（跟著元件走，改名也不會斷）。
-   上傳／刪除屬寫入動作（未解鎖時按鈕已被唯讀鎖停用）；下載與時鐘為唯讀資訊，唯讀時仍可用。 */
-let _sgSpecTarget = null;   // { cat, idx } 等待檔案選取
+   DB 記在該元件上（跟著元件走，改名也不會斷）。
 
-function _sgSpecComp(cat, idx) {
-  const arr = sgProjectData && sgProjectData[SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field];
+   ⚠ 一顆元件可以有「多份」規格書（同一顆料常分成 datasheet／application note／errata）。
+   欄位仍叫 comp.SpecFile，形狀是「1 份＝單一物件（舊格式）、≥2 份＝陣列」：
+     讀一律走 sgSpecList(comp)  → 永遠拿到陣列；
+     寫一律走 sgSpecStore(comp) → 0 份 delete key、1 份寫回舊的單一物件、≥2 份才寫陣列。
+   既有專案在共用 DB 裡的形狀因此完全沒變（5G-RRU 原樣保留、舊版前端也還讀得到單一份），
+   真的放到 2 份以上才會出現陣列。每一份各自帶 _from（快選參照）→ 刪除時只解除參照不刪來源檔。
+
+   外層仍然是五顆 icon（數量不變）：
+     👁 檢視：1 份直接看；多份在預覽視窗上方給檔案切換列（按鈕上有數量徽章）
+     ↑ 上傳：可一次選多個檔，附加到清單；同檔名＝取代原本那一份
+     ↓ 下載：1 份直接下載；多份開「規格書清單」挑
+     🗑 刪除：1 份直接問；多份開「規格書清單」挑
+     🕘 清單：規格書清單／上傳紀錄（每一份都能檢視／下載／取代／刪除）
+   上傳／取代／刪除是寫入動作（未解鎖時被唯讀鎖停用）；檢視／下載／清單標 sg-spec-ro，唯讀仍可用。 */
+const SG_SPEC_MAX = 20;            // 一顆元件的規格書上限（防手滑一次選進幾百個檔）
+let _sgSpecTarget = null;          // { cat, idx, mode:'append'|'replace', at } 等待檔案選取
+
+/* 讀：永遠回陣列（吃得下舊的單一物件） */
+function sgSpecList(comp) {
+  if (!comp) return [];
+  const v = comp.SpecFile;
+  if (!v) return [];
+  return (Array.isArray(v) ? v : [v]).filter(s => s && s.path);
+}
+/* 寫：0 份 delete key（空值不可寫 '' 或 []）、1 份維持舊形狀、多份才寫陣列 */
+function sgSpecStore(comp, list) {
+  if (!comp) return;
+  const arr = (list || []).filter(s => s && s.path);
+  if (!arr.length) { delete comp.SpecFile; return; }
+  comp.SpecFile = (arr.length === 1) ? arr[0] : arr;
+}
+/* 規格書顯示用檔名（沒有檔名就退回路徑尾巴，不顯示空白） */
+function sgSpecName(s) {
+  if (!s) return '規格書';
+  if (s.name) return s.name;
+  const p = String(s.path || '');
+  return p.slice(p.lastIndexOf('/') + 1) || '規格書';
+}
+/* src='tab2' → 讀 TH/ME 頁自己那份副本（兩頁各有獨立的專案選單，不可混用） */
+function _sgSpecComp(cat, idx, src) {
+  const data = (src === 'tab2') ? currentProjectData : sgProjectData;
+  const arr = data && data[SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field];
   return Array.isArray(arr) ? arr[idx] : null;
 }
+/* 規格書有增減 → 重畫元件表；清單視窗開著就一起更新 */
+function _sgSpecRefresh() {
+  sgRenderProjectComponents();
+  if (_sgSpecListState) sgSpecListRender();
+}
 
-function sgSpecUpload(cat, idx) {
+function sgSpecUpload(cat, idx, mode, at) {
   if (isProtected) { alert('請先解鎖密碼保護'); return; }
   if (!dbAdapter.isSharePointMode || !dbAdapter.isSharePointMode()) {
     alert('規格書需要 SharePoint 檔案儲存空間；目前為本機／離線模式，無法上傳。');
@@ -9218,53 +9373,88 @@ function sgSpecUpload(cat, idx) {
     alert('請先填寫元件名稱，再上傳規格書（檔案會以元件名稱命名）。');
     return;
   }
-  _sgSpecTarget = { cat, idx };
+  const replacing = (mode === 'replace');
+  if (!replacing && sgSpecList(comp).length >= SG_SPEC_MAX) {
+    alert('這顆元件的規格書已達上限 ' + SG_SPEC_MAX + ' 份，請先刪掉不需要的再上傳。');
+    return;
+  }
+  _sgSpecTarget = { cat, idx, mode: replacing ? 'replace' : 'append', at: at };
   const input = document.getElementById('sg-spec-file-input');
-  if (input) { input.value = ''; input.click(); }
+  if (input) { input.value = ''; input.multiple = !replacing; input.click(); }
 }
 
 async function sgSpecOnFilePicked(inputEl) {
   const t = _sgSpecTarget;
   _sgSpecTarget = null;
-  const file = inputEl && inputEl.files && inputEl.files[0];
-  if (!t || !file) return;
+  const files = (inputEl && inputEl.files) ? Array.from(inputEl.files) : [];
+  if (!t || !files.length) return;
   const comp = _sgSpecComp(t.cat, t.idx);
   if (!comp) return;
   const projName = (sgProjectData && (sgProjectData.project_name || sgProjectId)) || 'UnknownProject';
-  const old = (comp.SpecFile && comp.SpecFile.path) ? comp.SpecFile.path : null;
-  const oldIsRef = !!(comp.SpecFile && comp.SpecFile._from);   // 參照別的專案 → 換檔時不可刪來源檔
-  try {
-    roToast('⬆ 規格書上傳中… ' + file.name);
-    const path = await dbAdapter.uploadSpec(projName, t.cat, comp.Component, file);
-    if (!path) throw new Error('上傳未回傳路徑');
-    const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
-    comp.SpecFile = {
-      path,
-      name: file.name,
-      at: new Date().toISOString(),
-      by: (acct && acct.name) || '',
-    };
-    // 取代舊檔：新檔上傳成功後才刪舊檔（路徑不同才刪，避免刪掉剛覆蓋的同名檔）；
-    // 舊檔若是快選帶入的參照，實體檔屬於來源專案，只換掉參照不刪檔。
-    if (old && old !== path && !oldIsRef) { try { await dbAdapter.deleteSpec(old); } catch (e) {} }
-    sgRenderProjectComponents();
-    roToast('✅ 規格書已上傳，請記得按「儲存元件變更」');
-  } catch (e) {
-    console.error('[spec] 上傳失敗', e);
-    alert('規格書上傳失敗：' + (e.message || e));
+  const acct = dbAdapter.getAccountInfo && dbAdapter.getAccountInfo();
+  const by = (acct && acct.name) || '';
+  const list = sgSpecList(comp);          // sgSpecList 回的是新陣列 → 改它不影響尚未寫回的 comp
+  let done = 0;
+
+  for (const file of files) {
+    if (t.mode === 'append' && list.length >= SG_SPEC_MAX) {
+      alert('已達上限 ' + SG_SPEC_MAX + ' 份，其餘檔案未上傳。');
+      break;
+    }
+    try {
+      roToast('⬆ 規格書上傳中… ' + file.name);
+      const path = await dbAdapter.uploadSpec(projName, t.cat, comp.Component, file);
+      if (!path) throw new Error('上傳未回傳路徑');
+      const entry = { path, name: file.name, at: new Date().toISOString(), by };
+      // 取代舊檔：新檔上傳成功後才刪舊檔（路徑相同＝同檔名覆蓋就不刪，免得刪掉剛寫上去的）；
+      // 舊檔若是快選帶入的參照，實體檔屬於來源專案 → 只換參照不刪檔。
+      const dropOld = async (old) => {
+        if (old && old.path && old.path !== path && !old._from) {
+          try { await dbAdapter.deleteSpec(old.path); } catch (e) { console.warn('[spec] 舊檔刪除失敗', e); }
+        }
+      };
+      if (t.mode === 'replace') {
+        const old = list[t.at];
+        if (!old) throw new Error('要取代的那一份已不存在，請重開清單');
+        list[t.at] = entry;                 // 就地取代，位置不動
+        await dropOld(old);
+      } else {
+        // 同檔名＝同一個儲存路徑（實體檔已被覆蓋）→ 就地更新那一筆，不製造重複項
+        const hit = list.findIndex(s => sgSpecName(s).toLowerCase() === file.name.toLowerCase());
+        if (hit >= 0) { const old = list[hit]; list[hit] = entry; await dropOld(old); }
+        else list.push(entry);
+      }
+      done++;
+    } catch (e) {
+      console.error('[spec] 上傳失敗', file.name, e);
+      alert('規格書上傳失敗：' + file.name + '\n' + (e.message || e));
+    }
+  }
+
+  if (done) {
+    sgSpecStore(comp, list);
+    _sgSpecRefresh();
+    roToast('✅ 規格書已' + (t.mode === 'replace' ? '取代' : '上傳') + '（' + done + ' 份），請記得按「儲存元件變更」');
   }
 }
 
-async function sgSpecDownload(cat, idx) {
-  const comp = _sgSpecComp(cat, idx);
-  const spec = comp && comp.SpecFile;
+/* ↓：1 份直接下載，多份開清單讓使用者挑 */
+function sgSpecDownload(cat, idx, src) {
+  const list = sgSpecList(_sgSpecComp(cat, idx, src));
+  if (!list.length) return;
+  if (list.length === 1) { sgSpecDownloadAt(cat, idx, 0, src); return; }
+  sgSpecListOpen(cat, idx, src);
+}
+
+async function sgSpecDownloadAt(cat, idx, k, src) {
+  const spec = sgSpecList(_sgSpecComp(cat, idx, src))[k];
   if (!spec || !spec.path) return;
   try {
     const url = await dbAdapter.getSpecSrc(spec.path);
     if (!url) throw new Error('取得下載連結失敗');
     const a = document.createElement('a');
     a.href = url;
-    a.download = spec.name || 'spec';
+    a.download = sgSpecName(spec);
     a.target = '_blank';
     a.rel = 'noopener';
     document.body.appendChild(a);
@@ -9276,42 +9466,145 @@ async function sgSpecDownload(cat, idx) {
   }
 }
 
-async function sgSpecDelete(cat, idx) {
+/* 🗑：1 份直接問，多份開清單讓使用者挑要刪哪一份 */
+function sgSpecDelete(cat, idx) {
+  if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  const list = sgSpecList(_sgSpecComp(cat, idx));
+  if (!list.length) return;
+  if (list.length === 1) { sgSpecDeleteAt(cat, idx, 0); return; }
+  sgSpecListOpen(cat, idx);
+}
+
+async function sgSpecDeleteAt(cat, idx, k) {
   if (isProtected) { alert('請先解鎖密碼保護'); return; }
   const comp = _sgSpecComp(cat, idx);
-  const spec = comp && comp.SpecFile;
+  const list = sgSpecList(comp);
+  const spec = list[k];
   if (!spec || !spec.path) return;
+  const many = (list.length > 1)
+    ? '\n（這顆元件共有 ' + list.length + ' 份規格書，只會刪掉這一份）' : '';
   // 快選帶進來的規格書是「參照」，實體檔在來源專案底下 → 只解除參照，不可刪檔
   if (spec._from) {
-    if (!confirm('元件「' + (comp.Component || '') + '」的規格書是從專案「' + spec._from +
-                 '」快選帶入的參照。\n檔案：' + (spec.name || '') +
+    if (!confirm('元件「' + (comp.Component || '') + '」的這份規格書是從專案「' + spec._from +
+                 '」快選帶入的參照。\n檔案：' + sgSpecName(spec) + many +
                  '\n\n將只移除本專案的參照，不會刪除來源專案的原始檔。要繼續嗎？')) return;
-    delete comp.SpecFile;
-    sgRenderProjectComponents();
+    list.splice(k, 1);
+    sgSpecStore(comp, list);
+    _sgSpecRefresh();
     roToast('🔗 已移除規格書參照（來源檔案保留），請記得按「儲存元件變更」');
     return;
   }
   // 破壞性操作：重複確認
-  if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' + (spec.name || '') + '\n\n此操作會從 SharePoint 移除該檔案。')) return;
+  if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' +
+               sgSpecName(spec) + many + '\n\n此操作會從 SharePoint 移除該檔案。')) return;
   if (!confirm('再次確認：刪除後無法復原，仍要刪除嗎？')) return;
   try {
     await dbAdapter.deleteSpec(spec.path);
   } catch (e) {
     console.warn('[spec] 刪除檔案失敗（仍會清除參照）', e);
   }
-  delete comp.SpecFile;
-  sgRenderProjectComponents();
+  list.splice(k, 1);
+  sgSpecStore(comp, list);
+  _sgSpecRefresh();
   roToast('🗑 規格書已刪除，請記得按「儲存元件變更」');
 }
 
-function sgSpecInfo(cat, idx) {
-  const comp = _sgSpecComp(cat, idx);
-  const spec = comp && comp.SpecFile;
-  if (!spec || !spec.path) { alert('此元件尚未上傳規格書。'); return; }
-  const at = spec.at ? new Date(spec.at).toLocaleString('zh-TW') : '（無紀錄）';
-  alert('元件：' + (comp.Component || '') + '\n檔案：' + (spec.name || '') +
-        '\n上傳時間：' + at + (spec.by ? '\n上傳者：' + spec.by : '') +
-        (spec._from ? '\n來源：快選自專案「' + spec._from + '」（檔案存放於該專案，本專案只保留參照）' : ''));
+/* 🕘：規格書清單（也是原本「上傳時間」那顆的去處 —— 清單裡每一份都列出上傳時間／上傳者） */
+function sgSpecInfo(cat, idx, src) {
+  if (!sgSpecList(_sgSpecComp(cat, idx, src)).length) { alert('此元件尚未上傳規格書。'); return; }
+  sgSpecListOpen(cat, idx, src);
+}
+
+/* ── 規格書清單視窗：一顆元件的所有規格書 ＋ 每一份的檢視／下載／取代／刪除 ──
+   未解鎖（唯讀）或從 TH/ME 頁開啟時只給檢視／下載，寫入鍵一律不畫出來。 */
+let _sgSpecListState = null;      // { cat, idx, src }
+
+function sgSpecListOpen(cat, idx, src) {
+  const comp = _sgSpecComp(cat, idx, src);
+  if (!comp) return;
+  _sgSpecListState = { cat, idx, src: src || '' };
+  const m = document.getElementById('sg-speclist-modal');
+  if (m) m.style.display = 'flex';
+  sgSpecListRender();
+}
+
+function sgSpecListClose() {
+  _sgSpecListState = null;
+  const m = document.getElementById('sg-speclist-modal');
+  if (m) m.style.display = 'none';
+}
+
+function sgSpecListRender() {
+  const st = _sgSpecListState;
+  if (!st) return;
+  const comp = _sgSpecComp(st.cat, st.idx, st.src);
+  const list = sgSpecList(comp);
+  const readOnly = isProtected || st.src === 'tab2';   // TH/ME 頁只負責看，寫入入口留在 Tab1
+  const who = document.getElementById('sg-speclist-who');
+  if (who) {
+    who.textContent = '元件：' + ((comp && comp.Component) || '(未命名)') +
+                      '　·　共 ' + list.length + ' 份規格書';
+  }
+  const body = document.getElementById('sg-speclist-body');
+  if (body) {
+    body.innerHTML = list.length
+      ? '<table class="sg-speclist-table"><thead><tr>' +
+        '<th style="width:34px;">#</th><th>檔案名稱</th><th style="width:160px;">上傳時間</th>' +
+        '<th style="width:110px;">上傳者</th><th style="width:132px;">動作</th></tr></thead><tbody>' +
+        list.map((s, k) => {
+          const nm = sgSpecName(s);
+          const at = s.at ? new Date(s.at).toLocaleString('zh-TW') : '（無紀錄）';
+          const ref = s._from
+            ? '<div class="sg-speclist-ref" title="檔案存放在來源專案的 SPEC 資料夾，這裡只是參照；刪除只會解除參照">↩ 參照自專案「' +
+              escapeHtml(s._from) + '」</div>' : '';
+          return '<tr><td>' + (k + 1) + '</td>' +
+            '<td class="fname" title="' + escapeAttr(nm) + '">' + escapeHtml(nm) + ref + '</td>' +
+            '<td>' + escapeHtml(at) + '</td>' +
+            '<td>' + escapeHtml(s.by || '—') + '</td>' +
+            '<td class="acts">' +
+              '<button class="sg-spec-btn sg-spec-view sg-spec-ro has-file" title="線上瀏覽這一份（不必下載）" onclick="sgSpecListView(' + k + ')">👁</button>' +
+              '<button class="sg-spec-btn sg-spec-down sg-spec-ro" title="下載這一份" onclick="sgSpecListDownload(' + k + ')">↓</button>' +
+              (readOnly ? '' :
+                '<button class="sg-spec-btn sg-spec-up" title="上傳新檔取代這一份（舊檔會從 SharePoint 移除）" onclick="sgSpecListReplace(' + k + ')">🔄</button>' +
+                '<button class="sg-spec-btn danger" title="刪除這一份" onclick="sgSpecListDelete(' + k + ')">🗑</button>') +
+            '</td></tr>';
+        }).join('') + '</tbody></table>'
+      : '<div class="sg-speclist-empty">這顆元件還沒有規格書。' +
+        (readOnly ? '' : '可用下方的「＋ 上傳規格書」加入（可一次選多個檔案）。') + '</div>';
+  }
+  const addBtn = document.getElementById('sg-speclist-add');
+  if (addBtn) addBtn.style.display = readOnly ? 'none' : '';
+  const hint = document.getElementById('sg-speclist-hint');
+  if (hint) {
+    hint.style.display = readOnly ? '' : 'none';
+    hint.textContent = (st.src === 'tab2')
+      ? '（這裡只提供檢視／下載；要上傳、取代或刪除請到「EE/RF/PWR-專案元件清單」）'
+      : '（未解鎖，僅供檢視／下載；要上傳、取代或刪除請先解除密碼保護）';
+  }
+}
+
+function sgSpecListView(k) {
+  const st = _sgSpecListState;
+  if (!st) return;
+  const s = { cat: st.cat, idx: st.idx, src: st.src };
+  sgSpecListClose();                 // 預覽視窗疊在清單上會互相遮住 → 先收清單
+  sgSpecView(s.cat, s.idx, k, s.src);
+}
+function sgSpecListDownload(k) {
+  const st = _sgSpecListState;
+  if (st) sgSpecDownloadAt(st.cat, st.idx, k, st.src);
+}
+function sgSpecListReplace(k) {
+  const st = _sgSpecListState;
+  if (st) sgSpecUpload(st.cat, st.idx, 'replace', k);
+}
+function sgSpecListDelete(k) {
+  const st = _sgSpecListState;
+  if (st) sgSpecDeleteAt(st.cat, st.idx, k);
+}
+function sgSpecListAdd() {
+  const st = _sgSpecListState;
+  if (st) sgSpecUpload(st.cat, st.idx, 'append');
 }
 
 /* ── 規格書線上預覽（👁）──────────────────────────────────
@@ -9380,18 +9673,21 @@ function _sgSpecViewBody(html) {
   if (b) b.innerHTML = html;
 }
 
-async function sgSpecView(cat, idx) {
-  const comp = _sgSpecComp(cat, idx);
-  const spec = comp && comp.SpecFile;
-  if (!spec || !spec.path) { alert('此元件尚未上傳規格書。'); return; }
+async function sgSpecView(cat, idx, k, src) {
+  const comp = _sgSpecComp(cat, idx, src);
+  const list = sgSpecList(comp);
+  if (!list.length) { alert('此元件尚未上傳規格書。'); return; }
+  const kk = Math.min(Math.max(0, Number(k) || 0), list.length - 1);
+  const spec = list[kk];
   if (!dbAdapter.isSharePointMode || !dbAdapter.isSharePointMode()) {
     alert('規格書存放在 SharePoint；目前是本機／離線模式，無法線上瀏覽。');
     return;
   }
   const seq = ++_sgSpecViewSeq;
-  const name = spec.name || '規格書';
+  const name = sgSpecName(spec);
   _sgSpecViewRelease();
-  _sgSpecViewState = { cat, idx, name, blobUrl: null, webUrl: null, downloadUrl: null, seq };
+  _sgSpecViewState = { cat, idx, k: kk, src: src || '', name,
+                       blobUrl: null, webUrl: null, downloadUrl: null, seq };
 
   const modal = document.getElementById('sg-specview-modal');
   const title = document.getElementById('sg-specview-title');
@@ -9399,8 +9695,25 @@ async function sgSpecView(cat, idx) {
   if (title) title.textContent = name;
   if (sub) {
     sub.textContent = '元件：' + (comp.Component || '(未命名)')
+      + (list.length > 1 ? '　·　第 ' + (kk + 1) + ' / ' + list.length + ' 份' : '')
       + (spec.at ? '　·　上傳於 ' + new Date(spec.at).toLocaleString('zh-TW') : '')
       + (spec._from ? '　·　參照自專案「' + spec._from + '」' : '');
+  }
+  // 多份規格書 → 標題底下給一排檔案頁籤，點一下就換看哪一份（單份時整列不出現）
+  const tabs = document.getElementById('sg-specview-tabs');
+  if (tabs) {
+    if (list.length > 1) {
+      const q = "'" + cat + "'," + idx;
+      const sq = ",'" + (src || '') + "'";
+      tabs.innerHTML = list.map((s, j) =>
+        '<button class="sg-sv-tab' + (j === kk ? ' active' : '') + '" title="' +
+        escapeAttr(sgSpecName(s) + (s._from ? '（參照自專案「' + s._from + '」）' : '')) +
+        '" onclick="sgSpecView(' + q + ',' + j + sq + ')">📄 ' + escapeHtml(sgSpecName(s)) + '</button>').join('');
+      tabs.style.display = 'flex';
+    } else {
+      tabs.innerHTML = '';
+      tabs.style.display = 'none';
+    }
   }
   if (modal) modal.style.display = 'flex';
   _sgSpecViewBody('<div class="sg-specview-msg"><span class="sv-ico">⏳</span>讀取中…</div>');
@@ -9481,6 +9794,8 @@ function sgSpecViewClose() {
   _sgSpecViewState = null;
   const m = document.getElementById('sg-specview-modal');
   if (m) m.style.display = 'none';
+  const tabs = document.getElementById('sg-specview-tabs');
+  if (tabs) { tabs.innerHTML = ''; tabs.style.display = 'none'; }
   _sgSpecViewBody('');
 }
 
@@ -9496,7 +9811,7 @@ function sgSpecViewNewTab() {
 function sgSpecViewDownload() {
   const st = _sgSpecViewState;
   if (!st) return;
-  sgSpecDownload(st.cat, st.idx);
+  sgSpecDownloadAt(st.cat, st.idx, st.k || 0, st.src);   // 下載「現在看的這一份」
 }
 
 /* 讀取某元件（同專案「模擬與實測驗證」）的實測 Pd。實測值與 rf_data 同存於專案文件，
@@ -9578,7 +9893,11 @@ function sgRefValText(key, v) {
     return arr.map(r => (r.primary ? '★' : '') + rthShort(r) + '=' + r.value
                         + (r.cond ? '（' + r.cond + '）' : '')).join('；');
   }
-  if (key === 'SpecFile') return (v && v.name) ? v.name : (v && v.path ? v.path : '');
+  if (key === 'SpecFile') {
+    const arr = (Array.isArray(v) ? v : [v]).filter(x => x && x.path);
+    if (!arr.length) return '';
+    return arr.map(x => sgSpecName(x)).join('；') + (arr.length > 1 ? '（共 ' + arr.length + ' 份）' : '');
+  }
   return String(v);
 }
 
@@ -9682,7 +10001,7 @@ function sgRefSyncApply() {
       try { v = JSON.parse(JSON.stringify(v)); } catch (e) { return; }   // 深拷貝：不可與快取共用參照
     }
     // 規格書是「參照」不是複本：實體檔仍在來源專案底下 → 重新標來源
-    if (d.key === 'SpecFile' && v && v.path && origin) v._from = origin;
+    if (d.key === 'SpecFile' && v && origin) sgSpecMarkFrom({ SpecFile: v }, origin);
     comp[d.key] = v;
     n++;
   });
