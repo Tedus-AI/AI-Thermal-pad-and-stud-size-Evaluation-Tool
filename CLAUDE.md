@@ -126,6 +126,15 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 > `SpecFile` 是檔案參照不是複本（實體檔在來源專案的 `SPEC/<專案名>/` 底下）。快選帶入時
 > 會標 `SpecFile._from = <來源專案名>`，本專案刪除／換檔時只解除參照，不得刪來源檔。
 
+> **快選面板可調整大小**：`.sg-picker-pop` 是 `resize:both` ＋ flex 直排（搜尋框與底部提示
+> 固定高、`.sg-picker-list` 用 `flex:1; min-height:0` 吃掉剩餘高度），所以拉高面板時變長的是
+> 清單本身，而不是只把外框撐大。⚠ 面板由 `sgRenderProjectComponents` 重繪時**重建**，
+> 尺寸一定要記在 localStorage（`sgThermal.pickerSize`，三個分類共用）並在開啟時
+> `sgPickerApplySize` 套回去，否則每次重繪就跳回預設。開啟時的 `display` 必須是 `flex`
+> 不能是 `block`（否則清單吃不到剩餘高度）。套回去時夾在 92vw／82vh 內（換小螢幕不會爆出畫面）。
+> 尺寸由 `ResizeObserver` 記錄，需兩個守衛：面板 `display:none` 時不存（否則存進 0×0）、
+> 「重設大小」後吃掉**一次**通知（否則剛清掉的記憶會立刻被預設值寫回）。
+
 > **快選是「一次性快照」，不是 live link**：`sgPickerAdd` 把來源元件的欄位整份抄進本專案，
 > 之後兩邊各走各的（唯一真的連動的是 `SpecFile` 的路徑與 `tim_library` 的型號）。
 > 來源後來補了熱阻，本專案不會自己變 → `sgRefSyncBadge` 每次重繪拿 `sgProjectTreeCache`
