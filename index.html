@@ -1477,8 +1477,9 @@
   .sg-sv-tab.active { background: #0b5ed7; border-color: #0b5ed7; color: #fff; font-weight: 600; }
   /* 規格書清單視窗 */
   .sg-speclist-box { width: min(760px, 94vw); max-width: min(760px, 94vw); max-height: 86vh; }
-  /* 規格書清單是「資料」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail） */
-  .sg-speclist-box .lock-modal-title { color: #1a3a6b; }
+  /* 規格書清單是「資料」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail；
+     主題區塊那條是 !important，這裡也要 !important） */
+  .sg-speclist-box .lock-modal-title { color: #1a3a6b !important; }
   .sg-speclist-note { font-size: 0.8rem; color: #64748b; line-height: 1.7; margin: 6px 0 10px; }
   .sg-speclist-empty { font-size: 0.85rem; color: #94a3b8; padding: 16px; text-align: center;
     background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; }
@@ -1733,8 +1734,9 @@
   /* 差異視窗 */
   /* 這個視窗要列「目前 vs 來源」兩欄值 → 比 .lock-modal-box 的 460px 寬（不然欄位名會折行） */
   .sg-refsync-box { width: min(780px, 94vw); max-width: min(780px, 94vw); max-height: 86vh; }
-  /* 來源有更新是「提醒」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail） */
-  .sg-refsync-box .lock-modal-title { color: #b45309; }
+  /* 來源有更新是「提醒」不是錯誤 → 不用 .lock-modal-title 的紅色（紅色保留給 Fail）。
+     ⚠ 主題區塊有 `.lock-modal-title{color:var(--gm-danger)!important}`，這裡必須同樣 !important 才蓋得掉。 */
+  .sg-refsync-box .lock-modal-title { color: #b45309 !important; }
   .sg-refsync-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 6px; }
   .sg-refsync-table th {
     text-align: left; font-weight: 600; color: #475569; padding: 5px 6px;
@@ -1747,6 +1749,7 @@
   .sg-refsync-table tr.sv-clear td.sv-new { color: #b45309; }
   .sg-refsync-scroll { overflow: auto; max-height: 52vh; }
   .sg-refsync-note { color: #475569; font-size: 0.82rem; line-height: 1.7; margin: 2px 0 8px; }
+  .sg-refsync-note .sg-refsync-hint2 { color: #94a3b8; font-size: 0.76rem; }
   /* 參照鎖定的瓦數：白底黑字純文字、不可編輯、無輸入框 */
   .sg-locked-val {
     display: inline-block; padding: 2px 4px; min-width: 40px;
@@ -4900,8 +4903,10 @@
     <h3 class="lock-modal-title">&#8635; 來源專案有更新</h3>
     <div id="sg-refsync-who" class="lock-modal-text" style="font-weight:600;"></div>
     <p class="sg-refsync-note">這顆元件是從別的專案快選帶入的。下面是<b>屬於這顆料本身</b>的欄位
-      （熱阻／規格書／限溫／類型／Temp Sensor）在兩邊的差異 —— 勾選要採用來源值的欄位再套用；
-      功耗、E-Pad 尺寸、導熱方式、TIM 這些跟著各專案自己的設計走，不在同步範圍。</p>
+      （熱阻／規格書／限溫／類型／Temp Sensor，以及 TH/ME 頁的元件大小與元件高度）在兩邊的差異
+      —— 勾選要採用來源值的欄位再套用；功耗、E-Pad 尺寸、凸台／TIM、導熱方式這些跟著各專案自己的
+      散熱設計走，不在同步範圍。<br><span class="sg-refsync-hint2">※ 標「（TH/ME 頁）」的兩欄要在
+      <b>TH/ME-專案元件清單也載入同一個專案</b>時才比得出差異。</span></p>
     <div id="sg-refsync-body"></div>
     <div id="sg-refsync-lock" class="lock-modal-hint" style="display:none;">（未解鎖，僅供檢視；要套用請先解除密碼保護）</div>
     <div class="lock-modal-actions">
@@ -7114,18 +7119,9 @@ function onCellChange(el) {
   el.classList.toggle('changed', !!value);
 
   // 若修改的是元件大小，且該行為自動模式 → 重算凸台/TIM Size 並重繪
+  // （同一段連動也被「參照帶入」使用 → 抽成 applyHeatSourceSizeEffects）
   if (field === 'heatSourceSize') {
-    const spec = thermalSpecs[compKey];
-    if (spec && spec.padAuto) {
-      if (spec.timType === 'Pad') {
-        applyPadAutoCalcData(compKey);                 // 內部尊重「自訂」/解鎖不覆蓋
-        renderAllCategories();
-      } else if (spec.timType === 'Putty' && spec.bossSizeType === '自動帶入') {
-        spec.bossSize = spec.heatSourceSize || '';     // Putty:凸台同步元件大小
-        syncTimSizeToBoss(compKey);                    // TIM Size 跟隨凸台
-        renderAllCategories();
-      }
-    }
+    if (applyHeatSourceSizeEffects(compKey)) renderAllCategories();
   }
 
   // 手改凸台大小(如 Grease 自訂)→ TIM Size 跟隨凸台
@@ -7765,6 +7761,7 @@ async function sgOnProjectChange() {
   sgProjectId = select.value || null;
   sgProjectData = null;
   sgVariantsCache = null; sgProjectTreeCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
+  sgPendingSpec2 = {};   // 未存檔的快選元件會一起被丟掉 → 它們帶進來的元件大小/高度也不該留著
   if (!sgProjectId) {
     sgRenderProjectComponents();
     snapSgClean();
@@ -8302,6 +8299,7 @@ function sgBuildProjectTree(projects, category) {
     if (!items.length) continue;
     const projName = proj?.project_name || pid;
     const ts = Date.parse(proj?.meta?.timestamp || '') || 0;
+    const specs = proj?.thermal_specs || null;   // Tab2 的資料（元件大小／高度也要一起帶走）
     const measMap = new Map();   // 該專案實測值：name → { pd, source }
     const vd = Array.isArray(proj?.validation_data?.[catLower]) ? proj.validation_data[catLower] : [];
     for (const it of vd) {
@@ -8320,6 +8318,7 @@ function sgBuildProjectTree(projects, category) {
         power: comp?.['Power(W)'] ?? '',
         power_rt: comp?.['Power_RT(W)'] ?? '',
         src,
+        spec2: sgPickSpec2(specs, name),     // { heatSourceSize?, heatSourceHeight? } 或 null
         pd_meas: m ? m.pd : null,
         pd_meas_source: m ? m.source : null,
       });
@@ -8634,8 +8633,15 @@ function sgPickerAdd(cat, projId, compName) {
     overrides._pd_meas_from = g.projName;
   }
   sgProjectData[fieldKey].push(sgMakeComp(cat, overrides));
+  // TH/ME 頁的「元件大小／元件高度」是這顆料的封裝規格 → 來源當初有填就直接抄過來。
+  // （值存在 thermal_specs，不在元件物件上，所以走 sgApplySpec2 處理兩頁專案不同步的情況）
+  const s2 = sgApplySpec2(sgProjectId, c.name, c.spec2);
   sgPickerClose(cat);
   sgRenderProjectComponents();
+  if (s2.applied.length) {
+    roToast('📐 已一併帶入來源的' + s2.applied.map(sgSpec2Label).join('、') +
+            (s2.pending ? '（存檔後在 TH/ME 頁就看得到）' : '（見 TH/ME-專案元件清單）'));
+  }
 }
 
 /* ── 熱阻（θ/Ψ）參數 ──
@@ -9855,6 +9861,33 @@ function sgApplyMeasured(cat, idx, field) {
    ⚠ 一律不自動覆蓋：本專案可能刻意填了不同的值（UX 慣例：建議值 click-to-apply，
      不直接改使用者輸入）。功耗／E-Pad 尺寸／導熱方式／TIM／備註都**不在**同步範圍 ——
      那些跟著各專案自己的工況與散熱設計走。 */
+/* Tab2（TH/ME 頁）裡「屬於這顆料本身」的兩個欄位：封裝外型尺寸與最大高度。
+   它們是這顆料的規格，不是各專案自己的散熱設計 → 一起納入「參照」：
+   快選帶入時來源有填就抄過來，之後來源有更新也會出現在「↻ 來源有更新」清單裡。
+   ⚠ 凸台大小／TIM／E-PAD／IC 距離 HSK 一律不納入 —— 那些跟著各專案自己的散熱設計走。
+   ⚠ 這兩個值存在 `thermal_specs[specKey]`（Tab2 的資料），不在元件物件上，
+      所以取用／寫入都要走 sgSpecKey(元件名) 這把 key。 */
+const SG_REF_SPEC2_FIELDS = [
+  { key: 'heatSourceSize',   label: '元件大小(mm)' },
+  { key: 'heatSourceHeight', label: '元件高度(max)(mm)' },
+];
+
+/* 從某專案的 thermal_specs 撈出這顆元件的那兩個值（空的就不放進來，不寫 ''） */
+function sgPickSpec2(specs, name) {
+  const s = specs && specs[sgSpecKey(name)];
+  if (!s) return null;
+  const out = {};
+  SG_REF_SPEC2_FIELDS.forEach(f => {
+    const v = s[f.key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') out[f.key] = String(v).trim();
+  });
+  return Object.keys(out).length ? out : null;
+}
+function sgSpec2Label(k) {
+  const f = SG_REF_SPEC2_FIELDS.find(x => x.key === k);
+  return f ? f.label : k;
+}
+
 const SG_REF_SPEC_FIELDS = [
   { key: 'Rth',         label: '熱阻（θ/Ψ）' },
   { key: 'SpecFile',    label: '規格書' },
@@ -9864,6 +9897,75 @@ const SG_REF_SPEC_FIELDS = [
   { key: 'Local_Qty',   label: 'Local 數量' },
   { key: 'Remote_Qty',  label: 'Remote 數量' },
 ];
+
+/* 快選帶入但「Tab2 沒有載入同一個專案」時的暫存區：{ projId: { specKey: { 欄位: 值 } } }。
+   存檔（saveAllTabs）時併進該專案的 thermal_specs 一起寫回。只存在記憶體，
+   跟未存檔的元件同生共死 —— Tab1 換專案時一併清掉。 */
+let sgPendingSpec2 = {};
+
+/* 把「只填空格」的合併套到一份 thermal_specs map 上（不覆蓋已經填過的值）。
+   回傳實際寫進去的欄位數。specsMap 會被就地修改，故呼叫端先自行複製。 */
+function sgMergeSpec2Into(specsMap, pending) {
+  let n = 0;
+  Object.entries(pending || {}).forEach(([key, vals]) => {
+    const cur = Object.assign({}, specsMap[key] || {});
+    Object.entries(vals || {}).forEach(([k, v]) => {
+      const c = cur[k];
+      if (c === undefined || c === null || String(c).trim() === '') { cur[k] = v; n++; }
+    });
+    if (Object.keys(cur).length) specsMap[key] = cur;
+  });
+  return n;
+}
+
+/* 元件大小變更後的連動（只有自動模式才有作用）：Pad → 重算凸台/TIM Size；
+   Putty ＋「自動帶入」→ 凸台同步元件大小、TIM Size 跟隨凸台。
+   使用者手改（onCellChange）與參照帶入共用這一段，免得兩邊行為分岔（UX 慣例 12）。 */
+function applyHeatSourceSizeEffects(compKey) {
+  const spec = thermalSpecs[compKey];
+  if (!spec || !spec.padAuto) return false;
+  if (spec.timType === 'Pad') { applyPadAutoCalcData(compKey); return true; }   // 內部尊重「自訂」/解鎖
+  if (spec.timType === 'Putty' && spec.bossSizeType === '自動帶入') {
+    spec.bossSize = spec.heatSourceSize || '';
+    syncTimSizeToBoss(compKey);
+    return true;
+  }
+  return false;
+}
+
+/* 把來源專案的「元件大小／元件高度」套到本專案的同名元件。
+   ⚠ thermal_specs 與 rf_data 同屬一個專案 document，但 Tab1/Tab2 各有獨立的專案選單：
+     (a) Tab2 正好載入同一個專案 → 直接寫進記憶體的 thermalSpecs，畫面即時反映；
+     (b) 沒有 → 只能先暫存（寫進 Tab2 的副本會污染「別的專案」的資料），
+         由 saveAllTabs 併進這個專案的 thermal_specs。
+   一律「只填空格」：本專案已經填過的值不覆蓋（可能是刻意量到不同的尺寸）。
+   force=true（↻ 來源有更新逐欄套用）才允許覆蓋既有值。 */
+function sgApplySpec2(projId, compName, vals, force) {
+  const clean = {};
+  SG_REF_SPEC2_FIELDS.forEach(f => {
+    const v = vals && vals[f.key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') clean[f.key] = String(v).trim();
+  });
+  if (!Object.keys(clean).length || !compName) return { applied: [], pending: false };
+  const key = sgSpecKey(compName);
+
+  if (projId && currentProjectId && currentProjectId === projId) {
+    const spec = thermalSpecs[key] || (thermalSpecs[key] = {});
+    const applied = [];
+    Object.entries(clean).forEach(([k, v]) => {
+      const cur = spec[k];
+      if (force || cur === undefined || cur === null || String(cur).trim() === '') { spec[k] = v; applied.push(k); }
+    });
+    if (!Object.keys(spec).length) delete thermalSpecs[key];
+    if (applied.includes('heatSourceSize')) applyHeatSourceSizeEffects(key);
+    if (applied.length && currentProjectData) renderAllCategories();
+    return { applied, pending: false };
+  }
+  if (!projId) return { applied: [], pending: false };
+  const bag = sgPendingSpec2[projId] || (sgPendingSpec2[projId] = {});
+  bag[key] = Object.assign({}, bag[key], clean);
+  return { applied: Object.keys(clean), pending: true };
+}
 
 /* 來源元件（同一個專案 id ＋ 同名）。回傳 null = 沒有參照；{gone:true} = 來源已不在。 */
 function sgRefSource(comp, cat) {
@@ -9875,7 +9977,7 @@ function sgRefSource(comp, cat) {
   const name = String(comp.Component || '').trim();
   const hit = g && g.comps.find(x => x.name === name);
   if (!hit) return { gone: true };
-  return { group: g, src: hit.src || {} };
+  return { group: g, src: hit.src || {}, spec2: hit.spec2 || {} };
 }
 
 function _sgRefNorm(v) {
@@ -9914,6 +10016,18 @@ function sgRefDiff(comp, cat) {
     out.push({ key: f.key, label: f.label, myText, thText,
                srcVal: theirs, clears: _sgRefNorm(theirs) === '' });
   });
+  // Tab2 的元件大小／高度也納入比對。⚠ 它們存在 thermal_specs（Tab2 的副本），
+  // 只有「Tab2 正好載入同一個專案」時才知道本專案的現值 → 否則整組跳過，不誤報。
+  if (sgProjectId && currentProjectId === sgProjectId) {
+    const mine = thermalSpecs[sgSpecKey(comp.Component)] || {};
+    const theirs = r.spec2 || {};
+    SG_REF_SPEC2_FIELDS.forEach(f => {
+      const a = _sgRefNorm(mine[f.key]), b = _sgRefNorm(theirs[f.key]);
+      if (a === b) return;
+      out.push({ key: f.key, label: f.label + '（TH/ME 頁）', myText: a, thText: b,
+                 srcVal: theirs[f.key], clears: b === '', spec2: true });
+    });
+  }
   return out;
 }
 
@@ -9992,9 +10106,25 @@ function sgRefSyncApply() {
   if (!comp) { sgRefSyncClose(); return; }
   const origin = comp._ref_origin_project || '';
   let n = 0;
+  let spec2Touched = false;
   t.diff.forEach((d, i) => {
     const ck = document.getElementById('sg-refsync-ck-' + i);
     if (!ck || !ck.checked) return;
+    // Tab2 的欄位寫回 thermal_specs（不是元件物件）；逐欄套用是使用者明確勾選 → 允許覆蓋
+    if (d.spec2) {
+      const key = sgSpecKey(comp.Component);
+      if (d.clears) {
+        if (thermalSpecs[key]) {
+          delete thermalSpecs[key][d.key];
+          if (!Object.keys(thermalSpecs[key]).length) delete thermalSpecs[key];
+        }
+        if (d.key === 'heatSourceSize') applyHeatSourceSizeEffects(key);
+      } else {
+        sgApplySpec2(sgProjectId, comp.Component, { [d.key]: d.srcVal }, true);
+      }
+      spec2Touched = true; n++;
+      return;
+    }
     if (d.clears) { delete comp[d.key]; n++; return; }      // 空值不寫 ''，直接 delete key
     let v = d.srcVal;
     if (v && typeof v === 'object') {
@@ -10007,6 +10137,7 @@ function sgRefSyncApply() {
   });
   if (!n) { sgRefSyncClose(); return; }
   sgSyncRjc(comp);                 // 熱阻改了 → R_jc（5G-RRU 讀的那個欄位）跟著重算
+  if (spec2Touched && currentProjectData) renderAllCategories();   // TH/ME 頁同步重繪
   sgRefSyncClose();
   const y = window.scrollY;
   sgRenderProjectComponents();
@@ -11563,10 +11694,28 @@ async function saveAllTabs() {
       }
     }
 
+    // 快選帶入的 TH/ME 欄位（元件大小／高度）：Tab2 沒有載入同一個專案時只能先暫存
+    // （寫進 Tab2 的副本會污染「別的專案」），存檔時併進這個專案的 thermal_specs。
+    //   (a) Tab2 也載入同一個專案 → 併進記憶體的 thermalSpecs，跟著 Tab2 的寫入走；
+    //   (b) 否則 → 先讀回該專案現有的 thermal_specs，只填空格後併進 Tab1 的寫入。
+    let sgSpec2Fields = null;
+    const pend2 = hasSg ? sgPendingSpec2[sgProjectId] : null;
+    if (pend2 && Object.keys(pend2).length) {
+      if (hasCl && currentProjectId === sgProjectId) {
+        if (sgMergeSpec2Into(thermalSpecs, pend2) && currentProjectData) renderAllCategories();
+        delete sgPendingSpec2[sgProjectId];
+      } else {
+        const existingDoc = (await dbAdapter.getDoc('projects', sgProjectId)) || {};
+        const mergedSpecs = Object.assign({}, existingDoc.thermal_specs || {});
+        sgMergeSpec2Into(mergedSpecs, pend2);
+        sgSpec2Fields = { thermal_specs: mergedSpecs };
+      }
+    }
+
     // 把三頁的寫入合併成單一批次(每頁寫回各自的專案 id)
     const ops = [];
     if (hasSg) {
-      ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: {
+      ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: Object.assign({
         rf_data: sgProjectData.rf_data || [],
         digital_data: sgProjectData.digital_data || [],
         pwr_data: sgProjectData.pwr_data || [],
@@ -11577,7 +11726,7 @@ async function saveAllTabs() {
         param_backoff_rt: sgProjectData.param_backoff_rt || '',
         param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
         tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
-      } });
+      }, sgSpec2Fields || {}) });
       // 註：本工具不再「存檔時自動 upsert 元件到共用 *_library」。
       // 「📚 從資料庫快選」改為即時掃所有專案聚合，不依賴 *_library；
       // 停掉自動 upsert 可避免累積孤兒、也不再無聲覆寫共用目錄。
@@ -11596,6 +11745,7 @@ async function saveAllTabs() {
     }
 
     await dbAdapter.writeBatch(ops);
+    if (sgSpec2Fields && hasSg) delete sgPendingSpec2[sgProjectId];   // 已寫回，不再重複併入
 
     // SharePoint:整批寫完後只釋放鎖 + 重新上鎖「一次」
     if (dbAdapter.isSharePointMode()) {
