@@ -1538,6 +1538,9 @@
   }
   .sg-rth-btn:hover { background: #eef2f7; border-color: #94a3b8; }
   .sg-rth-btn.has-rth { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; font-weight: 600; }
+  /* θJC 與主散熱路徑對不上（例：IC top 卻只有 θJC,bottom）→ 琥珀色提醒（不是錯誤、不擋存檔） */
+  .sg-rth-fallback { margin-top: 6px; padding: 6px 10px; border-left: 4px solid #d97706; background: #fffbeb;
+                     color: #78350f; border-radius: 4px; font-size: 0.82rem; line-height: 1.5; }
   .sg-rth-btn.has-rth:hover { background: #ede9fe; border-color: #c4b5fd; }
   /* 熱阻編輯視窗的表格 */
   .sg-rth-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 4px; }
@@ -5607,6 +5610,7 @@
 <script src="graphDb.js?v=__APP_VERSION__"></script>
 <script src="graphListsDb.js?v=__APP_VERSION__"></script>
 <script src="dbAdapter.js?v=__APP_VERSION__"></script>
+<script src="compMerge.js?v=__APP_VERSION__"></script>
 <script src="teamsContact.js?v=__APP_VERSION__"></script>
 
 <!-- SheetJS for Excel export -->
@@ -6791,7 +6795,9 @@ async function onProjectChange() {
     }
 
     currentProjectId = projectId;
+    CompMerge.ensureProjectCids(data);
     currentProjectData = data;
+    clProjectBase = sgBaseFrom(data);   // 載入時快照（TH/ME 頁單獨推導別的專案時，存檔三方合併用）
     thermalSpecs = currentProjectData.thermal_specs || {};
     hiddenComponents = currentProjectData.hidden_components || {};
 
@@ -7519,8 +7525,11 @@ function eeImportExcel(fileInput) {
           if (v && v !== '-' && v !== '—') { spec[field] = v; }
         };
 
+        const sizeBefore = spec.heatSourceSize;
         setField('heatSourceSize', row[2]);
         setField('heatSourceHeight', row[3]);
+        // 元件大小變了 → 跟手動輸入走同一段連動（Pad → 重算凸台/TIM Size；Putty＋自動帶入 → 凸台同步）
+        if (spec.heatSourceSize !== sizeBefore) applyHeatSourceSizeEffects(specKey);
         imported++;
       }
 
@@ -7691,6 +7700,21 @@ async function exportPDF() {
 /* ---- State ---- */
 let sgProjectId = null;
 let sgProjectData = null;
+/* 存檔三方合併（compMerge.js）的「載入時快照」：兩個工具存檔時都把整份元件清單寫回共用 DB，
+   直接寫回會把 5G-RRU 在我們載入之後存的修改整批蓋掉 → 存檔時拿快照與「畫面」「資料庫最新」
+   逐欄比對，只寫我改過的欄位；兩邊改到同一格 → 存檔前列出來讓使用者選。 */
+let sgProjectBase = null;   // Tab1 專案的元件清單快照
+let clProjectBase = null;   // Tab2 專案的元件清單快照（TH/ME 頁單獨推導別的專案時用）
+function sgBaseFrom(doc) {
+  if (!doc) return null;
+  const o = {};
+  CompMerge.CATS.forEach(f => { o[f] = Array.isArray(doc[f]) ? doc[f] : []; });
+  return CompMerge.clone(o);
+}
+// 兩個工具共寫的數字欄位：清空時刪 key、不寫 ''（空值一律不寫 key）
+const SG_SHARED_NUM_FIELDS = ['Limit(C)', 'Power(W)', 'Qty'];
+let sgPendingRenames = {};       // { 專案id: [{ from, to }] } 還沒存的元件改名（spec key），見 sgRenameSpecRefs
+let sgPendingSpecDeletes = [];   // [{ projId, path }] 已從畫面移除、存檔成功後才真的刪的規格書檔案
 
 /* 註：原本這裡有一份 SG_DEFAULTS（RF/Digital/PWR 的 Height/Pad/Thick/Board_Type/
    Limit/R_jc/TIM_Type 罐頭值），與 5G-RRU 的 RF_DEFAULT/DIG_DEFAULT/PWR_DEFAULT 完全同值。
@@ -7762,6 +7786,9 @@ async function sgOnProjectChange() {
   sgProjectData = null;
   sgVariantsCache = null; sgProjectTreeCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
   sgPendingSpec2 = {};   // 未存檔的快選元件會一起被丟掉 → 它們帶進來的元件大小/高度也不該留著
+  sgPendingRenames = {}; // 同理：沒存的改名不該搬 TH/ME 頁的資料
+  sgPendingSpecDeletes = [];   // 沒存的「刪除規格書」→ 資料庫還指著那個檔 → 檔案不可刪
+  sgProjectBase = null;
   if (!sgProjectId) {
     sgRenderProjectComponents();
     snapSgClean();
@@ -7769,7 +7796,9 @@ async function sgOnProjectChange() {
   }
 
   try {
-    sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
+    sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);   // 複本（dbAdapter 讀寫一律用複本）
+    if (sgProjectData) CompMerge.ensureProjectCids(sgProjectData);   // 舊資料沒有元件 id → 這裡補發
+    sgProjectBase = sgBaseFrom(sgProjectData);                         // 載入時快照（存檔三方合併用）
     sgShowStatus('已選擇專案：' + (sgProjectData?.project_name || sgProjectId), 'success');
     sgRenderProjectComponents();
     snapSgClean();   // 載入即為乾淨基準
@@ -7909,8 +7938,9 @@ function sgRenderProjectComponents() {
         ? rthArr.map(r => (r.primary ? '★ ' : '') + rthTypeLabel(r) + ' = ' + r.value + ' °C/W'
             + (r.cond ? '（' + r.cond + '）' : '')).join('\n')
           + '\n—\n' + (rthRjc
-            ? '🔗 5G-RRU 的 Rjc 取用：' + rthTypeDef(rthRjc.type).label + ' = ' + rthRjc.value + ' °C/W'
-            : '🔗 無 θJC 資料，5G-RRU 的 Rjc 沿用其預設值')
+            ? '🔗 5G-RRU 的 Rjc 取用：' + rthTypeDef(rthRjc.type).label + ' = ' + rthRjc.value + ' °C/W' +
+              (rthRjc.fallback ? '\n⚠ 主散熱路徑應該用 ' + rthTypeDef(rthRjc.want).label + '，熱阻表沒有 → 暫用上面這一筆，請補上' : '')
+            : '🔗 無 θJC 資料，5G-RRU 的 Rjc 需在 5G-RRU 端自行填寫')
         : '填寫熱阻參數（θJA / θJC,top / θJC,bottom / θJB / ΨJT / ΨJB）';
       const rthCell =
         `<button class="sg-rth-btn sg-spec-ro${rthArr.length ? ' has-rth' : ''}" ` +
@@ -8147,13 +8177,16 @@ function sgOnCompEdit(el) {
   if (field === 'Component') {
     const oldName = sgProjectData[fieldKey][idx].Component;
     const newName = val;
-    if (oldName && oldName !== newName) tcpRenameComponentRef(cat, oldName, newName);
+    if (oldName && oldName !== newName) {
+      tcpRenameComponentRef(cat, oldName, newName);
+      sgRenameSpecRefs(cat, oldName, newName);   // TH/ME 頁以元件名稱當 key 的規格／隱藏清單一起搬
+    }
   }
 
   // Limit(C) 是共用欄位（5G-RRU 也讀它算裕度）：清空時要「刪掉 key」而不是寫 ''。
   // 空字串會覆蓋掉 5G-RRU 自己的預設值，而它的 `Limit − Drop − Loc_Amb` 會把 '' 當 0，
   // 算出一個超大負裕度，看起來像元件要燒掉而不是「還沒填」。
-  if (field === 'Limit(C)' && (val === '' || val === null || (typeof val === 'number' && isNaN(val)))) {
+  if (SG_SHARED_NUM_FIELDS.includes(field) && (val === '' || val === null || (typeof val === 'number' && isNaN(val)))) {
     delete sgProjectData[fieldKey][idx][field];
     return;
   }
@@ -8376,9 +8409,11 @@ window.sgDebugVariants = sgDebugVariants;
      PWR_DEFAULT 完全同值，等於本工具先塞一份假資料、5G-RRU 端再也分不出「工程師真的填了
      250」還是「AI-Thermal 自動塞的 250」。
    改為「key 整個不寫」（不是寫空字串）：
-     - 5G-RRU 快選是 Object.assign({}, RF_DEFAULT, src)，key 不存在 → 套它自己的預設，
-       行為與過去完全相同；寫成 '' 反而會覆蓋掉預設值，讓 Height×Slope 變 NaN。
+     - 5G-RRU 端沒有值就標紅「必填」並擋下計算（它已不再套分類預設值）；寫成 '' 在它那邊
+       也一樣算沒填，但共用 DB 的規則是空值一律不寫 key。瓦數（Power(W)）同理：兩邊共用的欄位，
+       新增時不寫 ''，使用者填了才有。
      - sgCarrySrc 會跳過 undefined，所以本工具的快選也不受影響。
+   每顆元件配發一個 `_cid`（元件 id，compMerge.js）：存檔時三方合併靠它配對，改名也對得上。
    各欄位之後的來源：
      Board_Type / Pad_L / Pad_W ← Tab2「主散熱路徑」＋元件大小／E-PAD 大小（存檔時推導）
      R_jc                       ← Tab1 熱阻表的 θJC（存檔時推導）
@@ -8386,10 +8421,10 @@ window.sgDebugVariants = sgDebugVariants;
      Height(mm) / Thick(mm)     ← 5G-RRU 端自行設定，本工具一律不寫 */
 function sgMakeComp(cat, overrides) {
   return Object.assign({
-    Component: '', Type: '', Qty: 1, 'Power(W)': '', 'Power_RT(W)': '',
+    Component: '', Type: '', Qty: 1, 'Power_RT(W)': '',
     TV_ID_mil: 'N/A', TV_Qty: 'N/A',
     Temp_Sensor: 'N', Local_Qty: '', Remote_Qty: '',
-  }, overrides || {});
+  }, overrides || {}, { _cid: CompMerge.newCid() });   // 新的一顆（快選也不沿用來源的元件 id）
 }
 
 
@@ -8661,19 +8696,48 @@ function rthShort(r) { return rthTypeDef(r && r.type).short; }
 function rthTypeLabel(r) { return rthTypeDef(r && r.type).label; }
 
 /* ── 熱阻 → 5G-RRU 的 Rjc（comp.R_jc）──
-   5G-RRU 體積評估的熱路徑是 Tj = Tc + P×R_jc、Tc = T_hsk + P×(R_int + R_TIM)，
-   R_int 是元件經 Thermal Via／Copper Coin 導到散熱器的基板熱阻，
-   也就是它的「殼」指的是元件底面 → 對應 datasheet 的 θJC,bottom。
+   5G-RRU 體積評估的熱路徑是 Tj = Tc + P×R_jc、Tc = T_hsk + P×(R_int + R_TIM)，「殼」是熱真正出去的那一面：
+     - Copper Coin／Thermal Via：熱從封裝底面穿板到散熱器 → θJC,bottom；
+     - IC top：熱從封裝上表面經 TIM 到散熱器（R_int = 0）→ θJC,top。
+       原本一律優先取 θJC,bottom；露銅焊墊（exposed pad）封裝的 θJC,bottom 通常比 θJC,top 小很多
+       → IC top 元件的 Tj 被低估（偏樂觀）。
    ⚠ 只有 θJC 類型可以當 R_jc：θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數而非熱阻，
      硬塞進去會讓 5G-RRU 的 Tj 重複計算而失真，因此一律不取用。
-   取值順序：標「主要」的 θJC → 第一筆 θJC,bottom → 第一筆 θJC,top。 */
+   取值：依主散熱路徑決定要 top 還是 bottom（同一種有多筆 → 標「主要」的優先）；
+         熱阻表沒有那一種 → 暫用另一種並標 fallback（熱阻表與 5G-RRU 都會提示）；
+         沒選主散熱路徑 → 維持原本順序（主要 → θJC,bottom → θJC,top）。 */
 const RTH_RJC_TYPES = ['JC_bot', 'JC_top'];
-function sgRjcFromRth(comp) {
+function sgRjcWantFor(path) {
+  if (path === 'IC top') return 'JC_top';
+  if (path === 'Copper Coin' || path === 'Thermal Via') return 'JC_bot';
+  return null;
+}
+/* 這顆元件的主散熱路徑：Tab2 的「主散熱路徑」優先（兩頁同專案時用 TH/ME 頁記憶體裡的最新值），
+   沒有就看元件上的導熱方式（可能是 5G-RRU 端設定的）。 */
+function sgHeatPathOf(comp) {
+  if (!comp) return null;
+  const key = sgSpecKey(comp.Component);
+  const specs = (currentProjectId && currentProjectId === sgProjectId && thermalSpecs) ? thermalSpecs
+              : ((sgProjectData && sgProjectData.thermal_specs) || {});
+  const hd = specs[key] && specs[key].heatDirection;
+  if (hd && HEAT_PATH_MAP[hd]) return hd;
+  const bt = comp.Board_Type;
+  return (bt && HEAT_PATH_MAP[bt]) ? bt : null;
+}
+function sgRjcFromRth(comp, path) {
   const arr = Array.isArray(comp && comp.Rth) ? comp.Rth : [];
   const cand = arr.filter(r => r && RTH_RJC_TYPES.includes(r.type) && !isNaN(parseFloat(r.value)));
   if (!cand.length) return null;
-  const pick = cand.find(r => r.primary) || cand.find(r => r.type === 'JC_bot') || cand[0];
-  return { value: parseFloat(pick.value), type: pick.type, cond: pick.cond || '' };
+  const want = sgRjcWantFor(path === undefined ? sgHeatPathOf(comp) : path);
+  let pick, fallback = false;
+  if (want) {
+    const same = cand.filter(r => r.type === want);
+    if (same.length) pick = same.find(r => r.primary) || same[0];
+    else { pick = cand.find(r => r.primary) || cand[0]; fallback = true; }
+  } else {
+    pick = cand.find(r => r.primary) || cand.find(r => r.type === 'JC_bot') || cand[0];
+  }
+  return { value: parseFloat(pick.value), type: pick.type, cond: pick.cond || '', want, fallback };
 }
 /* 把 θJC 同步寫進 comp.R_jc（5G-RRU 專屬欄位，本工具不顯示）。
    沒有任何 θJC 資料時不動 R_jc（保留既有值），只清掉來源標記。 */
@@ -8848,15 +8912,22 @@ function sgRthRender() {
 function sgRthRenderRjcHint() {
   const el = document.getElementById('sg-rth-rjc');
   if (!el) return;
-  const got = sgRjcFromRth({ Rth: _sgRthRows });
+  const t = _sgRthTarget;
+  const comp = t ? _sgSpecComp(t.cat, t.idx) : null;
+  const path = sgHeatPathOf(comp);
+  const got = sgRjcFromRth({ Rth: _sgRthRows }, path);
+  const pathNote = path ? ('主散熱路徑「' + escapeHtml(path) + '」') : '還沒選主散熱路徑';
   if (got) {
     const d = rthTypeDef(got.type);
     el.innerHTML = '🔗 5G-RRU 體積評估的「熱阻 Rjc」將取用：<b>' + escapeHtml(d.label) +
       ' = ' + escapeHtml(String(got.value)) + ' °C/W</b>' +
       (got.cond ? '（' + escapeHtml(got.cond) + '）' : '') +
-      '　<span style="opacity:.75">θJC 才是接面到殼；θJA／θJB／Ψ 熱路徑不同，不會被取用。</span>';
+      '　<span style="opacity:.75">依' + pathNote + '取用（IC top → θJC,top；Copper Coin／Thermal Via → θJC,bottom）。' +
+      'θJA／θJB／Ψ 熱路徑不同，不會被取用。</span>' +
+      (got.fallback ? '<div class="sg-rth-fallback">⚠ ' + pathNote + '應該用 <b>' + escapeHtml(rthTypeDef(got.want).label) +
+        '</b>，這張表沒有 → 暫用上面這一筆，Tj 可能失真。請補上 ' + escapeHtml(rthTypeDef(got.want).label) + '。</div>' : '');
   } else {
-    el.innerHTML = '🔗 目前沒有 θJC,top／θJC,bottom 的資料，5G-RRU 的「熱阻 Rjc」會沿用它自己的預設值。' +
+    el.innerHTML = '🔗 目前沒有 θJC,top／θJC,bottom 的資料，5G-RRU 的「熱阻 Rjc」需在 5G-RRU 端自行填寫（沒填就無法計算體積）。' +
       '<span style="opacity:.75">（θJA／θJB／Ψ 熱路徑不同，不能當 Rjc 使用）</span>';
   }
 }
@@ -9412,12 +9483,12 @@ async function sgSpecOnFilePicked(inputEl) {
       const path = await dbAdapter.uploadSpec(projName, t.cat, comp.Component, file);
       if (!path) throw new Error('上傳未回傳路徑');
       const entry = { path, name: file.name, at: new Date().toISOString(), by };
-      // 取代舊檔：新檔上傳成功後才刪舊檔（路徑相同＝同檔名覆蓋就不刪，免得刪掉剛寫上去的）；
+      // 取代舊檔：新檔上傳成功後才處理舊檔（路徑相同＝同檔名覆蓋就不刪，免得刪掉剛寫上去的）；
       // 舊檔若是快選帶入的參照，實體檔屬於來源專案 → 只換參照不刪檔。
+      // 舊檔不立刻刪：排進 sgPendingSpecDeletes，按「儲存元件變更」成功後才刪（沒存就不刪，
+      // 資料庫才不會指著一個已經不存在的檔案）。
       const dropOld = async (old) => {
-        if (old && old.path && old.path !== path && !old._from) {
-          try { await dbAdapter.deleteSpec(old.path); } catch (e) { console.warn('[spec] 舊檔刪除失敗', e); }
-        }
+        if (old && old.path && old.path !== path && !old._from) sgQueueSpecDelete(old.path);
       };
       if (t.mode === 'replace') {
         const old = list[t.at];
@@ -9500,19 +9571,15 @@ async function sgSpecDeleteAt(cat, idx, k) {
     roToast('🔗 已移除規格書參照（來源檔案保留），請記得按「儲存元件變更」');
     return;
   }
-  // 破壞性操作：重複確認
+  // 破壞性操作：重複確認。檔案要等「儲存元件變更」成功後才真的從 SharePoint 刪除（沒存就不刪）。
   if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' +
-               sgSpecName(spec) + many + '\n\n此操作會從 SharePoint 移除該檔案。')) return;
-  if (!confirm('再次確認：刪除後無法復原，仍要刪除嗎？')) return;
-  try {
-    await dbAdapter.deleteSpec(spec.path);
-  } catch (e) {
-    console.warn('[spec] 刪除檔案失敗（仍會清除參照）', e);
-  }
+               sgSpecName(spec) + many + '\n\n按「儲存元件變更」後會從 SharePoint 移除該檔案（沒儲存就不會刪）。')) return;
+  if (!confirm('再次確認：儲存後就無法復原，仍要刪除嗎？')) return;
+  sgQueueSpecDelete(spec.path);
   list.splice(k, 1);
   sgSpecStore(comp, list);
   _sgSpecRefresh();
-  roToast('🗑 規格書已刪除，請記得按「儲存元件變更」');
+  roToast('🗑 已移除規格書；按「儲存元件變更」後才會從 SharePoint 刪除檔案');
 }
 
 /* 🕘：規格書清單（也是原本「上傳時間」那顆的去處 —— 清單裡每一份都列出上傳時間／上傳者） */
@@ -9902,6 +9969,61 @@ const SG_REF_SPEC_FIELDS = [
    存檔（saveAllTabs）時併進該專案的 thermal_specs 一起寫回。只存在記憶體，
    跟未存檔的元件同生共死 —— Tab1 換專案時一併清掉。 */
 let sgPendingSpec2 = {};
+
+/* ── 元件改名 → TH/ME 頁以元件名稱當 key 的資料一起搬 ─────────────────────
+   thermal_specs（元件大小、主散熱路徑、TIM…）與 hidden_components 都用 sgSpecKey(元件名) 當 key。
+   原本改名只搬了標註圖的參照 → 那些資料全變孤兒：TH/ME 頁那一列變空白、推導不出導熱方式／E-Pad，
+   到 5G-RRU 就成了必填紅框。
+   ⚠ Tab1/Tab2 各有獨立的專案選單：
+     (a) TH/ME 頁正好載入同一個專案 → 直接搬記憶體裡的 thermalSpecs／hiddenComponents，並把 TH/ME 頁
+         那份元件清單的名稱一起改（否則那一列會對不到規格）；
+     (b) 沒有 → 記在 sgPendingRenames，存檔時在「資料庫最新的」thermal_specs 上搬，跟著 Tab1 的寫入走。
+   新名稱已經有自己的資料 → 不覆蓋（兩邊都保留，提示使用者）。 */
+function sgMoveKey(obj, from, to) {
+  if (!obj || !from || !to || from === to || !(from in obj)) return false;
+  if (to in obj) return 'clash';
+  obj[to] = obj[from];
+  delete obj[from];
+  return true;
+}
+function sgRenameSpecRefs(cat, oldName, newName) {
+  const from = sgSpecKey(oldName), to = sgSpecKey(newName);
+  if (!from || !to || from === to || !sgProjectId) return;
+  if (sgPendingSpec2[sgProjectId]) sgMoveKey(sgPendingSpec2[sgProjectId], from, to);   // 快選帶入、還沒存的尺寸也跟著走
+  if (currentProjectId === sgProjectId && currentProjectData) {
+    const r = sgMoveKey(thermalSpecs, from, to);
+    sgMoveKey(hiddenComponents, from, to);
+    const f = SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field;
+    if (f) (currentProjectData[f] || []).forEach(c => { if (c && c.Component === oldName) c.Component = newName; });
+    if (r === 'clash') roToast('TH/ME 頁已經有「' + newName + '」的資料，舊名稱的規格沒有搬過去，請到 TH/ME 頁確認');
+    if (typeof renderAllCategories === 'function') renderAllCategories();
+  } else {
+    (sgPendingRenames[sgProjectId] = sgPendingRenames[sgProjectId] || []).push({ from, to });
+  }
+}
+
+/* ── 規格書的「刪除／取代舊檔」延到存檔成功後才刪 SharePoint 上的檔案 ────────
+   畫面上移除參照要按「儲存元件變更」才會寫進資料庫。原本按 🗑 就立刻刪檔 → 沒存就離開
+   （切專案、放棄修改）時，資料庫還指著一個已經不存在的檔案。
+   真正刪之前再確認一次：任何專案的任何元件都沒有再指著這個路徑（同名重新上傳會是同一個路徑、
+   別的專案可能用快選參照它）才刪。 */
+function sgQueueSpecDelete(path) {
+  if (path && sgProjectId) sgPendingSpecDeletes.push({ projId: sgProjectId, path });
+}
+async function sgFlushSpecDeletes(projId) {
+  const todo = sgPendingSpecDeletes.filter(x => x.projId === projId);
+  sgPendingSpecDeletes = sgPendingSpecDeletes.filter(x => x.projId !== projId);
+  if (!todo.length) return;
+  let projects = {};
+  try { projects = (await dbAdapter.getCollection('projects')) || {}; } catch (e) { return; }   // 不確定就不刪
+  const inUse = new Set();
+  Object.values(projects).forEach(p => ['rf_data', 'digital_data', 'pwr_data'].forEach(f =>
+    ((p && p[f]) || []).forEach(c => sgSpecList(c).forEach(sp => { if (sp && sp.path) inUse.add(sp.path); }))));
+  for (const x of todo) {
+    if (inUse.has(x.path)) continue;
+    try { await dbAdapter.deleteSpec(x.path); } catch (e) { console.warn('[spec] 延後刪除失敗', x.path, e); }
+  }
+}
 
 /* 把「只填空格」的合併套到一份 thermal_specs map 上（不覆蓋已經填過的值）。
    回傳實際寫進去的欄位數。specsMap 會被就地修改，故呼叫端先自行複製。 */
@@ -11698,74 +11820,137 @@ async function saveAllTabs() {
     // （寫進 Tab2 的副本會污染「別的專案」），存檔時併進這個專案的 thermal_specs。
     //   (a) Tab2 也載入同一個專案 → 併進記憶體的 thermalSpecs，跟著 Tab2 的寫入走；
     //   (b) 否則 → 先讀回該專案現有的 thermal_specs，只填空格後併進 Tab1 的寫入。
-    let sgSpec2Fields = null;
+    let pend2Other = null;   // Tab2 沒載入同一個專案 → 存檔時在「資料庫最新的」thermal_specs 上只填空格
     const pend2 = hasSg ? sgPendingSpec2[sgProjectId] : null;
     if (pend2 && Object.keys(pend2).length) {
       if (hasCl && currentProjectId === sgProjectId) {
         if (sgMergeSpec2Into(thermalSpecs, pend2) && currentProjectData) renderAllCategories();
         delete sgPendingSpec2[sgProjectId];
       } else {
-        const existingDoc = (await dbAdapter.getDoc('projects', sgProjectId)) || {};
-        const mergedSpecs = Object.assign({}, existingDoc.thermal_specs || {});
-        sgMergeSpec2Into(mergedSpecs, pend2);
-        sgSpec2Fields = { thermal_specs: mergedSpecs };
+        pend2Other = pend2;
       }
     }
+    const renames = hasSg ? (sgPendingRenames[sgProjectId] || []) : [];   // 兩頁不同專案時累積的改名（spec key 要搬）
 
-    // 把三頁的寫入合併成單一批次(每頁寫回各自的專案 id)
-    const ops = [];
-    if (hasSg) {
-      ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: Object.assign({
-        rf_data: sgProjectData.rf_data || [],
-        digital_data: sgProjectData.digital_data || [],
-        pwr_data: sgProjectData.pwr_data || [],
-        param_temp: sgProjectData.param_temp || '55',
-        param_temp_custom: sgProjectData.param_temp_custom || '',
-        param_backoff: sgProjectData.param_backoff || '',
-        param_duplex: sgProjectData.param_duplex || 'TDD 75%',
-        param_backoff_rt: sgProjectData.param_backoff_rt || '',
-        param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
-        tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
-      }, sgSpec2Fields || {}) });
-      // 註：本工具不再「存檔時自動 upsert 元件到共用 *_library」。
-      // 「📚 從資料庫快選」改為即時掃所有專案聚合，不依賴 *_library；
-      // 停掉自動 upsert 可避免累積孤兒、也不再無聲覆寫共用目錄。
+    // 元件清單（rf/digital/pwr）兩個工具共寫 → 寫入時在「資料庫最新內容」上做三方合併（compMerge.js）：
+    // 只寫我改過的欄位，5G-RRU 在我們載入之後存的修改不會被整批蓋掉；兩邊改到同一格 → 存檔前列出來讓使用者選。
+    // fields 傳函式：dbAdapter 在最新狀態上計算（412／本機檔版本衝突時重讀後重算）。
+    if (hasSg) CompMerge.ensureProjectCids(sgProjectData);
+    if (clDerivedComps) CompMerge.ensureProjectCids(clDerivedComps);
+    const sgMine = hasSg ? { rf_data: sgProjectData.rf_data || [], digital_data: sgProjectData.digital_data || [],
+                             pwr_data: sgProjectData.pwr_data || [] } : null;
+    const sgBase = sgProjectBase, clBase = clProjectBase;
+    const mergeInto = (f, base, mine, cur, resolutions) => {
+      if (base && cur) {
+        const m = CompMerge.mergeProject(base, mine, cur, { resolutions });
+        if (m.unresolved.length) throw CompMerge.MergePending(m.unresolved);
+        Object.assign(f, m.fields);
+        return m;
+      }
+      // 新專案／沒有載入時快照 → 以畫面為準（型別整理照做：共用欄位空值不寫 key）
+      CompMerge.CATS.forEach(k => { if (mine[k]) f[k] = mine[k].map(CompMerge.normalizeComp); });
+      return null;
+    };
+    let sgWritten = null, clWritten = null, sgMerge = null, clMerge = null;
+    const buildOps = (resolutions) => {
+      const ops = [];
+      if (hasSg) {
+        ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: (cur) => {
+          const f = {
+            param_temp: sgProjectData.param_temp || '55',
+            param_temp_custom: sgProjectData.param_temp_custom || '',
+            param_backoff: sgProjectData.param_backoff || '',
+            param_duplex: sgProjectData.param_duplex || 'TDD 75%',
+            param_backoff_rt: sgProjectData.param_backoff_rt || '',
+            param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
+            tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
+          };
+          sgMerge = mergeInto(f, sgBase, sgMine, cur, resolutions);
+          if (pend2Other || renames.length) {
+            const specs = Object.assign({}, (cur && cur.thermal_specs) || {});
+            if (pend2Other) sgMergeSpec2Into(specs, pend2Other);
+            renames.forEach(r => sgMoveKey(specs, r.from, r.to));
+            f.thermal_specs = specs;
+            if (renames.length) {
+              const hidden = Object.assign({}, (cur && cur.hidden_components) || {});
+              renames.forEach(r => sgMoveKey(hidden, r.from, r.to));
+              f.hidden_components = hidden;
+            }
+          }
+          sgWritten = f;
+          return f;
+        } });
+        // 註：本工具不再「存檔時自動 upsert 元件到共用 *_library」。
+        // 「📚 從資料庫快選」改為即時掃所有專案聚合，不依賴 *_library；
+        // 停掉自動 upsert 可避免累積孤兒、也不再無聲覆寫共用目錄。
+      }
+      if (hasCl) {
+        ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: (cur) => {
+          const f = { thermal_specs: thermalSpecs, hidden_components: hiddenComponents };
+          clMerge = clDerivedComps ? mergeInto(f, clBase, clDerivedComps, cur, resolutions) : null;
+          clWritten = f;
+          return f;
+        } });
+      }
+      if (hasVd) {
+        ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: {
+          validation_data: vdValidationData,
+          vd_hidden_components: vdHiddenComps
+        } });
+      }
+      return ops;
+    };
+
+    const res = await CompMerge.saveWithMerge(async (resolutions) => { await dbAdapter.writeBatch(buildOps(resolutions)); }, {
+      // 本機檔模式的版本衝突：fileDb 已換成磁碟上的最新內容 → 重算合併再存
+      isRetryable: e => (typeof ConflictError !== 'undefined' && e instanceof ConflictError),
+      dialog: { title: '⚠ 這個專案在你載入後，已在資料庫被更新（可能是 5G-RRU 或其他人剛存檔）' },
+    });
+
+    if (!res.ok) {
+      setStatus('已取消儲存：沒有寫入任何資料（畫面上的修改都還在）', 'err', 5000);
+    } else {
+      // 畫面換成實際寫入的內容（含併入的 5G-RRU 修改），並以它當作新的「載入時快照」
+      if (hasSg && sgWritten) {
+        CompMerge.CATS.forEach(k => { if (sgWritten[k]) sgProjectData[k] = CompMerge.clone(sgWritten[k]); });
+        if (sgWritten.thermal_specs) sgProjectData.thermal_specs = CompMerge.clone(sgWritten.thermal_specs);
+        if (sgWritten.hidden_components) sgProjectData.hidden_components = CompMerge.clone(sgWritten.hidden_components);
+        sgProjectBase = sgBaseFrom(sgWritten);
+        if (hasCl && currentProjectId === sgProjectId && currentProjectData) {
+          CompMerge.CATS.forEach(k => { if (sgWritten[k]) currentProjectData[k] = CompMerge.clone(sgWritten[k]); });
+          clProjectBase = sgBaseFrom(sgWritten);
+        }
+        delete sgPendingRenames[sgProjectId];
+        if (pend2Other) delete sgPendingSpec2[sgProjectId];   // 已寫回，不再重複併入
+      }
+      if (clWritten && clDerivedComps && currentProjectData) {
+        CompMerge.CATS.forEach(k => { if (clWritten[k]) currentProjectData[k] = CompMerge.clone(clWritten[k]); });
+        clProjectBase = sgBaseFrom(clWritten);
+      }
+
+      // SharePoint:整批寫完後只釋放鎖 + 重新上鎖「一次」
+      if (dbAdapter.isSharePointMode()) {
+        try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
+        relock();
+      }
+
+      // 寫入成功後對帳清理孤兒圖片（已刪卻殘留、或衝突/失敗上傳遺留的檔案）。
+      // 此時記憶體引用 = 剛持久化內容，故為權威來源；fire-and-forget 不阻塞存檔 UX。
+      if (hasSg && dbAdapter.isSharePointMode()) {
+        tcpAuditImages({ deleteOrphans: true, log: false }).catch(() => {});
+      }
+      // 從畫面移除的規格書：參照已經存進資料庫了 → 現在才刪檔（fire-and-forget）
+      if (hasSg) sgFlushSpecDeletes(sgProjectId).catch(() => {});
+
+      // 重新繪製有載入的頁
+      if (hasSg && typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
+      if (hasCl && typeof renderAllCategories === 'function') renderAllCategories();
+      if (hasVd && typeof vdRender === 'function') vdRender();
+
+      snapAllClean();   // 已持久化 → 重設乾淨基準
+      const note = [sgMerge, clMerge].map(m => (m ? CompMerge.summaryText(m) : '')).filter(Boolean).join('；');
+      setStatus('全部儲存成功！' + (note ? '（' + note + '）' : ''), 'saved', note ? 6000 : 3000);
     }
-    if (hasCl) {
-      ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: Object.assign({
-        thermal_specs: thermalSpecs,
-        hidden_components: hiddenComponents
-      }, clDerivedComps || {}) });
-    }
-    if (hasVd) {
-      ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: {
-        validation_data: vdValidationData,
-        vd_hidden_components: vdHiddenComps
-      } });
-    }
-
-    await dbAdapter.writeBatch(ops);
-    if (sgSpec2Fields && hasSg) delete sgPendingSpec2[sgProjectId];   // 已寫回，不再重複併入
-
-    // SharePoint:整批寫完後只釋放鎖 + 重新上鎖「一次」
-    if (dbAdapter.isSharePointMode()) {
-      try { await dbAdapter.releaseLock(); } catch (e) { console.warn('releaseLock failed:', e); }
-      relock();
-    }
-
-    // 寫入成功後對帳清理孤兒圖片（已刪卻殘留、或衝突/失敗上傳遺留的檔案）。
-    // 此時記憶體引用 = 剛持久化內容，故為權威來源；fire-and-forget 不阻塞存檔 UX。
-    if (hasSg && dbAdapter.isSharePointMode()) {
-      tcpAuditImages({ deleteOrphans: true, log: false }).catch(() => {});
-    }
-
-    // 重新繪製有載入的頁
-    if (hasSg && typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
-    if (hasCl && typeof renderAllCategories === 'function') renderAllCategories();
-    if (hasVd && typeof vdRender === 'function') vdRender();
-
-    snapAllClean();   // 已持久化 → 重設乾淨基準
-    setStatus('全部儲存成功！', 'saved', 3000);
   } catch (e) {
     console.error('Save-all error:', e);
     if (e instanceof ConflictError) {
@@ -11774,12 +11959,16 @@ async function saveAllTabs() {
       // 重新載入有載入的頁的最新資料
       if (hasCl) {
         currentProjectData = await dbAdapter.getDoc('projects', currentProjectId);
+        if (currentProjectData) CompMerge.ensureProjectCids(currentProjectData);
+        clProjectBase = sgBaseFrom(currentProjectData);
         thermalSpecs = currentProjectData?.thermal_specs ?? {};
         hiddenComponents = currentProjectData?.hidden_components ?? {};
         if (typeof renderAllCategories === 'function') renderAllCategories();
       }
       if (hasSg) {
         sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
+        if (sgProjectData) CompMerge.ensureProjectCids(sgProjectData);
+        sgProjectBase = sgBaseFrom(sgProjectData);
         if (typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
       }
       if (hasVd) {

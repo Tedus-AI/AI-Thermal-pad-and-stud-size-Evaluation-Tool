@@ -56,7 +56,8 @@ global.fetch = async (url, opts = {}) => {
   if (method === 'GET') {
     if (url.includes('/sites/contoso.sharepoint.com:')) return ok({ id: 'site1' });
     if (url.includes('/drive/root:'))                   return ok({ id: 'item1' });
-    if (url.includes('?$select=id,eTag,cTag'))          return ok({ id: 'item1', eTag: server.eTagStr() });
+    if (url.includes('?$select=id,eTag,cTag'))          return ok({ id: 'item1', eTag: server.eTagStr(),
+                                                                   size: server.fakeSize != null ? server.fakeSize : Buffer.byteLength(server.content) });
     if (url.endsWith('/content'))                       return ok(null, server.content);
     throw new Error('unexpected GET ' + url);
   }
@@ -194,6 +195,59 @@ async function expectThrow(name, fn, predicate) {
   check('對方的 digital_library.fpga1 保留', server.db().digital_library.fpga1?.pwr === 20);
   check('批次 set 成功', server.db().projects.p9?.z === 9);
   check('批次 update 合併成功（既有欄位保留）', server.db().projects.p1.batch === true && server.db().projects.p1.mine === 'ours');
+
+  console.log('[T12] updateDoc 的 fields 是函式：412 重讀後在最新 doc 上重算（三方合併用）');
+  await graphDb.refresh();
+  let calls = 0;
+  server.beforePut = () => server.external(db => { db.projects.p1.a = 5; });
+  await graphDb.updateDoc('projects', 'p1', (cur) => { calls++; return { derived: cur.a + 1 }; });
+  check('函式跑了兩次（第一次的結果被 412 擋下）', calls === 2);
+  check('寫入的是在最新內容上重算的結果（5+1=6）', server.db().projects.p1.derived === 6);
+
+  console.log('[T13] 函式丟例外（例如合併有未決定的衝突）→ 不寫入、快取不變');
+  await graphDb.refresh();
+  base = server.putAttempts;
+  const before = JSON.stringify(await graphDb.getDoc('projects', 'p1'));
+  await expectThrow('例外原樣丟出', () => graphDb.writeBatch([
+    { type: 'update', col: 'projects', id: 'p2', fields: { ok: 1 } },
+    { type: 'update', col: 'projects', id: 'p1', fields: () => { const e = new Error('pending'); e.name = 'MergePending'; throw e; } },
+  ]), e => e.name === 'MergePending');
+  check('完全沒有 PUT', server.putAttempts === base);
+  check('同一批的其他筆也沒動到快取（整批都不寫）', (await graphDb.getDoc('projects', 'p2')).ok === undefined &&
+        JSON.stringify(await graphDb.getDoc('projects', 'p1')) === before);
+
+  console.log('[T14] getDoc 回複本：改回傳值不會改到快取');
+  const d1 = await graphDb.getDoc('projects', 'p1');
+  d1.a = 'mutated';
+  check('快取不受影響', (await graphDb.getDoc('projects', 'p1')).a !== 'mutated');
+
+  console.log('[T15] 忽略較舊的讀取結果時不可換 eTag（否則下一次寫入會蓋掉磁碟上的內容）');
+  await graphDb.refresh();
+  server.external(db => { db.version = 1; db.projects.pExt = { e: 1 }; });   // 例：SharePoint 版本還原、或不遞增 version 的寫入
+  await graphDb.refresh();                                                   // 非 force 讀取 → 內容版本較舊被忽略
+  base = server.putAttempts;
+  await graphDb.setDoc('projects', 'pMine', { m: 1 });
+  check('寫入先得到 412（eTag 沒被換成新的）→ 以磁碟為準重讀後才寫', server.putAttempts === base + 2);
+  check('磁碟上的新內容（pExt）沒有被舊快取蓋掉', server.db().projects.pExt?.e === 1);
+  check('我方的寫入也成功', server.db().projects.pMine?.m === 1);
+
+  console.log('[T16] 本 session 第一次讀檔就讀到空內容：檔案大小不是 0 → 唯讀保護；真的是 0 → 建立空骨架');
+  delete window.graphDb;
+  eval(fs.readFileSync(path.join(__dirname, '..', 'graphDb.js'), 'utf8'));   // 全新的一份（沒有讀過任何資料）
+  const fresh = window.graphDb;
+  fresh._sleep = async () => {};
+  await fresh.initMsal();
+  const keep = server.content;
+  server.content = ''; server.fakeSize = 4321;
+  await fresh.refresh();
+  check('讀到空內容但檔案有 4321 bytes → 唯讀保護', fresh.isCorrupted() === true);
+  base = server.putAttempts;
+  await expectThrow('唯讀中寫入被擋', () => fresh.setDoc('projects', 'x', {}), e => /唯讀保護/.test(e.message));
+  check('沒有發出 PUT（不會用空骨架蓋掉共用 DB）', server.putAttempts === base);
+  server.fakeSize = null;   // 大小照實回報 0
+  await fresh.refresh();
+  check('真的是 0 bytes 的新檔 → 建立空骨架、可寫入', fresh.isCorrupted() === false);
+  server.content = keep;
 
   console.log(`\n結果：${pass} pass / ${fail} fail`);
   process.exit(fail ? 1 : 0);

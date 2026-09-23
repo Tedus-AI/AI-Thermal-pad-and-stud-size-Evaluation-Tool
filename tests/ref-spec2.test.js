@@ -178,9 +178,12 @@ function ok(name, cond, extra) {
     dbAdapter.isReady = () => true;
     dbAdapter.isSharePointMode = () => false;
     dbAdapter.getDoc = async (col, id) => JSON.parse(JSON.stringify(window.__db[id] || {}));
+    // fields 可以是函式（在資料庫最新內容上計算，三方合併）→ 跟真的後端一樣先算出來再記錄
     dbAdapter.writeBatch = async (ops) => {
-      window.__ops = JSON.parse(JSON.stringify(ops));
-      ops.forEach(o => { window.__db[o.id] = Object.assign({}, window.__db[o.id], o.fields); });
+      const resolved = ops.map(o => Object.assign({}, o, { fields: typeof o.fields === 'function'
+        ? o.fields(window.__db[o.id] ? JSON.parse(JSON.stringify(window.__db[o.id])) : null) : o.fields }));
+      window.__ops = JSON.parse(JSON.stringify(resolved));
+      resolved.forEach(o => { window.__db[o.id] = Object.assign({}, window.__db[o.id], JSON.parse(JSON.stringify(o.fields))); });
     };
     window._ensureLockBeforeWrite = async () => true;
     window.tcpNormalizeSPImages = async () => {};

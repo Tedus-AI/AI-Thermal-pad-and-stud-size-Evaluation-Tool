@@ -15,8 +15,9 @@
  *   [A] 舊資料（單一物件）照舊：五顆按鈕、無數量徽章、↓ 直接下載、🗑 直接問
  *   [B] 多份：👁 有數量徽章；預覽視窗出現檔案切換列，點了就換看那一份
  *   [C] 上傳可多選並附加；同檔名取代該筆（不產生重複）；到達上限會擋
- *   [D] 🔄 取代第 k 份：位置不動、舊檔被刪、其餘不受影響
- *   [E] 刪除其中一份：剩 1 份要寫回「單一物件」形狀；刪光要 delete key
+ *   [D] 🔄 取代第 k 份：位置不動、其餘不受影響；舊檔「存檔成功後」才刪
+ *   [E] 刪除其中一份：剩 1 份要寫回「單一物件」形狀；刪光要 delete key；實體檔存檔後才刪
+ *   [J] 延後刪檔：沒存就換專案 → 不刪；存檔時還有別的專案指著同一個檔 → 不刪
  *   [F] 快選參照：多份都標 _from；刪除參照只解除、不刪來源檔
  *   [G] 唯讀（未解鎖）：清單只剩 👁／↓，上傳／取代／刪除鍵不畫出來；👁 仍可用
  *   [H] Tab2：規格書欄在元件名稱右邊、只有一顆 👁、讀 Tab2 自己的專案副本
@@ -84,11 +85,38 @@ function ok(name, cond, extra) {
     sgProjectId = 'P1';
     sgProjectData = { project_name: '專案A', rf_data: [{ Component: 'PA', Qty: 4, 'Power(W)': 52 }], digital_data: [], pwr_data: [] };
     if (sf !== null) sgProjectData.rf_data[0].SpecFile = sf;
+    // 模擬真的載入：資料庫裡的樣子、補發元件 id、載入時快照（存檔三方合併用）
+    CompMerge.ensureProjectCids(sgProjectData);
+    window.__db = { projects: { P1: JSON.parse(JSON.stringify(sgProjectData)) } };
+    sgProjectBase = sgBaseFrom(sgProjectData);
+    sgPendingSpecDeletes = [];
+    window.__io.deletes.length = 0;
     sgVariantsCache = { RF: [], Digital: [], PWR: [] };
     sgProjectTreeCache = { RF: [], Digital: [], PWR: [] };
     sgRenderProjectComponents();
     window.__alerts.length = 0; window.__confirms.length = 0;
   }, [specFile, protectedMode]);
+
+  // 按「儲存元件變更」：假 DB（writeBatch 跟真的後端一樣，fields 可以是函式）
+  const saveNow = () => page.evaluate(async () => {
+    dbAdapter.isReady = () => true;
+    dbAdapter.getDoc = async (c, id) => { const d = (window.__db[c] || {})[id]; return d ? JSON.parse(JSON.stringify(d)) : null; };
+    dbAdapter.getCollection = async (c) => JSON.parse(JSON.stringify(window.__db[c] || {}));
+    dbAdapter.writeBatch = async (ops) => ops.forEach(o => {
+      const cur = (window.__db[o.col] || {})[o.id];
+      const f = typeof o.fields === 'function' ? o.fields(cur ? JSON.parse(JSON.stringify(cur)) : null) : o.fields;
+      window.__db[o.col] = window.__db[o.col] || {};
+      window.__db[o.col][o.id] = Object.assign({}, cur || {}, JSON.parse(JSON.stringify(f)));
+    });
+    dbAdapter.releaseLock = async () => {};
+    window._ensureLockBeforeWrite = async () => true;
+    window.tcpNormalizeSPImages = async () => {};
+    window.tcpAuditImages = async () => ({});
+    window.relock = () => {};
+    await saveAllTabs();
+    await new Promise(r => setTimeout(r, 80));   // 刪檔是存檔成功後 fire-and-forget
+    return window.__io.deletes.slice();
+  });
 
   const cellInfo = () => page.evaluate(() => {
     const cell = document.querySelector('#sg-project-components .sg-spec-cell .sg-spec-btns');
@@ -225,8 +253,10 @@ function ok(name, cond, extra) {
   });
   ok('取代模式 multiple=false、就地換掉第 2 份（順序不變）',
      d.multiple === false && d.names.join(',') === 'a.pdf,b_rev2.pdf,c.pdf', d);
-  ok('舊檔上傳成功後才從 SharePoint 刪掉（只刪那一份）',
-     d.deletes.length === 1 && /b\.pdf$/.test(d.deletes[0]), d.deletes);
+  ok('取代後還沒存 → 舊檔先不刪（沒存就離開，資料庫還指著它）', d.deletes.length === 0, d.deletes);
+  const dSaved = await saveNow();
+  ok('按「儲存元件變更」成功後才從 SharePoint 刪掉舊檔（只刪那一份）',
+     dSaved.length === 1 && /b\.pdf$/.test(dSaved[0]), dSaved);
 
   console.log('\n[E] 刪除一份 / 刪到剩一份 / 刪光');
   await setup([mkSpec('a.pdf'), mkSpec('b.pdf'), mkSpec('c.pdf')]);
@@ -236,8 +266,10 @@ function ok(name, cond, extra) {
     return { names: sgSpecList(comp).map(s => s.name), shape: Array.isArray(comp.SpecFile) ? 'array' : 'object',
              deletes: window.__io.deletes.slice(), confirms: window.__confirms.length };
   });
-  ok('刪掉第 2 份 → 其餘保留、實體檔一起刪、且問了兩次確認',
-     e1.names.join(',') === 'a.pdf,c.pdf' && /b\.pdf$/.test(e1.deletes[0]) && e1.confirms === 2, e1);
+  ok('刪掉第 2 份 → 其餘保留、問了兩次確認、實體檔先不刪（存檔後才刪）',
+     e1.names.join(',') === 'a.pdf,c.pdf' && e1.deletes.length === 0 && e1.confirms === 2, e1);
+  const e1Saved = await saveNow();
+  ok('存檔成功後才刪實體檔', e1Saved.length === 1 && /b\.pdf$/.test(e1Saved[0]), e1Saved);
   const e2 = await page.evaluate(async () => {
     await sgSpecDeleteAt('RF', 0, 1);
     const comp = sgProjectData.rf_data[0];
@@ -251,6 +283,29 @@ function ok(name, cond, extra) {
              cell: document.querySelector('#sg-project-components .sg-spec-cell .sg-spec-btns button').disabled };
   });
   ok('全部刪光 → delete key（不是 \'\' 也不是 []）、👁 變回停用', e3.has === false && e3.cell === true, e3);
+
+  console.log('\n[J] 延後刪檔的保護');
+  await setup([mkSpec('a.pdf'), mkSpec('b.pdf')]);
+  const g1 = await page.evaluate(async () => {
+    window.__io.deletes.length = 0;
+    await sgSpecDeleteAt('RF', 0, 1);
+    const pending = sgPendingSpecDeletes.length;
+    const sel = document.getElementById('sg-project-select');
+    if (sel) sel.value = '';
+    await sgOnProjectChange();                          // 沒存就換專案
+    await sgFlushSpecDeletes('P1');
+    return { pending, after: sgPendingSpecDeletes.length, deletes: window.__io.deletes.slice() };
+  });
+  ok('沒存就換專案 → 待刪清單清掉、檔案不刪（資料庫還指著它）', g1.pending === 1 && g1.after === 0 && g1.deletes.length === 0, g1);
+  await setup([mkSpec('a.pdf'), mkSpec('b.pdf')]);
+  await page.evaluate(async () => {
+    window.__io.deletes.length = 0;
+    // 別的專案（快選參照）也指著 b.pdf
+    window.__db.projects.OTHER = { project_name: '別案', rf_data: [{ Component: 'PA', SpecFile: { path: '/SPEC/P/RF/PA__b.pdf', name: 'b.pdf', _from: '專案A' } }] };
+    await sgSpecDeleteAt('RF', 0, 1);
+  });
+  const g2 = await saveNow();
+  ok('存檔時還有別的專案指著同一個檔 → 不刪', g2.length === 0, g2);
 
   console.log('\n[F] 快選參照：每一份都標 _from');
   const f = await page.evaluate(() => {
