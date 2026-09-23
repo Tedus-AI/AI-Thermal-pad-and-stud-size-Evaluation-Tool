@@ -103,6 +103,10 @@
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
 > `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`/`TIM_Type`）。漏一個，快選複製元件時就會掉值。
 > 目前應為 21 項，與上表一致。
+>
+> 內部欄位（底線開頭，兩個工具都原樣保留、**不列入** carry 白名單）：`_cid`（元件 id，存檔三方合併配對用，
+> 兩邊都會補發，見下方「存檔三方合併」）、`_defaults_ok`（5G-RRU 寫：使用者確認過這顆不是舊版罐頭預設值）、
+> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`／`_ref_*`（5G-RRU 的排除與快選參照）。
 
 ##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
 
@@ -110,24 +114,29 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 **完全同值**，等於本工具先塞一份假資料、5G-RRU 端再也分不出「工程師真的填了 250」還是
 「AI-Thermal 自動塞的 250」。已移除，新元件一律**不建立**這些 key。
 
-**空值一定要「不寫 key」，不可寫 `''`**：5G-RRU 快選是 `Object.assign({}, RF_DEFAULT, src)`，
-key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` 會**覆蓋掉**預設值，而它的 `calcRow`
-對空字串多半不會噴 NaN，而是靜默算成 0（實測：`Thick` 空 → `R_int`=0、`Board_Type` 空 →
-`R_int`=0、`Pad_L/W` 空 → 面積用字串算出假值、`Limit(C)` 空 → 裕度變超大負數），
-**方向是低估熱阻＝樂觀**，比 NaN 更危險。`sgCarrySrc` 會跳過 `undefined`，故快選不受影響。
-清空 Tab1「限溫」欄時 `sgOnCompEdit` 也是 `delete` key 而非寫 `''`。
+**空值一定要「不寫 key」，不可寫 `''`**：`''` 在舊版 5G-RRU 的 `calcRow` 多半不會噴 NaN，而是靜默算成 0
+（實測：`Thick` 空 → `R_int`=0、`Board_Type` 空 → `R_int`=0、`Pad_L/W` 空 → 面積用字串算出假值、
+`Limit(C)` 空 → 裕度變超大負數），**方向是低估熱阻＝樂觀**，比 NaN 更危險。現在的 5G-RRU 載入時會把 `''`
+刪掉並當成「沒填」擋下計算，但共用 DB 的規則不變：空值不寫 key。`sgCarrySrc` 會跳過 `undefined`，故快選不受影響。
+- `sgMakeComp` **不建立 `Power(W)`**（原本寫 `''`）；使用者填了才有。
+- 清空 Tab1 的共用數字欄（`SG_SHARED_NUM_FIELDS` = 限溫／瓦數／數量）時 `sgOnCompEdit` 一律 `delete` key。
+- 存檔時元件清單經 `CompMerge.normalizeComp` 整理：共用數字欄轉成數字、`''`／非數字 → 不寫 key。
 
 > ⚠ **這個「不捏造」在 5G-RRU 端的後果，已由它自己處理，不要為了消 NaN 而改成捏值**：
 > 本工具建立的元件沒有 `Height(mm)`／`R_jc` 等 key，5G-RRU 載入後 `calcThermalResistance`
 > 會拿 `undefined` 做算術 → Tj／裕度／允許溫升整列 NaN（而它的元件表 `value="(row[col]||0)"`
 > 會把缺值顯示成 0，看起來跟正常元件一樣，使用者只會覺得「建法一樣為什麼只有這幾顆 NaN」）。
-> 5G-RRU 端已加 `normalizeComps()`：載入時把缺的欄位補成**它自己的分類預設值**、標琥珀色並跳橫幅
-> 請使用者確認（對應其 PR「元件缺欄位 → 整列 NaN」）。**本工具仍然不寫這些 key** —— 預設值要由
-> 擁有該欄位的工具來給，不是由不知情的一方捏造。
+> 5G-RRU 端的處理（其 PR #87 起）：**元件欄位一律不補預設值**，缺必填（數量、瓦數；會發熱的另加高度、限溫、
+> Rjc、導熱方式、介面材料、E-Pad 長寬）→ 紅框「必填」並**擋下計算**，直到使用者補齊或按 👁 排除。
+> 另外 7 個欄位**全部**等於本工具舊版 `SG_DEFAULTS` 的元件（2026-09-18 以前建立的，例：Cygnus 40 顆）
+> 會被標成「疑似舊版自動帶入的預設值」，一樣擋計算，使用者改成實際值或按「確認是實際值」（寫
+> `_defaults_ok: true`）才解除。**本工具仍然不寫這些 key** —— 值要由擁有該欄位的工具給、而且要是實際值；
+> 本工具能推導的（`Board_Type`／`Pad_L`／`Pad_W`／`R_jc`／`TIM_Type`）推導得越完整，使用者在 5G-RRU
+> 要補的就越少。
 
 ⚠ **「從資料庫快選」的 carry 白名單兩邊都必須列全所有欄位**（AI-Thermal 的
-`SG_VARIANT_CARRY` / 5G-RRU 的 `VARIANT_CARRY`）。漏列的 key 會被各自的分類預設值蓋掉，
-複製完再存回共用 DB 就等於把對方工具填的真實值洗成罐頭值。新增任何每元件欄位時，
+`SG_VARIANT_CARRY` / 5G-RRU 的 `VARIANT_CARRY`）。漏列的 key 快選時就不會被帶過來（5G-RRU 已不套
+分類預設 → 變成缺值被必填檢查擋下；本工具專屬欄位則整個掉失），複製完再存回共用 DB 就等於把對方工具填的真實值丟掉。新增任何每元件欄位時，
 **同一個 commit 內要把它加進本工具的白名單，並在另一個 repo 同步補上**。
 物件／陣列型欄位（`Rth`、`SpecFile`）carry 時必須深拷貝，否則新元件與來源共用參照。
 
@@ -157,8 +166,12 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
   並在按鈕上標數量徽章；`↑` 可一次選多檔並附加，**同檔名＝取代該筆**（同名上傳本來就會覆蓋
   SharePoint 上同一個路徑，若再新增一筆就會有兩筆指向同一個檔）；`↓`／`🗑` 多份時開
   **規格書清單**讓使用者挑；`🕘` 就是那個清單（逐份檢視／下載／🔄 取代／🗑 刪除＋上傳紀錄）。
-- 取代（`🔄` 或同檔名上傳）：**新檔上傳成功後才刪舊檔**，且路徑相同（同名覆蓋）或舊檔是
+- 取代（`🔄` 或同檔名上傳）：新檔上傳成功後才處理舊檔，且路徑相同（同名覆蓋）或舊檔是
   `_from` 參照時不刪。刪除一份只 `splice` 那一筆，其餘保留。
+- ⚠ **實體檔一律等「儲存元件變更」成功後才刪**（`sgQueueSpecDelete` → `sgPendingSpecDeletes` →
+  `saveAllTabs` 成功後 `sgFlushSpecDeletes`）。原本按 🗑 就立刻刪 SharePoint 上的檔，但移除參照要存檔才寫進
+  資料庫 → 沒存就離開（換專案、放棄修改）時資料庫指著一個已經不存在的檔。換專案時待刪清單清空（沒存＝不刪）。
+  真正刪之前再掃一次**所有專案**：還有任何元件指著同一個路徑（同名重新上傳、別的專案的快選參照）就不刪。
 - 上限 `SG_SPEC_MAX = 20`。
 - **TH/ME 頁（Tab2）只有 `👁`**：`th2SpecCell()` 讀的是 Tab2 自己的專案副本（`sgSpecView(cat, idx, k, 'tab2')`），
   因為兩頁各有獨立的專案選單。上傳／取代／刪除的入口**只留 Tab1**（UX 慣例 4：同一份檔案
@@ -243,10 +256,18 @@ key 不存在 → 套它自己的預設（行為與過去相同）；寫 `''` �
 `comp.Rth = [{ type, value, cond, primary }]` 逐筆記錄 datasheet 的熱阻標法。
 存檔時 `sgSyncRjcAll` 會把其中的 **θJC** 寫進 `comp.R_jc` 供 5G-RRU 算 Tj：
 
-- 取值順序：標「主要」的 θJC → 第一筆 `JC_bot` → 第一筆 `JC_top`，來源記在 `comp._rjc_from`。
+- **依主散熱路徑取用**（`sgHeatPathOf` → `sgRjcWantFor` → `sgRjcFromRth`）：熱從哪一面出去，就用那一面的 θJC。
+  `IC top`（熱從封裝上表面經 TIM 出去、5G-RRU 端 `R_int = 0`）→ **θJC,top**；
+  `Copper Coin`／`Thermal Via`（穿板、從底面出去）→ **θJC,bottom**。同一種有多筆 → 標「主要」的優先。
+  主散熱路徑取自 Tab2（兩頁同專案用 TH/ME 頁記憶體裡的最新值），沒有就看元件上的 `Board_Type`。
+  ⚠ 原本一律優先取標「主要」／θJC,bottom：露銅焊墊封裝的 θJC,bottom 通常比 θJC,top 小很多 →
+  IC top 元件的 Tj 被低估（偏樂觀）。
+- 熱阻表沒有對應的那一種 → 暫用另一種、回傳 `fallback: true`：熱阻視窗顯示琥珀色提醒（`.sg-rth-fallback`），
+  Tab1 熱阻按鈕的 tooltip 也寫出來；5G-RRU 端看 `Board_Type` 與 `_rjc_from` 對不上時標 ⚠。
+- 沒選主散熱路徑 → 維持原本順序（標「主要」的 → 第一筆 `JC_bot` → 第一筆 `JC_top`）。來源記在 `comp._rjc_from`。
 - **只有 θJC 可以當 `R_jc`**。5G-RRU 的熱路徑是 `Tj = Tc + P×R_jc`、
-  `Tc = T_hsk + P×(R_int + R_TIM)`，其「殼」是元件底面 → 對應 θJC,bottom；
-  θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數，硬塞會讓 Tj 重複計算而失真。
+  `Tc = T_hsk + P×(R_int + R_TIM)`；θJA 含到環境的整條路徑、θJB 到板子、Ψ 是特性參數，
+  硬塞會讓 Tj 重複計算而失真。
 - 沒有任何 θJC 時不動 `R_jc`（保留既有值），只清掉 `_rjc_from`。
   ⚠ 這也是 5G-RRU 端**唯一**還能自行輸入 Rjc 的情況：它以 `_rjc_from` 判斷要不要鎖欄位，
   沒有標記就當成「本工具沒推導過」而開放輸入。所以不要為了「清乾淨」而在沒有 θJC 時
@@ -337,6 +358,60 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
 - ⚠ **既有規格書檔案不會跟著搬**：每顆元件的 `SpecFile.path` 存的是完整路徑，所以下載
   照常；只有改名後「新上傳」的檔案會進新資料夾。這點在彈窗說明裡有明講，不要拿掉。
 
+#### 元件改名 → TH/ME 頁以元件名稱當 key 的資料一起搬（`sgRenameSpecRefs`）
+
+`thermal_specs`（元件大小、主散熱路徑、TIM…）與 `hidden_components` 都用 `sgSpecKey(元件名)` 當 key。
+原本 Tab1 改名只搬了標註圖的 `componentRef` → 那些資料全變孤兒：TH/ME 頁那一列變空白、推導不出導熱方式／
+E-Pad，到 5G-RRU 就變成必填紅框。
+
+- 兩頁同專案 → 直接搬記憶體裡的 `thermalSpecs`／`hiddenComponents`，並把 TH/ME 頁那份元件清單的名稱一起改；
+  快選帶入、還沒存的尺寸（`sgPendingSpec2`）也跟著搬。
+- 兩頁不同專案 → 記在 `sgPendingRenames[專案]`，`saveAllTabs` 在**資料庫最新的** `thermal_specs`／
+  `hidden_components` 上搬（跟著 Tab1 的寫入）；換專案時清空（沒存的改名不搬）。
+- 新名稱已經有自己的資料 → **不覆蓋**（兩份都保留，提示使用者到 TH/ME 頁確認）。
+
+#### 存檔三方合併（`compMerge.js`）⚠️ 兩個 repo 共用同一份
+
+兩個工具存檔時都會把整份元件清單（`rf_data`／`digital_data`／`pwr_data`）用自己畫面上的副本寫回。
+直接寫回 → 對方在我們**載入之後**存的修改被整批蓋掉（例：本工具開著專案 → 5G-RRU 補了元件高度存檔 →
+回本工具改瓦數存檔 → 高度被蓋回沒有）。
+
+- **`compMerge.js`（＋`tests/comp-merge.unit.test.js`）在兩個 repo 內容逐字相同**，改一邊就同步另一邊。
+- 快照：`sgProjectBase`（Tab1 載入時）、`clProjectBase`（Tab2 載入時；TH/ME 頁單獨推導別的專案、把三個陣列
+  補進 Tab2 的寫入時用）。載入時 `CompMerge.ensureProjectCids` 補發 `_cid`，快照與畫面同一份 id；
+  `sgMakeComp`（含快選）一律給**新的** `_cid`。
+- `saveAllTabs` 的 Tab1／Tab2 寫入改成 **fields 函式**：`dbAdapter.writeBatch` 在「寫入當下的最新內容」上呼叫
+  （412 重讀後重算；本機檔模式的 `ConflictError` 由 `CompMerge.saveWithMerge` 重試），逐顆元件、逐欄比對：
+  我沒改 → 用資料庫的；只有我改 → 用我的；**兩邊改得不一樣 → 存檔前跳衝突視窗**，每一列選「用我的／用資料庫的」，
+  全部選完才能存；取消 → 什麼都不寫、狀態列說明。相依欄位整組比對（E-Pad 長寬＋`_pad_from`、`R_jc`＋`_rjc_from`、
+  `Board_Type`＋`_bt_from`、`TIM_Type`＋`TIM_Model`）。本工具自己推導的欄位（`sgSyncRjcAll`、`sgDeriveAllFromSpecs`
+  在存檔前算好）屬於「我的修改」，照常寫入。
+- 本工具專屬、不與 5G-RRU 共寫的欄位（`param_*`、`tcPlacement`、`thermal_specs`、`validation_data`…）不做三方合併。
+- 存檔成功 → 畫面換成實際寫入的內容（含併入的 5G-RRU 修改）並當作新快照；兩頁同專案時 TH/ME 頁那份元件清單
+  也一起換；狀態列附一句「已合併：併入資料庫最新的 N 項修改…」。
+- **`graphDb`／`fileDb` 的 `getDoc` 回複本、`setDoc`／`updateDoc`／`writeBatch` 存複本**：畫面不可再持有 DB 快取
+  的活參照（原本 Tab1 還沒存的修改，可能在存 TIM 型號庫之類的其他寫檔動作時被一起寫進資料庫）。
+  `writeBatch` **先把整批要寫的內容算完才動快取**：任何一筆丟例外（例如合併有未決定的衝突）→ 整批不寫。
+  `getCollection` 仍回快取本身，呼叫端只能讀。
+- 契約測試：`tests/merge-save.test.js`、`tests/comp-merge.unit.test.js`、`tests/optimistic-concurrency.test.js`（T12–T16）。
+
+#### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
+
+檔名是 `${projectId}_${catKey}_${ts}.jpg`，專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，剩下的才是專案 id，
+必須完全相等。⚠ 原本用 `startsWith(projectId + '_')`：專案 `FDD_4T4R_60W` 每次存檔清孤兒時，會把
+`FDD_4T4R_60W_v2`（5G-RRU「複製專案」取名「FDD 4T4R 60W v2」就會產生這種 id）的圖當成孤兒刪掉；刪專案時也一樣。
+檔名對不上格式的一律不列（不認得的檔案不刪）。
+
+#### SharePoint 讀寫防護（`graphDb.js`）
+
+- `_graphGet`：`cache:'no-store'`＋no-cache；逾時 30 秒；逾時／斷線／429／5xx 自動重試 2 次，其他 4xx 直接丟出。
+  `_graphPut` 逾時 90 秒；`_withOptimisticWrite` 除了 412，逾時／斷線／429／5xx 也重讀（force）後重試。
+- **防版本回退時不可換 eTag**：`_readFile` 忽略「比手上舊」的內容時，eTag 也保留舊的。原本照樣換成新 eTag →
+  下一次寫入的 If-Match 會對上，把這份過時的快取整檔寫回，蓋掉磁碟上的內容（例：SharePoint「版本歷史」還原、
+  或不遞增 version 的另一個工具的寫入）。保留舊 eTag → 下一次寫入得到 412 → 以磁碟為準重讀再合併。
+- metadata 多取 `size`：**本 session 第一次讀檔就讀到空內容、但檔案大小不是 0（或拿不到大小）→ 唯讀保護**，
+  不可 bootstrap 空骨架（否則下一次寫入就把整份共用 DB 抹掉）；真的是 0 bytes 才建立空骨架。
+
 ### 規則
 
 1. **存 project 一律用 `updateDoc('projects', id, fields)`，不要用 `setDoc`。**
@@ -418,7 +493,7 @@ await dbAdapter.updateDoc('projects', docId, {
 ### 運作方式
 
 - 原始碼裡只放佔位符 `__APP_VERSION__`（出現在 `index.html` 的 `window.APP_VERSION`、
-  6 支本地 JS 的 `?v=__APP_VERSION__` 快取戳記、以及 `version.json`）。
+  7 支本地 JS（含兩個 repo 共用的 `compMerge.js`）的 `?v=__APP_VERSION__` 快取戳記、以及 `version.json`）。
 - `.github/workflows/deploy-pages.yml` 在每次 push 到 `main` 時，用
   `TZ='Asia/Taipei' date +%Y.%m.%d.%H%M`＋短 SHA 算出版本號，`sed` 戳進上述佔位符，
   再部署到 GitHub Pages。**因此每次 push 都會自動戳新版本，不靠人記憶。**

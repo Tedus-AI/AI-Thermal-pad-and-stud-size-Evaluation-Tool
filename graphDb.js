@@ -25,6 +25,35 @@ let lastReadProjects = 0;    // 上次成功讀檔時的 projects 筆數（歸�
 let sawRealData = false;     // 本 session 是否曾持有實際資料（區分「全新空庫」vs「截斷成空檔」）
 let currentEtag = null;      // 最近一次讀檔的 DriveItem eTag（樂觀並發 If-Match 基準）
 
+/* 讀寫一律用複本：getDoc 若回傳快取的活參照，呼叫端在畫面上的試改會直接改到快取，之後任何一次
+   整檔寫入（例如存 TIM 型號庫、釋放編輯鎖）就會把沒按儲存的內容寫進共用 DB；寫入時同理。 */
+function _clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+/* updateDoc／writeBatch 的 fields 可以是函式：在「寫入當下的最新內容」上計算要寫的欄位
+   （412 重讀後會重算），給需要三方合併的呼叫端用（compMerge.js）。函式拿到的是複本；
+   丟例外 → 不寫入、原樣往外丟。 */
+function _resolveFields(fields, existing) {
+  return typeof fields === 'function' ? fields(existing ? _clone(existing) : null) : fields;
+}
+
+/* 外部請求一律有逾時（網路卡住時不讓畫面一直轉圈）；讀取另外自動重試（UX 慣例 11） */
+const GET_TIMEOUT_MS = 30000;
+const PUT_TIMEOUT_MS = 90000;
+async function _fetchT(url, init, ms) {
+  const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+  try {
+    return await fetch(url, ctl ? Object.assign({}, init, { signal: ctl.signal }) : init);
+  } catch (e) {
+    const err = new Error((e && e.name === 'AbortError')
+      ? ('連線逾時：SharePoint ' + Math.round(ms / 1000) + ' 秒沒有回應')
+      : ('網路連線失敗：' + ((e && e.message) || e)));
+    err.network = true;                 // 供重試判斷（逾時／斷線）
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 const graphDb = {
   /* ─── MSAL Initialization ─────────────────────────────── */
   async initMsal() {
@@ -133,24 +162,33 @@ const graphDb = {
     // cache:'no-store' + no-cache headers prevent the browser/proxy from
     // serving a stale copy, which would make the version check read an old
     // version and falsely report a conflict.
-    const resp = await fetch(url, {
-      cache: 'no-store',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      }
-    });
-    if (!resp.ok) {
+    // 逾時、斷線、429／5xx 自動重試 2 次；其他 4xx（權限、找不到檔）直接丟出。
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await this._sleep(600 * attempt);
+      let resp;
+      try {
+        resp = await _fetchT(url, {
+          cache: 'no-store',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        }, GET_TIMEOUT_MS);
+      } catch (e) { lastErr = e; continue; }
+      if (resp.ok) return resp;
       const errText = await resp.text().catch(() => '');
-      throw new Error(`Graph API GET failed: ${resp.status} ${resp.statusText} — ${errText}`);
+      lastErr = new Error(`Graph API GET failed: ${resp.status} ${resp.statusText} — ${errText}`);
+      lastErr.status = resp.status;
+      if (!(resp.status === 429 || resp.status >= 500)) break;
     }
-    return resp;
+    throw lastErr;
   },
 
   async _graphPut(url, body, contentType = 'application/json', extraHeaders = {}) {
     const token = await this._getAccessToken(true);
-    const resp = await fetch(url, {
+    const resp = await _fetchT(url, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -158,7 +196,7 @@ const graphDb = {
         ...extraHeaders
       },
       body: body
-    });
+    }, PUT_TIMEOUT_MS);
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
       const err = new Error(`Graph API PUT failed: ${resp.status} ${resp.statusText} — ${errText}`);
@@ -193,14 +231,18 @@ const graphDb = {
     await this._resolveDriveItemId();
     // 先取 metadata 拿 eTag 作為樂觀並發基準。content GET 會被 302 導到下載主機，
     // 其 ETag 是儲存層的、不可用於 Graph 的 If-Match，所以要單獨取 DriveItem 的 eTag。
+    // ⚠ eTag 先暫存、等內容確定採用後才提交（見下方「防版本回退」）。
+    let metaEtag = null;   // 拿不到 → 採用內容時退化為無 If-Match（不比現況差）
+    let metaSize = null;   // 檔案實際大小（bytes）：判斷「讀到空內容」是全新空檔還是讀取異常
     try {
       const metaResp = await this._graphGet(
-        `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/items/${driveItemId}?$select=id,eTag,cTag`
+        `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/items/${driveItemId}?$select=id,eTag,cTag,size`
       );
       const meta = await metaResp.json();
-      currentEtag = meta.eTag || meta.cTag || null;
+      metaEtag = meta.eTag || meta.cTag || null;
+      if (typeof meta.size === 'number') metaSize = meta.size;
     } catch (e) {
-      currentEtag = null;   // 拿不到 etag → 退化為無 If-Match（不比現況差）
+      metaEtag = null;
     }
     const resp = await this._graphGet(
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/items/${driveItemId}/content`
@@ -213,6 +255,13 @@ const graphDb = {
         // 絕不可 bootstrap 空骨架後寫回（否則把整份共用 DB 抹掉）。
         dbCorrupted = true;
         console.error('[graphDb] 讀到空檔但先前已有資料 → 截斷疑慮，進入唯讀保護');
+        return;
+      }
+      if (metaSize !== 0) {
+        // 本 session 第一次讀檔就讀到空內容，但檔案大小不是 0（或拿不到大小）→ 讀取異常，不是全新空檔。
+        // 若照舊 bootstrap 空骨架，下一次寫入就會把整份共用 DB 抹掉 → 進唯讀，請使用者重新整理。
+        dbCorrupted = true;
+        console.error('[graphDb] 讀到空內容但檔案大小為 ' + metaSize + ' bytes → 讀取異常，進入唯讀保護');
         return;
       }
       // 真正的全新空檔（首次建庫）→ bootstrap 空骨架
@@ -240,8 +289,12 @@ const graphDb = {
     if (!(opts && opts.force) && currentVersion && parsed.version < currentVersion &&
         dbCache && Object.keys(dbCache).length) {
       console.warn(`[graphDb] 忽略較舊的讀取結果 (server v${parsed.version} < local v${currentVersion})，保留本地較新版本`);
+      // ⚠ 內容不採用 → eTag 也不可換成這次讀到的：否則下一次寫入的 If-Match 會對上現在的檔案，
+      //   把這份（可能已過時的）快取整檔寫回，蓋掉磁碟上的內容（例：SharePoint「版本歷史」還原、
+      //   或另一個工具的寫入）。保留舊 eTag → 下一次寫入得到 412 → 以磁碟為準重讀（force）再合併。
       return;
     }
+    currentEtag = metaEtag;
     dbCache = parsed;
     currentVersion = dbCache.version;
     // 記錄這次讀到的 projects 筆數，作為「歸零保險絲」的比較基準（反映磁碟現況，
@@ -310,7 +363,10 @@ const graphDb = {
         await this._writeFile(opts);
         return decision.value;
       } catch (e) {
-        if (e && e.status === 412 && attempt < MAX) {
+        // 412：別人改過 → 以磁碟為準重讀後在最新狀態上重算；逾時／斷線／429／5xx：不確定有沒有寫成功 →
+        // 一樣重讀再試（帶 If-Match：若其實已寫成功會得到 412 再重讀，不會蓋掉任何人的寫入）
+        const retryable = e && (e.status === 412 || e.network || e.status === 429 || e.status >= 500);
+        if (retryable && attempt < MAX) {
           await this._sleep(120 * (attempt + 1));
           // 取得最新內容＋新 etag（force：衝突解決讀取一律以磁碟為準），
           // 下一圈在最新狀態上重跑 mutateFn
@@ -445,13 +501,14 @@ const graphDb = {
   },
 
   async getDoc(colName, docId) {
-    return dbCache[colName]?.[docId] ?? null;
+    return _clone(dbCache[colName]?.[docId] ?? null);
   },
 
   async setDoc(colName, docId, data) {
+    const copy = _clone(data);
     await this._withOptimisticWrite((cache) => {
       if (!cache[colName]) cache[colName] = {};
-      cache[colName][docId] = data;
+      cache[colName][docId] = copy;
     });
   },
 
@@ -459,10 +516,12 @@ const graphDb = {
     // 衝突時於最新 doc 上重做 shallow merge：他人對其他 doc／collection 的寫入
     // 不會被我們的整檔 PUT 回滾。（同一 doc 內巢狀欄位如 global_params 的競態，
     // 仍依 CLAUDE.md 規則 2 由呼叫端先 getDoc 合併。）
+    // fields 是函式時，每次都在最新 doc 上重算（三方合併）；先算完才動快取：算的途中丟例外 → 快取不變
     await this._withOptimisticWrite((cache) => {
+      const existing = (cache[colName] || {})[docId];
+      const f = _clone(_resolveFields(fields, existing));
       if (!cache[colName]) cache[colName] = {};
-      const existing = cache[colName][docId] ?? {};
-      cache[colName][docId] = { ...existing, ...fields };
+      cache[colName][docId] = { ...(existing ?? {}), ...f };
     });
   },
 
@@ -475,13 +534,19 @@ const graphDb = {
    */
   async writeBatch(ops) {
     await this._withOptimisticWrite((cache) => {
-      for (const op of ops) {
+      // 先把每一筆要寫的內容算好（fields 可以是函式：在最新 doc 上計算）；
+      // 任何一筆算的途中丟例外（例如合併有未決定的衝突）→ 整批都不動快取、不寫入
+      const plan = ops.map(op => {
+        const existing = (cache[op.col] || {})[op.id];
+        return { op, value: _clone(op.type === 'update' ? _resolveFields(op.fields, existing) : op.data) };
+      });
+      for (const { op, value } of plan) {
         if (!cache[op.col]) cache[op.col] = {};
         if (op.type === 'update') {
           const existing = cache[op.col][op.id] ?? {};
-          cache[op.col][op.id] = { ...existing, ...op.fields };
+          cache[op.col][op.id] = { ...existing, ...value };
         } else {
-          cache[op.col][op.id] = op.data;
+          cache[op.col][op.id] = value;
         }
       }
     });
@@ -549,7 +614,11 @@ const graphDb = {
   },
 
   /* 列出某專案在 tcp_images 資料夾下實際存在的圖檔路徑（供對帳/垃圾回收用）。
-     檔名格式為 `${projectId}_${catKey}_${ts}.jpg`，以 projectId 前綴過濾。 */
+     檔名格式為 `${projectId}_${catKey}_${ts}.jpg`。專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，
+     剩下的才是專案 id，必須「完全相等」。
+     ⚠ 原本用 startsWith(projectId + '_')：專案 A 每次存檔清孤兒時，會把 id 以「A_」開頭的另一個專案
+       （例：5G-RRU 複製出來的「FDD 4T4R 60W v2」→ id FDD_4T4R_60W_v2）的圖當成孤兒刪掉；刪專案時也一樣。
+     檔名對不上格式的一律不列（不認得的檔案不刪）。 */
   async listTcpImages(projectId) {
     if (!_siteId) await this._resolveDriveItemId();
     const folder = SHAREPOINT_CONFIG.filePath.replace(/[^/]+$/, '') + 'tcp_images';
@@ -565,7 +634,8 @@ const graphDb = {
       const data = await resp.json();
       for (const it of (data.value || [])) {
         if (it.folder) continue;
-        if (!projectId || it.name.startsWith(projectId + '_')) out.push(`${folder}/${it.name}`);
+        const m = /^(.+)_([^_]+)_(\d+)\.[A-Za-z0-9]+$/.exec(it.name || '');
+        if (!projectId || (m && m[1] === projectId)) out.push(`${folder}/${it.name}`);
       }
       url = data['@odata.nextLink'] || null;
     }

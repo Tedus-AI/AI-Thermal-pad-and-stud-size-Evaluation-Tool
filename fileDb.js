@@ -9,6 +9,10 @@ window.ConflictError = ConflictError;
 
 let fileHandle = null;
 let dbCache = {};
+function _fdbClone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }   // 讀寫用複本（理由同 graphDb）
+function _fdbFields(fields, existing) {   // fields 可以是函式：在目前（最新）的 doc 上計算（三方合併用）
+  return _fdbClone(typeof fields === 'function' ? fields(existing ? _fdbClone(existing) : null) : fields);
+}
 let currentVersion = 0;
 let dbCorrupted = false;     // 壞檔唯讀保護：JSON 解析失敗時禁止一切寫入
 let lastReadProjects = 0;    // 上次成功讀檔時的 projects 筆數（歸零保險絲基準）
@@ -84,20 +88,22 @@ const fileDb = {
 
   async getDoc(colName, docId) {
     this._assertReady();
-    return dbCache[colName]?.[docId] ?? null;
+    return _fdbClone(dbCache[colName]?.[docId] ?? null);
   },
 
   async setDoc(colName, docId, data) {
     this._assertReady();
     if (!dbCache[colName]) dbCache[colName] = {};
-    dbCache[colName][docId] = data;
+    dbCache[colName][docId] = _fdbClone(data);
     await this._writeFile();
   },
 
   async updateDoc(colName, docId, fields) {
     this._assertReady();
-    const existing = dbCache[colName]?.[docId] ?? {};
-    dbCache[colName][docId] = { ...existing, ...fields };
+    const existing = dbCache[colName]?.[docId];
+    const f = _fdbFields(fields, existing);
+    if (!dbCache[colName]) dbCache[colName] = {};
+    dbCache[colName][docId] = { ...(existing ?? {}), ...f };
     await this._writeFile();
   },
 
@@ -109,13 +115,16 @@ const fileDb = {
    */
   async writeBatch(ops) {
     this._assertReady();
-    for (const op of ops) {
+    // 先把每一筆要寫的內容算好；任何一筆丟例外（例如合併有未決定的衝突）→ 整批都不動快取
+    const plan = ops.map(op => ({ op, value: op.type === 'update'
+      ? _fdbFields(op.fields, (dbCache[op.col] || {})[op.id]) : _fdbClone(op.data) }));
+    for (const { op, value } of plan) {
       if (!dbCache[op.col]) dbCache[op.col] = {};
       if (op.type === 'update') {
         const existing = dbCache[op.col][op.id] ?? {};
-        dbCache[op.col][op.id] = { ...existing, ...op.fields };
+        dbCache[op.col][op.id] = { ...existing, ...value };
       } else {
-        dbCache[op.col][op.id] = op.data;
+        dbCache[op.col][op.id] = value;
       }
     }
     await this._writeFile();
