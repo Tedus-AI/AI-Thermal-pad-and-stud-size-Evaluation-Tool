@@ -1211,6 +1211,18 @@
   .sg-comp-list-table td.sg-limit-col .sg-cell-input::-webkit-inner-spin-button {
     -webkit-appearance: none; margin: 0;
   }
+  /* 限溫欄底下：限溫對象小下拉（自動／Tj／Tc）＋疑似範例值提醒（琥珀色：只提醒、不擋計算） */
+  .sg-comp-list-table td.sg-limit-col .sg-lim-ref { margin-top: 3px; }
+  .sg-comp-list-table td.sg-limit-col .sg-lim-ref select { font-size: 0.72rem; padding: 1px 2px; max-width: 5.6em; }
+  .sg-comp-list-table td.sg-limit-col .sg-lim-ref select.auto { color: #475569; }
+  .sg-comp-list-table td.sg-limit-col .sg-cell-input.sg-suspect { border: 2px dashed #d97706; background: #fffbeb; }
+  .sg-lim-sus { margin-top: 3px; font-size: 0.68rem; color: #92400e; line-height: 1.3; white-space: nowrap; }
+  .sg-lim-sus button { padding: 0 5px; font-size: 0.66rem; margin-left: 2px; cursor: pointer; }
+  .sg-lim-sus-banner { background: #fffbeb; border: 1px solid #fcd34d; border-left: 5px solid #d97706; color: #78350f;
+    border-radius: 8px; padding: 9px 14px; margin: 0 0 12px; font-size: 0.84rem; line-height: 1.6; }
+  .sg-lim-sus-banner ul { margin: 4px 0 0 18px; } .sg-lim-sus-banner li { margin: 2px 0; }
+  .sg-lim-sus-banner .cat { margin-left: 4px; font-size: 0.7rem; font-weight: 800; color: #92400e; }
+  .sg-lim-sus-banner button { padding: 1px 8px; font-size: 0.72rem; margin-left: 6px; cursor: pointer; }
   .sg-comp-list-table .sg-cell-input.comp-name {
     text-align: left;
     font-weight: 600;
@@ -7990,7 +8002,7 @@ function sgRenderProjectComponents() {
         <td class="sg-edit-cell"><input class="sg-cell-input comp-name" type="text" value="${escapeHtml(comp.Component || '')}" data-cat="${c}" data-idx="${i}" data-field="Component" onchange="sgOnCompEdit(this)">${refBadge}</td>
         <td class="sg-edit-cell"><div class="sg-type-cell"><select data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnTypeChange(this)"><option value="">--</option>${SG_TYPE_OPTIONS.map(o => `<option value="${o}"${selectVal === o ? ' selected' : ''}>${o}</option>`).join('')}</select><input type="text" class="sg-type-custom${customVisible}" value="${escapeHtml(customVal)}" placeholder="自訂類型" data-cat="${c}" data-idx="${i}" data-field="Type" onchange="sgOnCompEdit(this)"></div></td>
         <td class="sg-edit-cell sg-qty-col"><input class="sg-cell-input" type="number" min="0" value="${escapeAttr(comp.Qty ?? 1)}" data-cat="${c}" data-idx="${i}" data-field="Qty" onchange="sgOnCompEdit(this)"></td>
-        <td class="sg-edit-cell sg-limit-col"><input class="sg-cell-input" type="number" step="any" min="0" value="${escapeAttr(comp['Limit(C)'] ?? '')}" placeholder="—" title="元件允許的最高運作溫度（datasheet）。5G-RRU 以此算裕度：Allowed_dT = 限溫 − 內部溫降 − 局部環溫" data-cat="${c}" data-idx="${i}" data-field="Limit(C)" onchange="sgOnCompEdit(this)"></td>
+        <td class="sg-edit-cell sg-limit-col"><input class="sg-cell-input${CompMerge.limitSuspect(comp) ? ' sg-suspect' : ''}" type="number" step="any" min="0" value="${escapeAttr(comp['Limit(C)'] ?? '')}" placeholder="—" title="元件允許的最高運作溫度（datasheet）。下方小下拉是「限溫對象」：這個溫度指的是 Tj（晶片接面）還是 Tc（外殼）。5G-RRU 以此算裕度：允許溫升 = 限溫 − 內部溫降 − 局部環溫（以 Tc 判定時內部溫降不含 Rjc）" data-cat="${c}" data-idx="${i}" data-field="Limit(C)" onchange="sgOnCompEdit(this)"><div class="sg-lim-extra">${sgLimitExtraHtml(comp, c, i)}</div></td>
         <td class="sg-edit-cell">${pwCell('Power(W)', comp['Power(W)'])}${measBadge('hot')}</td>
         <td class="sg-edit-cell">${pwCell('Power_RT(W)', comp['Power_RT(W)'])}${measBadge('rt')}</td>
         <td class="sg-edit-cell sg-rth-cell">${rthCell}</td>
@@ -8047,7 +8059,8 @@ function sgRenderProjectComponents() {
     html = '<div class="sg-comp-list-empty">此專案尚無元件資料，可點選下方按鈕新增。</div>' + html;
   }
 
-  body.innerHTML = html;
+  body.innerHTML = '<div id="sg-lim-sus-banner"></div>' + html;
+  sgRenderLimitSuspectBanner();
   ['sg-export-excel-btn','sg-export-pdf-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
   container.style.display = 'block';
 
@@ -8193,10 +8206,82 @@ function sgOnCompEdit(el) {
   // 算出一個超大負裕度，看起來像元件要燒掉而不是「還沒填」。
   if (SG_SHARED_NUM_FIELDS.includes(field) && (val === '' || val === null || (typeof val === 'number' && isNaN(val)))) {
     delete sgProjectData[fieldKey][idx][field];
+    if (field === 'Limit(C)') sgRefreshLimitCell(cat, idx, el);
     return;
   }
 
   sgProjectData[fieldKey][idx][field] = val;
+  // 限溫對象的自動判定看類型與名稱、疑似範例值看限溫 → 這三欄改了就地更新限溫欄（不整表重繪）
+  if (field === 'Limit(C)' || field === 'Type' || field === 'Component') sgRefreshLimitCell(cat, idx, el);
+}
+
+/* ── 限溫欄：限溫對象（Limit_Ref：Tj／Tc）＋限溫疑似範例值 ─────────────────────────
+   單一事實來源是 CompMerge.limitRef／limitSuspect（與 5G-RRU 共用、逐字相同的 compMerge.js），
+   兩個工具看到的「自動判定」與提醒才會一致。Limit_Ref 沒有 key＝自動判定（選「自動」一律 delete，不寫 ''）。
+   疑似範例值只提醒、不擋計算（琥珀色）；按「確認」寫 _limit_ok ＝ 當時的限溫，之後改成別的值會再提醒。 */
+function sgLimitExtraHtml(comp, cat, i) {
+  const auto = (() => { const o = Object.assign({}, comp); delete o.Limit_Ref; return CompMerge.limitRef(o, cat); })();
+  const cur = comp.Limit_Ref == null ? '' : String(comp.Limit_Ref);
+  const known = cur === '' || cur === 'Tj' || cur === 'Tc';
+  let opts = `<option value=""${cur === '' ? ' selected' : ''}>自動·${auto.ref}</option>` +
+             `<option value="Tj"${cur === 'Tj' ? ' selected' : ''}>Tj 接面</option>` +
+             `<option value="Tc"${cur === 'Tc' ? ' selected' : ''}>Tc 外殼</option>`;
+  if (!known) opts += `<option value="${escapeAttr(cur)}" selected>${escapeHtml(cur)}（未知值）</option>`;
+  const tip = '限溫對象：這個限溫指的是 Tj（晶片接面）還是 Tc（外殼）。5G-RRU 以 Tc 判定時，內部溫降與允許溫升都不含 Rjc 那段。\n' +
+              '自動＝' + auto.ref + '（依' + auto.why + '）' + (cur ? '；目前指定為 ' + cur : '');
+  let h = `<div class="sg-lim-ref"><select class="${cur ? '' : 'auto'}" title="${escapeAttr(tip)}" data-cat="${cat}" data-idx="${i}" onchange="sgOnLimitRefChange(this)">${opts}</select></div>`;
+  const sus = CompMerge.limitSuspect(comp);
+  if (sus) h += `<div class="sg-lim-sus" title="${escapeAttr(sus.note + '。只提醒、不影響計算。')}">⚠ 疑似範例值<button type="button" onclick="sgConfirmLimitOk('${cat}',${i})">確認</button></div>`;
+  return h;
+}
+function sgOnLimitRefChange(sel) {
+  const cat = sel.dataset.cat, idx = parseInt(sel.dataset.idx, 10);
+  const comp = sgProjectData && sgProjectData[SG_CAT_MAP[cat].field] && sgProjectData[SG_CAT_MAP[cat].field][idx];
+  if (!comp) return;
+  if (sel.value === 'Tj' || sel.value === 'Tc') comp.Limit_Ref = sel.value;
+  else if (sel.value === '') delete comp.Limit_Ref;
+  sgRefreshLimitCell(cat, idx, sel);
+}
+function sgConfirmLimitOk(cat, idx) {
+  const comp = sgProjectData && sgProjectData[SG_CAT_MAP[cat].field] && sgProjectData[SG_CAT_MAP[cat].field][idx];
+  if (!comp) return;
+  const sus = CompMerge.limitSuspect(comp);
+  if (!sus) return;
+  if (!confirm(`確認「${comp.Component || '(未命名)'}」的限溫 ${sus.value} °C 是實際規格？\n\n提醒原因：${sus.note}。\n\n確認後不再提醒（限溫之後改成別的值會再提醒）。記得按「儲存元件變更」寫回資料庫。`)) return;
+  comp._limit_ok = sus.value;
+  sgRefreshLimitCell(cat, idx);
+}
+/* 就地更新某一列的限溫欄（虛線框、限溫對象、提醒）與上方橫幅。el＝觸發的欄位（找得到同一列就不用重新查表） */
+function sgRefreshLimitCell(cat, idx, el) {
+  const comp = sgProjectData && sgProjectData[SG_CAT_MAP[cat].field] && sgProjectData[SG_CAT_MAP[cat].field][idx];
+  let td = el && el.closest ? el.closest('tr')?.querySelector('td.sg-limit-col') : null;
+  if (!td) {
+    const inp = document.querySelector(`#sg-project-components-body input[data-field="Limit(C)"][data-cat="${cat}"][data-idx="${idx}"]`);
+    td = inp ? inp.closest('td') : null;
+  }
+  if (comp && td) {
+    const inp = td.querySelector('input.sg-cell-input');
+    if (inp) inp.classList.toggle('sg-suspect', !!CompMerge.limitSuspect(comp));
+    const box = td.querySelector('.sg-lim-extra');
+    if (box) box.innerHTML = sgLimitExtraHtml(comp, cat, idx);
+  }
+  sgRenderLimitSuspectBanner();
+  if (typeof applyReadonlyLock === 'function') applyReadonlyLock();
+}
+function sgRenderLimitSuspectBanner() {
+  const el = document.getElementById('sg-lim-sus-banner');
+  if (!el) return;
+  const list = [];
+  if (sgProjectData) for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
+    (sgProjectData[catInfo.field] || []).forEach((comp, idx) => {
+      const s = CompMerge.limitSuspect(comp);
+      if (s) list.push({ catKey, idx, name: comp.Component || '(未命名)', value: s.value, note: s.note });
+    });
+  }
+  el.innerHTML = list.length ? `<div class="sg-lim-sus-banner">⚠ <b>限溫疑似範例值（${list.length} 顆）</b>：這些限溫不像實際規格，可能是從範例或舊資料帶過來還沒改。` +
+    `不影響計算，但限溫偏高會讓 5G-RRU 把散熱器算得偏小，請對照規格書確認。<ul>` +
+    list.map(x => `<li><b>${escapeHtml(x.name)}</b><span class="cat">${escapeHtml(x.catKey)}</span>　限溫 ${x.value} °C — ${escapeHtml(x.note)}` +
+      `<button type="button" onclick="sgConfirmLimitOk('${x.catKey}',${x.idx})">✓ 確認是實際值</button></li>`).join('') + `</ul></div>` : '';
 }
 
 /* 元件改名時，連動更新該分類所有頁面已標註的 componentRef（舊名 → 新名）。
@@ -8246,7 +8331,7 @@ const SG_VARIANT_CARRY = [
   // Tab1/Tab2 推導出來的欄位（也要帶，否則快選複製的元件會掉掉這些值）
   'Board_Type', 'Pad_L', 'Pad_W', 'R_jc', 'TIM_Model', 'TIM_Type',
   // 5G-RRU 專屬欄位（本工具無編輯入口，但要原值帶過，不可讓罐頭值蓋掉）
-  'Height(mm)', 'Thick(mm)', 'Limit(C)',
+  'Height(mm)', 'Thick(mm)', 'Limit(C)', 'Limit_Ref',
 ];
 
 /* 把（可能有多份的）規格書逐份標上來源專案：本專案只是參照，刪除時不可刪來源檔。
@@ -9964,6 +10049,7 @@ const SG_REF_SPEC_FIELDS = [
   { key: 'Rth',         label: '熱阻（θ/Ψ）' },
   { key: 'SpecFile',    label: '規格書' },
   { key: 'Limit(C)',    label: '限溫 (°C)' },
+  { key: 'Limit_Ref',   label: '限溫對象 (Tj/Tc)' },
   { key: 'Type',        label: '元件類型' },
   { key: 'Temp_Sensor', label: 'Temp Sensor' },
   { key: 'Local_Qty',   label: 'Local 數量' },
@@ -12311,9 +12397,11 @@ function sgExportExcel() {
   for (const [catKey, catInfo] of Object.entries(SG_CAT_MAP)) {
     const items = sgProjectData[catInfo.field] || [];
     // 欄位順序與畫面一致（PDF 是畫面截圖，故三方同步只需顧 Excel）
-    const headers = ['Component','Type','Qty','限溫(°C)',`Pd@${tempLabel}°C(W)`,'Pd@25°C(W)','熱阻(°C/W)','Thermal Via 內徑(mil)','Thermal Via Qty','Temp Sensor','備註'];
+    const headers = ['Component','Type','Qty','限溫(°C)','限溫對象',`Pd@${tempLabel}°C(W)`,'Pd@25°C(W)','熱阻(°C/W)','Thermal Via 內徑(mil)','Thermal Via Qty','Temp Sensor','備註'];
     const rows = items.map(c => [
-      c.Component||'', c.Type||'', c.Qty??'', c['Limit(C)']??'', c['Power(W)']??'', c['Power_RT(W)']??'',
+      c.Component||'', c.Type||'', c.Qty??'', c['Limit(C)']??'',
+      (lr => lr.auto ? `自動 ${lr.ref}（${lr.why}）` : lr.ref)(CompMerge.limitRef(c, catKey)),
+      c['Power(W)']??'', c['Power_RT(W)']??'',
       sgRthExportText(c), c.TV_ID_mil||'', c.TV_Qty||'', c.Temp_Sensor||'', c.note||''
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);

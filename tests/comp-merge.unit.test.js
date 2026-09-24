@@ -15,6 +15,8 @@
  *   [J] 專案欄位（project_name）三方比對
  *   [K] ensureCids／projectDigest／saveWithMerge 流程
  *   [L] 呼叫端自己推導的欄位（derivedKeys）不比對、不跳假衝突
+ *   [M] 限溫與限溫對象（Limit_Ref）整組比對
+ *   [N] 共用元件語意：limitRef（限溫對象自動判定）、limitSuspect（限溫疑似範例值）
  *
  * 執行：node tests/comp-merge.unit.test.js
  */
@@ -213,6 +215,57 @@ const BASE = {
     const r2 = CM.mergeProject(b2, m2, t2, { derivedKeys: ['Thick(mm)'] });
     ok('推導欄位兩邊不同也不跳衝突，一律用畫面上的值（呼叫端之後重新推導）',
        r2.conflicts.length === 0 && r2.fields.rf_data[0]['Thick(mm)'] === 3 && r2.fields.rf_data[0].Board_Type === 'Copper Coin', r2);
+  }
+
+  console.log('\n[M] 限溫與限溫對象整組比對');
+  {
+    const b = { digital_data: [{ _cid: 'd', Component: 'DDR', 'Limit(C)': 95 }] };
+    const m = { digital_data: [{ _cid: 'd', Component: 'DDR', 'Limit(C)': 95, Limit_Ref: 'Tj' }] };   // 我只改對象
+    const t = { digital_data: [{ _cid: 'd', Component: 'DDR', 'Limit(C)': 105 }] };                   // 對方只改數字
+    const r = CM.mergeProject(b, m, t);
+    ok('一邊改限溫、一邊改對象 → 整組衝突（不拼成「對方的數字＋我的對象」）',
+       r.unresolved.length === 1 && r.unresolved[0].fields.join() === 'Limit(C),Limit_Ref', r.unresolved);
+    ok('衝突視窗寫出兩邊的數字與對象',
+       CM.fmtUnit(['Limit(C)', 'Limit_Ref'], r.unresolved[0].mine) === '95 °C（Tj）' &&
+       CM.fmtUnit(['Limit(C)', 'Limit_Ref'], r.unresolved[0].theirs) === '105 °C（對象自動判定）', [CM.fmtUnit(['Limit(C)', 'Limit_Ref'], r.unresolved[0].mine), CM.fmtUnit(['Limit(C)', 'Limit_Ref'], r.unresolved[0].theirs)]);
+    const r2 = CM.mergeProject(b, m, C(b));
+    ok('只有我改 → 用我的對象', r2.conflicts.length === 0 && r2.fields.digital_data[0].Limit_Ref === 'Tj' && r2.fields.digital_data[0]['Limit(C)'] === 95);
+    const m3 = C(b); m3.digital_data[0].Limit_Ref = '';
+    ok("對象空字串等於沒填（不算修改）", CM.mergeProject(b, m3, C(b)).fields.digital_data[0].Limit_Ref === undefined && CM.normalizeComp(m3.digital_data[0]).Limit_Ref === undefined);
+    const b4 = { rf_data: [{ _cid: 's', Component: 'SFP', 'Limit(C)': 200 }] };
+    const m4 = { rf_data: [{ _cid: 's', Component: 'SFP', 'Limit(C)': 200, _limit_ok: 200 }] };        // 我確認了
+    const t4 = { rf_data: [{ _cid: 's', Component: 'SFP', 'Limit(C)': 85 }] };                        // 對方改了數字
+    const r4 = CM.mergeProject(b4, m4, t4);
+    ok('確認標記不跟限溫綁成一組：不跳衝突，數字用對方的、標記留著（值不同 → 之後照樣提醒）',
+       r4.conflicts.length === 0 && r4.fields.rf_data[0]['Limit(C)'] === 85 && r4.fields.rf_data[0]._limit_ok === 200, r4.fields.rf_data[0]);
+  }
+
+  console.log('\n[N] 共用元件語意：限溫對象自動判定、限溫疑似範例值');
+  {
+    const ref = (c, cat) => { const r = CM.limitRef(c, cat); return r.ref + (r.auto ? '·' + r.why : ''); };
+    ok('有填就照填的', ref({ Component: 'SFP', Limit_Ref: 'Tj' }, 'digital') === 'Tj' && CM.limitRef({ Limit_Ref: 'Tc' }).auto === false);
+    ok('AI-Thermal 的元件類型優先：SFP／DDR／濾波器 → Tc，DC-DC／CPU → Tj（即使在 PWR 類）',
+       ref({ Component: 'U1', Type: 'SFP' }, 'digital') === 'Tc·類型 SFP' && ref({ Component: 'M', Type: 'DDR' }, 'digital') === 'Tc·類型 DDR' &&
+       ref({ Component: 'F', Type: 'filter' }, 'rf') === 'Tc·類型 filter' && ref({ Component: 'Buck', Type: 'DC-DC' }, 'pwr') === 'Tj·類型 DC-DC' &&
+       ref({ Component: 'SoC', Type: 'CPU' }, 'DIGITAL') === 'Tj·類型 CPU');
+    ok('沒有類型 → 舊規則：PWR 類、名稱含 DDR 或 SFP → Tc，其餘 Tj（兩個工具的分類寫法都認得）',
+       ref({ Component: 'Power Mod' }, 'pwr') === 'Tc·PWR 類' && ref({ Component: 'Power Mod' }, 'PWR') === 'Tc·PWR 類' &&
+       ref({ Component: 'Power Mod' }, 'pwr_data') === 'Tc·PWR 類' && ref({ Component: '16G DDR' }, 'digital') === 'Tc·名稱含 DDR' &&
+       ref({ Component: 'SFP28' }, 'digital') === 'Tc·名稱含 SFP' && ref({ Component: 'CPU (FPGA)' }, 'digital') === 'Tj·預設' &&
+       ref({ Component: 'X', Type: '其他' }, 'rf') === 'Tj·預設');
+    ok('不認得的值當成沒填（自動判定）', ref({ Component: 'A', Limit_Ref: 'tc' }, 'rf') === 'Tj·預設');
+    const sus = c => { const r = CM.limitSuspect(c); return r ? r.id + ':' + r.value : null; };
+    ok('光模組 > 85 °C、DDR > 105 °C → 提醒', sus({ Component: 'SFP', 'Limit(C)': 200 }) === 'sfp:200' &&
+       sus({ Component: 'U7', Type: 'SFP', 'Limit(C)': 95 }) === 'sfp:95' && sus({ Component: 'SFP', 'Limit(C)': 85 }) === null &&
+       sus({ Component: 'LPDDR4', 'Limit(C)': 125 }) === 'ddr:125' && sus({ Component: '16G DDR', 'Limit(C)': 95 }) === null);
+    ok('功放以外的元件 ≥ 200 °C → 提醒；功放（類型或名稱）不提醒',
+       sus({ Component: 'Cavity Filter', 'Limit(C)': 200 }) === 'hot:200' && sus({ Component: 'Circulator', 'Limit(C)': 125 }) === null &&
+       sus({ Component: 'Final PA', 'Limit(C)': 225 }) === null && sus({ Component: 'Driver PA', 'Limit(C)': 200 }) === null &&
+       sus({ Component: 'BTS6201U-PreDriver', 'Limit(C)': 200 }) === null && sus({ Component: 'GTRB384608FC', Type: 'Final PA', 'Limit(C)': 250 }) === null);
+    ok('確認過（_limit_ok ＝ 目前的限溫）→ 不再提醒；限溫改了 → 再提醒；字串數字也認得',
+       sus({ Component: 'SFP', 'Limit(C)': 200, _limit_ok: 200 }) === null && sus({ Component: 'SFP', 'Limit(C)': 150, _limit_ok: 200 }) === 'sfp:150' &&
+       sus({ Component: 'SFP', 'Limit(C)': '200', _limit_ok: '200' }) === null);
+    ok('沒有限溫 → 不提醒（缺值交給必填檢查）', sus({ Component: 'SFP' }) === null && sus({ Component: 'SFP', 'Limit(C)': '' }) === null);
   }
 
   console.log('\n[K] ensureCids／projectDigest／saveWithMerge');

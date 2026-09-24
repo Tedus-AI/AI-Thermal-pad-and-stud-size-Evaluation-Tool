@@ -93,6 +93,7 @@
 | `Component` | 兩邊 | 名稱即 key |
 | `Qty`、`Power(W)` | 兩邊 | |
 | `Limit(C)` | 兩邊 | AI-Thermal 在 Tab1「限溫(°C)」欄（Qty 右側）|
+| `Limit_Ref` | 兩邊 | **限溫對象** `'Tj'`／`'Tc'`：限溫欄底下的小下拉（兩個工具都有）。沒有 key＝自動判定，見下方「限溫對象」 |
 | `Type`、`Power_RT(W)`、`TV_ID_mil`、`TV_Qty`、`Temp_Sensor`、`Local_Qty`、`Remote_Qty`、`note`、`Rth`、`SpecFile` | 只有 AI-Thermal | 5G-RRU 不顯示但會原樣保留 |
 | `Board_Type`、`Pad_L`、`Pad_W` | AI-Thermal **推導**（Tab2）| 由 Tab2「主散熱路徑」＋元件大小／E-PAD 大小推導，見下節 |
 | `TIM_Model` | AI-Thermal **推導**（Tab2）| 由 Tab2「TIM Type」底下的型號下拉推導；值是 `tim_library` 的**型號名** |
@@ -102,13 +103,37 @@
 
 > ⚠ 上表**每一個** per-component 欄位都必須出現在 `SG_VARIANT_CARRY`（含推導出來的
 > `Board_Type`/`Pad_L`/`Pad_W`/`R_jc`/`TIM_Model`/`TIM_Type`）。漏一個，快選複製元件時就會掉值。
-> 目前應為 21 項，與上表一致。
+> 目前應為 22 項，與上表一致（含 `Limit_Ref`）。
 >
 > 內部欄位（底線開頭，兩個工具都原樣保留、**不列入** carry 白名單）：`_cid`（元件 id，存檔三方合併配對用，
 > 兩邊都會補發，見下方「存檔三方合併」）、`_defaults_ok`（5G-RRU 寫：使用者確認過這顆不是舊版罐頭預設值）、
 > `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`／`_ref_*`（5G-RRU 的排除與快選參照）、
 > `_renamed_from`（5G-RRU 寫：改過名的元件，本工具以名稱當 key 的資料還掛在哪個名稱底下；本工具存檔搬完就清掉，
-> 見下方「元件改名」）。
+> 見下方「元件改名」）、`_limit_ok`（兩邊都會寫：使用者確認「限溫疑似範例值」其實是實際規格時，記下**確認的那個限溫數字**，
+> 見下方「限溫對象」）。
+
+#### 限溫對象（`Limit_Ref`）與限溫疑似範例值（`_limit_ok`）⚠️ 兩個工具共用規則
+
+「限溫」指的是 Tj（晶片接面）還是 Tc（外殼／本體）。原本只有 5G-RRU 用名稱猜（PWR 類或名稱含 ddr → Tc），
+本工具看不到也改不了；而且 5G-RRU 的允許溫升一律扣 P×Rjc，Tc 類元件 Rjc > 0 時會低估允許溫升。
+
+- **`Limit_Ref`**：`'Tj'`／`'Tc'`，沒有 key＝自動判定（選「自動」一律 `delete`，不寫 `''`）。Tab1 限溫欄底下的小下拉
+  （`sgLimitExtraHtml`：`自動·Tc`／`Tj 接面`／`Tc 外殼`，「自動」直接寫出判定結果；值不認得時補「（未知值）」選項，
+  不靜默改掉）。改限溫、類型、名稱時 `sgRefreshLimitCell` **就地**更新那一格與上方橫幅（不整表重繪，UX 慣例 1）。
+- **單一事實來源 `CompMerge.limitRef(comp, cat)`**（兩邊逐字相同的 `compMerge.js`）：有填照填的；沒填 →
+  先看本工具的元件類型（`DDR`／`eMMC`／`SFP`／`GPS module`／`Power Modules`／`filter`／`CR` → Tc；
+  PA、DC-DC、LDO、CPU 等 IC 類型 → Tj），沒有類型才用舊規則（PWR 類、名稱含 DDR 或 SFP → Tc，其餘 Tj）。
+  ⚠ 所以**改元件類型會改變 5G-RRU 的判定溫度**（只在沒指定 `Limit_Ref` 時）。
+- 5G-RRU 端：內部溫降＝從判定溫度的位置到散熱器，**Tc 不含 Rjc**；允許溫升、裕度、溫升組成因此一致。
+  備份真實資料的體積與瓶頸完全不變（Tc 類元件 Rjc 都是 0）。
+- **限溫疑似範例值 `CompMerge.limitSuspect`**（只提醒、不擋計算，琥珀色）：光模組 > 85 °C、DDR > 105 °C、
+  功放以外 ≥ 200 °C（5G-RRU 內建範例的 SFP、Cavity Filter 都是 200，有專案原封不動沿用）。Tab1 限溫格虛線框＋
+  「⚠ 疑似範例值 [確認]」、元件清單上方 `#sg-lim-sus-banner` 橫幅。按確認 → 寫 `_limit_ok` ＝ 當時的限溫；
+  之後改成別的值會再提醒。未解鎖時下拉與確認鈕由 `applyReadonlyLock` 一起停用。
+- 快選白名單 `SG_VARIANT_CARRY` 含 `Limit_Ref`（`_limit_ok` 不帶）；參照同步 `SG_REF_SPEC_FIELDS` 含 `Limit_Ref`
+  （屬於這顆料本身）；Excel 匯出在限溫後面多一欄「限溫對象」。三方合併：`Limit(C)`＋`Limit_Ref` 綁成一組。
+- 契約測試：`tests/limit-ref.test.js`；規則本身在共用的 `tests/comp-merge.unit.test.js` [M]／[N]。
+  5G-RRU 端的計算與畫面見它的 CLAUDE.md「限溫對象」一節。
 
 ##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
 
@@ -209,7 +234,7 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 > 之後兩邊各走各的（唯一真的連動的是 `SpecFile` 的路徑與 `tim_library` 的型號）。
 > 來源後來補了熱阻，本專案不會自己變 → `sgRefSyncBadge` 每次重繪拿 `sgProjectTreeCache`
 > （快選面板本來就讀好的全專案元件，不必多讀 DB）比對 `SG_REF_SPEC_FIELDS`
-> （`Rth`／`SpecFile`／`Limit(C)`／`Type`／`Temp_Sensor`／`Local_Qty`／`Remote_Qty`
+> （`Rth`／`SpecFile`／`Limit(C)`／`Limit_Ref`／`Type`／`Temp_Sensor`／`Local_Qty`／`Remote_Qty`
 > —— 只有「屬於這顆料本身」的欄位），有差異就在元件名稱下方標「↻ 來源有更新 (n)」，
 > 點開 `sgRefSyncOpen` 列出「目前 vs 來源」逐欄勾選套用。守則：
 > **絕不自動覆蓋**（本專案可能刻意填不同值）；功耗／E-Pad 尺寸／導熱方式／TIM／備註
@@ -397,6 +422,7 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
 回本工具改瓦數存檔 → 高度被蓋回沒有）。
 
 - **`compMerge.js`（＋`tests/comp-merge.unit.test.js`）在兩個 repo 內容逐字相同**，改一邊就同步另一邊。
+  它也放了兩個**共用元件語意**函式（`limitRef`／`limitSuspect`）：兩個工具的畫面與計算必須判斷一致。
 - 快照：`sgProjectBase`（Tab1 載入時）、`clProjectBase`（Tab2 載入時；TH/ME 頁單獨推導別的專案、把三個陣列
   補進 Tab2 的寫入時用）。載入時 `CompMerge.ensureProjectCids` 補發 `_cid`，快照與畫面同一份 id；
   `sgMakeComp`（含快選）一律給**新的** `_cid`。
@@ -404,7 +430,7 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
   （412 重讀後重算；本機檔模式的 `ConflictError` 由 `CompMerge.saveWithMerge` 重試），逐顆元件、逐欄比對：
   我沒改 → 用資料庫的；只有我改 → 用我的；**兩邊改得不一樣 → 存檔前跳衝突視窗**，每一列選「用我的／用資料庫的」，
   全部選完才能存；取消 → 什麼都不寫、狀態列說明。相依欄位整組比對（E-Pad 長寬＋`_pad_from`、`R_jc`＋`_rjc_from`、
-  `Board_Type`＋`_bt_from`、`TIM_Type`＋`TIM_Model`）。本工具自己推導的欄位（`sgSyncRjcAll`、`sgDeriveAllFromSpecs`
+  `Board_Type`＋`_bt_from`、`TIM_Type`＋`TIM_Model`、`Limit(C)`＋`Limit_Ref`）。本工具自己推導的欄位（`sgSyncRjcAll`、`sgDeriveAllFromSpecs`
   在存檔前算好）屬於「我的修改」，照常寫入。
 - 本工具專屬、不與 5G-RRU 共寫的欄位（`param_*`、`tcPlacement`、`thermal_specs`、`validation_data`…）不做三方合併。
 - 存檔成功 → 畫面換成實際寫入的內容（含併入的 5G-RRU 修改）並當作新快照；兩頁同專案時 TH/ME 頁那份元件清單
