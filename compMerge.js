@@ -20,6 +20,9 @@
  * opts.derivedKeys：呼叫端自己每次都會重新推導的欄位（例：5G-RRU 的 Thick(mm) 由參數控制台帶入）。
  * 這些欄位不列入比對、不算「我改過這顆」、也不會跳衝突，一律用畫面上的值，呼叫端合併後再重新推導。
  * （不排除的話，載入時自動帶入的板厚會被當成「我改過」，對方刪掉那顆元件時就變成假衝突。）
+ *
+ * 另外放了兩個「共用元件語意」函式（limitRef／limitSuspect）：兩個工具的畫面與計算必須判斷一致，
+ * 放在這份兩邊逐字相同的檔案裡，才不會各寫一份、日後改一邊漏一邊。
  */
 (function (root) {
   'use strict';
@@ -30,7 +33,7 @@
   // 兩個工具共寫的數字欄位：比對前統一轉成數字。AI-Thermal 常存成字串、5G-RRU 存數字，
   // 不轉的話 "5.2" 與 5.2 會被當成「有改」而誤判成衝突。空字串／非數字 → 不寫 key。
   var NUM_KEYS = ['Qty', 'Power(W)', 'Height(mm)', 'Pad_L', 'Pad_W', 'Thick(mm)', 'Limit(C)', 'R_jc'];
-  var STR_KEYS = ['Board_Type', 'TIM_Type', 'TIM_Model'];
+  var STR_KEYS = ['Board_Type', 'TIM_Type', 'TIM_Model', 'Limit_Ref'];
 
   // 相依欄位整組比對：值與它的來源標記、成對的尺寸、型號與它所屬的類型
   var GROUPS = [
@@ -38,11 +41,13 @@
     ['R_jc', '_rjc_from'],
     ['Board_Type', '_bt_from'],
     ['TIM_Type', 'TIM_Model'],
+    ['Limit(C)', 'Limit_Ref'],   // 限溫與它指的是 Tj 還是 Tc：不可拼出「A 的數字＋B 的對象」
   ];
 
   var LABELS = {
     Component: '元件名稱', Qty: '數量', 'Power(W)': '瓦數 (W)', 'Power_RT(W)': '常溫瓦數 (W)',
-    'Height(mm)': '元件高度 (mm)', 'Thick(mm)': '板厚 (mm)', 'Limit(C)': '限溫 (°C)',
+    'Height(mm)': '元件高度 (mm)', 'Thick(mm)': '板厚 (mm)', 'Limit(C)': '限溫 (°C)／限溫對象',
+    Limit_Ref: '限溫對象 (Tj/Tc)', _limit_ok: '已確認限溫是實際值',
     Pad_L: 'E-Pad 長 × 寬', R_jc: '熱阻 Rjc', Board_Type: '導熱方式', TIM_Type: '介面材料／型號',
     Rth: '熱阻表（θ）', SpecFile: '規格書', note: '備註', Type: '類型',
     Temp_Sensor: '溫度感測', Local_Qty: 'Local 數量', Remote_Qty: 'Remote 數量',
@@ -340,6 +345,59 @@
     return loop();
   }
 
+  /* ── 共用元件語意：兩個工具的畫面與計算都呼叫這裡，判斷才會一致 ─────────── */
+  function typeOf(c) { return (c && typeof c.Type === 'string') ? c.Type.trim() : ''; }
+  function toNum(v) { return (typeof v === 'number') ? v : ((v === '' || v == null) ? NaN : parseFloat(v)); }
+
+  /* 限溫對象：這顆元件的「限溫」指的是 Tj（晶片接面）還是 Tc（外殼／本體）。
+     有填 Limit_Ref（'Tj'／'Tc'）→ 照填的。沒填 → 自動判定：
+       1. AI-Thermal 的元件類型：記憶體、光模組、模組、被動元件看外殼 → Tc；IC 看接面 → Tj
+       2. 沒有類型、或類型不在下面兩張清單 → 沿用舊規則：PWR 類、名稱含 DDR 或 SFP → Tc，其餘 Tj
+     cat 接受 'pwr'／'PWR'／'pwr_data'（兩個工具的分類寫法不同）。回傳 { ref, auto, why }。 */
+  var LIMIT_REF_TC_TYPES = ['DDR', 'eMMC', 'SFP', 'GPS module', 'Power Modules', 'filter', 'CR'];
+  var LIMIT_REF_TJ_TYPES = ['Final PA', 'Driver', 'Pre-driver', 'DC-DC', 'LDO', 'HOTSWAP', 'Power MOSFET',
+    'CLK IC', 'CPU', 'Baseband Processor', 'CLK buffer', 'Ethernet Transceiver', 'retimer'];
+  function limitRef(c, cat) {
+    var v = c && c.Limit_Ref;
+    if (v === 'Tj' || v === 'Tc') return { ref: v, auto: false, why: '已指定' };
+    var t = typeOf(c);
+    if (LIMIT_REF_TC_TYPES.indexOf(t) >= 0) return { ref: 'Tc', auto: true, why: '類型 ' + t };
+    if (LIMIT_REF_TJ_TYPES.indexOf(t) >= 0) return { ref: 'Tj', auto: true, why: '類型 ' + t };
+    var k = String(cat || '').toLowerCase();
+    if (k === 'pwr' || k === 'pwr_data') return { ref: 'Tc', auto: true, why: 'PWR 類' };
+    var n = nameOf(c);
+    if (/ddr/i.test(n)) return { ref: 'Tc', auto: true, why: '名稱含 DDR' };
+    if (/sfp|光模組/i.test(n)) return { ref: 'Tc', auto: true, why: '名稱含 SFP' };
+    return { ref: 'Tj', auto: true, why: '預設' };
+  }
+
+  /* 限溫疑似範例值（只提醒、不擋計算）：限溫明顯不像實際規格，多半是從內建範例或舊資料帶過來還沒改
+     （例：5G-RRU 內建範例的 SFP、腔體濾波器都是 200 °C，有專案原封不動沿用）。
+     使用者按「確認是實際值」→ 元件寫 `_limit_ok` ＝ 當時的限溫；之後限溫改成別的值會再提醒。
+     回傳 null 或 { id, value, note }。 */
+  var PA_TYPES = ['Final PA', 'Driver', 'Pre-driver'];
+  var PA_NAME_RE = /(^|[^a-z])pa([^a-z]|$)|amp|driver|gan|ldmos|功放|放大/i;
+  var LIMIT_SUSPECTS = [
+    { id: 'sfp', over: 85, note: '光模組的殼溫上限一般是 70 或 85 °C',
+      match: function (t, n) { return t === 'SFP' || /sfp|光模組|optical/i.test(n); } },
+    { id: 'ddr', over: 105, note: 'DDR 的殼溫上限一般是 85、95 或 105 °C',
+      match: function (t, n) { return t === 'DDR' || /ddr/i.test(n); } },
+    { id: 'hot', atLeast: 200, note: '功率放大器以外的元件，限溫很少到 200 °C',
+      match: function (t, n) { return PA_TYPES.indexOf(t) < 0 && !PA_NAME_RE.test(n); } },
+  ];
+  function limitSuspect(c) {
+    if (!isObj(c)) return null;
+    var v = toNum(c['Limit(C)']);
+    if (!isFinite(v) || toNum(c._limit_ok) === v) return null;
+    var t = typeOf(c), n = nameOf(c);
+    for (var i = 0; i < LIMIT_SUSPECTS.length; i++) {
+      var r = LIMIT_SUSPECTS[i];
+      if (!r.match(t, n)) continue;
+      if ((r.over !== undefined && v > r.over) || (r.atLeast !== undefined && v >= r.atLeast)) return { id: r.id, value: v, note: r.note };
+    }
+    return null;
+  }
+
   /* ── 畫面：衝突選擇視窗與提示 ─────────────────────────── */
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -368,6 +426,10 @@
       return o.R_jc + ' °C/W' + (o._rjc_from ? '（取自 ' + (o._rjc_from === 'JC_top' ? 'θJC,top' : 'θJC,bottom') + '）' : '');
     }
     if (u[0] === 'Board_Type') return o.Board_Type === undefined ? null : String(o.Board_Type);
+    if (u[0] === 'Limit(C)') {
+      if (o['Limit(C)'] === undefined && o.Limit_Ref === undefined) return null;
+      return (o['Limit(C)'] === undefined ? '?' : o['Limit(C)']) + ' °C' + (o.Limit_Ref ? '（' + o.Limit_Ref + '）' : '（對象自動判定）');
+    }
     if (u[0] === 'TIM_Type') {
       if (o.TIM_Type === undefined && o.TIM_Model === undefined) return null;
       return (o.TIM_Type || '—') + (o.TIM_Model ? '／型號 ' + o.TIM_Model : '');
@@ -533,6 +595,8 @@
     MergePending: MergePending, saveWithMerge: saveWithMerge,
     showConflictDialog: showConflictDialog, toast: toast, summaryText: summaryText,
     fmtUnit: fmtUnit,
+    limitRef: limitRef, limitSuspect: limitSuspect,
+    LIMIT_REF_TC_TYPES: LIMIT_REF_TC_TYPES, LIMIT_REF_TJ_TYPES: LIMIT_REF_TJ_TYPES, LIMIT_SUSPECTS: LIMIT_SUSPECTS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.CompMerge = api;
