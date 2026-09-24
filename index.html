@@ -6800,6 +6800,8 @@ async function onProjectChange() {
     clProjectBase = sgBaseFrom(data);   // 載入時快照（TH/ME 頁單獨推導別的專案時，存檔三方合併用）
     thermalSpecs = currentProjectData.thermal_specs || {};
     hiddenComponents = currentProjectData.hidden_components || {};
+    // 改過名的元件（5G-RRU 的改名標記、Tab1 還沒存的改名）：TH/ME 頁的資料先換到新名稱，那一列才不會變空白
+    sgLoadRenames(currentProjectData, { thermal_specs: thermalSpecs, hidden_components: hiddenComponents }, projectId);
 
     renderAllCategories();
     // 型號庫是頂層 collection、與專案無關，但 TIM 選型的下拉需要它 → 背景載入後再重繪一次
@@ -7713,7 +7715,8 @@ function sgBaseFrom(doc) {
 }
 // 兩個工具共寫的數字欄位：清空時刪 key、不寫 ''（空值一律不寫 key）
 const SG_SHARED_NUM_FIELDS = ['Limit(C)', 'Power(W)', 'Qty'];
-let sgPendingRenames = {};       // { 專案id: [{ from, to }] } 還沒存的元件改名（spec key），見 sgRenameSpecRefs
+// 5G-RRU 的元件改名標記：兩個工具寫入時都會重新決定它（本工具搬完資料就清掉）→ 合併時不比對、不跳衝突
+const SG_MERGE_DERIVED = ['_renamed_from'];
 let sgPendingSpecDeletes = [];   // [{ projId, path }] 已從畫面移除、存檔成功後才真的刪的規格書檔案
 
 /* 註：原本這裡有一份 SG_DEFAULTS（RF/Digital/PWR 的 Height/Pad/Thick/Board_Type/
@@ -7786,7 +7789,6 @@ async function sgOnProjectChange() {
   sgProjectData = null;
   sgVariantsCache = null; sgProjectTreeCache = null;   // 切換專案 → 失效快取，重繪時重抓跨專案 variant
   sgPendingSpec2 = {};   // 未存檔的快選元件會一起被丟掉 → 它們帶進來的元件大小/高度也不該留著
-  sgPendingRenames = {}; // 同理：沒存的改名不該搬 TH/ME 頁的資料
   sgPendingSpecDeletes = [];   // 沒存的「刪除規格書」→ 資料庫還指著那個檔 → 檔案不可刪
   sgProjectBase = null;
   if (!sgProjectId) {
@@ -7799,6 +7801,9 @@ async function sgOnProjectChange() {
     sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);   // 複本（dbAdapter 讀寫一律用複本）
     if (sgProjectData) CompMerge.ensureProjectCids(sgProjectData);   // 舊資料沒有元件 id → 這裡補發
     sgProjectBase = sgBaseFrom(sgProjectData);                         // 載入時快照（存檔三方合併用）
+    // 5G-RRU 改過名的元件（`_renamed_from`）：標註的 componentRef 先換到新名稱（存檔時寫回）；
+    // 手上那份 thermal_specs 也換（TH/ME 頁沒載入同一個專案時，θJC 依主散熱路徑取用讀的是它）
+    if (sgProjectData) sgLoadRenames(sgProjectData, { tcPlacement: sgProjectData.tcPlacement, thermal_specs: sgProjectData.thermal_specs }, null);
     sgShowStatus('已選擇專案：' + (sgProjectData?.project_name || sgProjectId), 'success');
     sgRenderProjectComponents();
     snapSgClean();   // 載入即為乾淨基準
@@ -9970,15 +9975,20 @@ const SG_REF_SPEC_FIELDS = [
    跟未存檔的元件同生共死 —— Tab1 換專案時一併清掉。 */
 let sgPendingSpec2 = {};
 
-/* ── 元件改名 → TH/ME 頁以元件名稱當 key 的資料一起搬 ─────────────────────
-   thermal_specs（元件大小、主散熱路徑、TIM…）與 hidden_components 都用 sgSpecKey(元件名) 當 key。
-   原本改名只搬了標註圖的參照 → 那些資料全變孤兒：TH/ME 頁那一列變空白、推導不出導熱方式／E-Pad，
-   到 5G-RRU 就成了必填紅框。
-   ⚠ Tab1/Tab2 各有獨立的專案選單：
-     (a) TH/ME 頁正好載入同一個專案 → 直接搬記憶體裡的 thermalSpecs／hiddenComponents，並把 TH/ME 頁
-         那份元件清單的名稱一起改（否則那一列會對不到規格）；
-     (b) 沒有 → 記在 sgPendingRenames，存檔時在「資料庫最新的」thermal_specs 上搬，跟著 Tab1 的寫入走。
-   新名稱已經有自己的資料 → 不覆蓋（兩邊都保留，提示使用者）。 */
+/* ── 元件改名 → 以元件名稱當 key 的資料一起搬 ─────────────────────────────────
+   本工具有好幾份資料用「元件名稱」當 key：
+     - TH/ME 頁：thermal_specs（元件大小、主散熱路徑、TIM…）、hidden_components —— key = sgSpecKey(名稱)
+     - Tab3 模擬與實測：validation_data[分類] 每一列的 component、vd_hidden_components —— key = `${分類}|${名稱}`
+     - Tab1 標註：tcPlacement[分類].pages[].annotations[].componentRef
+   改名時這些都要跟著搬，否則全變孤兒：TH/ME 頁那一列變空白、推導不出導熱方式／E-Pad（到 5G-RRU 變必填紅框）、
+   實測值掛在舊名稱底下變成另一列。
+   改名有兩個來源：
+     (a) 本工具 Tab1 改名 → 畫面上同專案的 TH/ME 頁／Tab3 當場搬（sgRenameSpecRefs）；
+     (b) 5G-RRU 改名 → 它不碰這些資料，存檔時在元件上標 `_renamed_from`（＝資料庫裡這些資料掛在哪個名稱底下）。
+   存檔時（寫入當下的最新內容上）再統一搬一次：資料庫裡掛的名稱 ≠ 要寫的名稱 → 搬到新名稱，同一次寫入裡
+   清掉 `_renamed_from`（sgCollectRenames／sgApplyRenames，見 saveAllTabs）。載入各頁時也先照標記搬記憶體裡
+   那一份（sgLoadRenames），畫面才對得上。
+   守則：新名稱已經有資料 → 不覆蓋（兩份都保留、提示）；舊名稱現在是另一顆元件的名稱 → 不搬（那是它的資料）。 */
 function sgMoveKey(obj, from, to) {
   if (!obj || !from || !to || from === to || !(from in obj)) return false;
   if (to in obj) return 'clash';
@@ -9988,18 +9998,163 @@ function sgMoveKey(obj, from, to) {
 }
 function sgRenameSpecRefs(cat, oldName, newName) {
   const from = sgSpecKey(oldName), to = sgSpecKey(newName);
-  if (!from || !to || from === to || !sgProjectId) return;
-  if (sgPendingSpec2[sgProjectId]) sgMoveKey(sgPendingSpec2[sgProjectId], from, to);   // 快選帶入、還沒存的尺寸也跟著走
-  if (currentProjectId === sgProjectId && currentProjectData) {
-    const r = sgMoveKey(thermalSpecs, from, to);
-    sgMoveKey(hiddenComponents, from, to);
-    const f = SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field;
-    if (f) (currentProjectData[f] || []).forEach(c => { if (c && c.Component === oldName) c.Component = newName; });
-    if (r === 'clash') roToast('TH/ME 頁已經有「' + newName + '」的資料，舊名稱的規格沒有搬過去，請到 TH/ME 頁確認');
-    if (typeof renderAllCategories === 'function') renderAllCategories();
-  } else {
-    (sgPendingRenames[sgProjectId] = sgPendingRenames[sgProjectId] || []).push({ from, to });
+  if (!oldName || !newName || oldName === newName || !sgProjectId) return;
+  const f = SG_CAT_MAP[cat] && SG_CAT_MAP[cat].field;
+  if (from !== to) {
+    if (sgPendingSpec2[sgProjectId]) sgMoveKey(sgPendingSpec2[sgProjectId], from, to);   // 快選帶入、還沒存的尺寸也跟著走
+    if (currentProjectId === sgProjectId && currentProjectData) {
+      const r = sgMoveKey(thermalSpecs, from, to);
+      sgMoveKey(hiddenComponents, from, to);
+      if (r === 'clash') roToast('TH/ME 頁已經有「' + newName + '」的資料，舊名稱的規格沒有搬過去，請到 TH/ME 頁確認');
+    }
   }
+  if (currentProjectId === sgProjectId && currentProjectData) {
+    if (f) (currentProjectData[f] || []).forEach(c => { if (c && c.Component === oldName) c.Component = newName; });
+    if (typeof renderAllCategories === 'function') renderAllCategories();
+  }
+  // Tab3 正好載入同一個專案 → 實測資料與「要驗證」清單當場搬（它那份元件清單的名稱也一起改）
+  if (typeof vdProjectId !== 'undefined' && vdProjectId === sgProjectId && vdProjectData) {
+    const r = sgApplyRenames({ validation_data: vdValidationData, vd_hidden_components: vdHiddenComps },
+                             [{ cat: String(cat).toLowerCase(), to: newName, from: [oldName] }], null);
+    if (f) (vdProjectData[f] || []).forEach(c => { if (c && c.Component === oldName) c.Component = newName; });
+    if (r.clashes.length) roToast('Tab3 已經有「' + newName + '」的實測資料，舊名稱的資料沒有搬過去，請到 Tab3 確認');
+    if (typeof vdRender === 'function') vdRender();
+  }
+  // 沒有載入這個專案的頁 → 不必記下來：存檔時比對「資料庫裡的名稱」與「要寫的名稱」，在最新內容上搬
+}
+
+// 在 doc 的某個元件陣列裡找同一顆：先比 _cid；doc 裡的舊資料還沒有 id 時才用名稱（fallbackName）對
+function sgFindComp(doc, field, cid, fallbackName) {
+  const list = (doc && doc[field]) || [];
+  if (cid) { const x = list.find(o => o && o._cid === cid); if (x) return x; }
+  if (fallbackName) return list.find(o => o && !o._cid && o.Component === fallbackName) || null;
+  return null;
+}
+// 各分類「正在使用」的名稱：舊名稱若是另一顆元件的現名 → 那是它的資料，不搬
+function sgTakenNames(doc) {
+  const byCat = {}, spec = new Set();
+  Object.entries(SG_CAT_MAP).forEach(([catKey, info]) => {
+    const set = byCat[catKey.toLowerCase()] = new Set();
+    ((doc && doc[info.field]) || []).forEach(c => { if (c && c.Component) { set.add(c.Component); spec.add(sgSpecKey(c.Component)); } });
+  });
+  return { byCat, spec };
+}
+/* 這次要寫的元件清單裡「名稱變了」的元件：每顆列出它以前可能用過的名稱（候選舊名）。
+   finalDoc：要寫入（或畫面上要呈現）的樣子；refs：其他版本（資料庫最新、畫面、載入時快照…），用 _cid 對；
+   baseDoc：資料庫的舊資料還沒有 id 時，用快照裡同一顆的名稱去對。
+   每個版本都取它的 `_renamed_from`（5G-RRU 的改名標記）與名稱。回傳 [{ cat, cid, to, from: [...] }]。 */
+function sgCollectRenames(finalDoc, refs, baseDoc) {
+  const out = [];
+  Object.entries(SG_CAT_MAP).forEach(([catKey, info]) => {
+    const f = info.field;
+    ((finalDoc && finalDoc[f]) || []).forEach(c => {
+      const to = c && c.Component;
+      if (!to) return;
+      const from = [];
+      const add = n => { if (typeof n === 'string' && n && n !== to && !from.includes(n)) from.push(n); };
+      add(c._renamed_from);
+      const b = baseDoc ? sgFindComp(baseDoc, f, c._cid) : null;
+      (refs || []).forEach(d => {
+        const o = d && d !== finalDoc ? sgFindComp(d, f, c._cid, b && b.Component) : null;
+        if (o) { add(o._renamed_from); add(o.Component); }
+      });
+      if (from.length) out.push({ cat: catKey.toLowerCase(), cid: c._cid, to, from });
+    });
+  });
+  return out;
+}
+// Tab3 自動產生、使用者還沒填任何東西的列（新名稱有這種列 → 可以直接用舊名稱那一列取代）
+const SG_VD_USER_FIELDS = ['pd_meas', 'temp_sim', 'temp_meas', 'temp_sim_cal', 'note'];
+function sgVdRowBlank(r) {
+  return !!r && SG_VD_USER_FIELDS.every(k => r[k] === undefined || r[k] === null || String(r[k]).trim() === '') &&
+         (!r.pd_source || r.pd_source === 'hot');
+}
+/* 把一批改名套到「以元件名稱當 key 的資料」上：只動 stores 裡有給的那幾份（就地修改 —— 呼叫端決定傳複本還是本尊）。
+   taken：sgTakenNames(...)，null＝不檢查（Tab1 當場改名：使用者指定的就是這一顆）。
+   回傳 { moved, changed: { thermal_specs: true, … }, clashes: [{ to, from, where }] }。 */
+function sgApplyRenames(stores, renames, taken) {
+  const res = { moved: 0, changed: {}, clashes: [] };
+  const hit = k => { res.moved++; res.changed[k] = true; };
+  (renames || []).forEach(r => {
+    const inUse = n => !!(taken && taken.byCat[r.cat] && taken.byCat[r.cat].has(n));
+    const cands = (r.from || []).filter(n => n && n !== r.to && !inUse(n));
+    if (!cands.length) return;
+    // TH/ME 頁（key 不分分類）
+    const toKey = sgSpecKey(r.to);
+    ['thermal_specs', 'hidden_components'].forEach(k => {
+      const m = stores[k];
+      if (!m || typeof m !== 'object') return;
+      const src = cands.map(sgSpecKey).find(key => key !== toKey && key in m && !(taken && taken.spec.has(key)));
+      if (!src) return;
+      if (toKey in m) { if (k === 'thermal_specs') res.clashes.push({ to: r.to, from: src, where: 'TH/ME 頁' }); return; }
+      m[toKey] = m[src]; delete m[src]; hit(k);
+    });
+    // Tab3 實測
+    const rows = stores.validation_data && stores.validation_data[r.cat];
+    if (Array.isArray(rows)) {
+      const src = rows.find(x => x && cands.includes(x.component));
+      if (src) {
+        const di = rows.findIndex(x => x && x !== src && x.component === r.to);
+        if (di < 0) { src.component = r.to; hit('validation_data'); }
+        else if (sgVdRowBlank(rows[di])) { rows.splice(di, 1); src.component = r.to; hit('validation_data'); }
+        else res.clashes.push({ to: r.to, from: src.component, where: 'Tab3 實測' });
+      }
+    }
+    const vh = stores.vd_hidden_components;
+    if (vh && typeof vh === 'object') {
+      const toK = r.cat + '|' + r.to;
+      const src = cands.map(n => r.cat + '|' + n).find(k => k in vh);
+      if (src && !(toK in vh)) { vh[toK] = vh[src]; delete vh[src]; hit('vd_hidden_components'); }
+    }
+    // Tab1 標註
+    const pages = stores.tcPlacement && stores.tcPlacement[r.cat] && stores.tcPlacement[r.cat].pages;
+    if (Array.isArray(pages)) pages.forEach(p => ((p && p.annotations) || []).forEach(a => {
+      if (a && cands.includes(a.componentRef)) { a.componentRef = r.to; hit('tcPlacement'); }
+    }));
+  });
+  return res;
+}
+function sgRenameClashToast(clashes) {
+  if (!clashes || !clashes.length) return;
+  const c = clashes[0];
+  roToast(c.where + '已經有「' + c.to + '」的資料，改名前（' + c.from + '）的資料沒有搬過去，兩份都保留，請確認' +
+          (clashes.length > 1 ? '（共 ' + clashes.length + ' 筆）' : ''));
+}
+// 元件清單寫進資料庫前：所有以名稱當 key 的資料都已經在同一次寫入裡搬好 → 清掉 5G-RRU 的改名標記
+function sgClearRenameMarks(doc) {
+  CompMerge.CATS.forEach(k => ((doc && doc[k]) || []).forEach(c => { if (c) delete c._renamed_from; }));
+}
+// 讓某一頁手上的元件清單副本也換成新名稱（用 _cid 對；對不到就用候選舊名）
+function sgRenameCopy(doc, renames) {
+  (renames || []).forEach(r => {
+    const f = SG_CAT_MAP[Object.keys(SG_CAT_MAP).find(k => k.toLowerCase() === r.cat)];
+    if (!f) return;
+    const list = (doc && doc[f.field]) || [];
+    const c = (r.cid && list.find(o => o && o._cid === r.cid)) || list.find(o => o && r.from.includes(o.Component));
+    if (c) c.Component = r.to;
+  });
+}
+/* 載入某一頁時：資料庫上的改名標記（5G-RRU 改的）＋ Tab1 還沒存的改名（同一個專案時）→ 先搬這一頁記憶體裡的資料，
+   並把這一頁的元件清單副本換成 Tab1 的名稱（跟 sgRenameSpecRefs 當場改名的行為一致）。
+   只改記憶體；存檔時會在資料庫最新內容上再搬一次並清掉標記。回傳搬了幾筆。 */
+function sgLoadRenames(doc, stores, projId) {
+  if (!doc) return 0;
+  const refs = [];
+  if (projId && projId === sgProjectId && sgProjectData && sgProjectData !== doc) {
+    const before = sgBaseFrom(doc);
+    let n = 0;
+    CompMerge.CATS.forEach(f => (doc[f] || []).forEach(c => {
+      const t = c && c._cid ? (sgProjectData[f] || []).find(x => x && x._cid === c._cid) : null;
+      if (t && t.Component && t.Component !== c.Component) { c.Component = t.Component; n++; }
+    }));
+    if (n) refs.push(before);
+  }
+  const rn = sgCollectRenames(doc, refs, null);
+  if (!rn.length) return 0;
+  const r = sgApplyRenames(stores, rn, sgTakenNames(doc));
+  sgRenameClashToast(r.clashes);
+  if (r.moved) roToast('有元件改過名稱：已把 ' + r.moved + ' 筆資料換到新名稱（例：' + rn[0].from[0] + ' → ' + rn[0].to + '），存檔後寫回資料庫');
+  return r.moved;
 }
 
 /* ── 規格書的「刪除／取代舊檔」延到存檔成功後才刪 SharePoint 上的檔案 ────────
@@ -11830,8 +11985,6 @@ async function saveAllTabs() {
         pend2Other = pend2;
       }
     }
-    const renames = hasSg ? (sgPendingRenames[sgProjectId] || []) : [];   // 兩頁不同專案時累積的改名（spec key 要搬）
-
     // 元件清單（rf/digital/pwr）兩個工具共寫 → 寫入時在「資料庫最新內容」上做三方合併（compMerge.js）：
     // 只寫我改過的欄位，5G-RRU 在我們載入之後存的修改不會被整批蓋掉；兩邊改到同一格 → 存檔前列出來讓使用者選。
     // fields 傳函式：dbAdapter 在最新狀態上計算（412／本機檔版本衝突時重讀後重算）。
@@ -11842,7 +11995,7 @@ async function saveAllTabs() {
     const sgBase = sgProjectBase, clBase = clProjectBase;
     const mergeInto = (f, base, mine, cur, resolutions) => {
       if (base && cur) {
-        const m = CompMerge.mergeProject(base, mine, cur, { resolutions });
+        const m = CompMerge.mergeProject(base, mine, cur, { resolutions, derivedKeys: SG_MERGE_DERIVED });
         if (m.unresolved.length) throw CompMerge.MergePending(m.unresolved);
         Object.assign(f, m.fields);
         return m;
@@ -11851,9 +12004,26 @@ async function saveAllTabs() {
       CompMerge.CATS.forEach(k => { if (mine[k]) f[k] = mine[k].map(CompMerge.normalizeComp); });
       return null;
     };
+    // 元件改名 → 以名稱當 key 的資料（TH/ME 頁、Tab3、標註）一起搬（見 sgCollectRenames／sgApplyRenames）。
+    // 同一個專案在這一批裡可能有好幾筆寫入（Tab1／TH/ME 頁／Tab3 各一筆）：寫元件清單的那一筆算出改名，
+    // 同一批後面的寫入沿用（writeBatch 依序計算）、各自搬自己要寫的那份；沒有頁面載入的那份在資料庫最新內容上搬。
+    const clOnSg = hasCl && hasSg && currentProjectId === sgProjectId;
+    const vdOn = (pid) => hasVd && vdProjectId === pid;
+    // 某一份資料沒有頁面載入 → 讀資料庫最新的那份搬好，有變才寫
+    let saveClashes = [];   // 新名稱已經有資料、舊名稱的資料沒搬 → 存完提示
+    const applyRn = (st, rn, taken) => { const r = sgApplyRenames(st, rn, taken); saveClashes.push(...r.clashes); return r; };
+    const moveDbStores = (f, cur, keys, rn, taken) => {
+      if (!rn.length || !cur) return;
+      const st = {};
+      keys.forEach(k => { if (cur[k] && typeof cur[k] === 'object') st[k] = CompMerge.clone(cur[k]); });
+      const r = applyRn(st, rn, taken);
+      keys.forEach(k => { if (r.changed[k]) f[k] = st[k]; });
+    };
     let sgWritten = null, clWritten = null, sgMerge = null, clMerge = null;
+    let sgRn = [], clRn = [], vdRn = [], sgTaken = null, clTaken = null, vdTaken = null;
     const buildOps = (resolutions) => {
-      const ops = [];
+      const ops = [], renamesBy = {}, takenBy = {};
+      saveClashes = [];
       if (hasSg) {
         ops.push({ type: 'update', col: 'projects', id: sgProjectId, fields: (cur) => {
           const f = {
@@ -11866,17 +12036,26 @@ async function saveAllTabs() {
             tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
           };
           sgMerge = mergeInto(f, sgBase, sgMine, cur, resolutions);
-          if (pend2Other || renames.length) {
-            const specs = Object.assign({}, (cur && cur.thermal_specs) || {});
-            if (pend2Other) sgMergeSpec2Into(specs, pend2Other);
-            renames.forEach(r => sgMoveKey(specs, r.from, r.to));
-            f.thermal_specs = specs;
-            if (renames.length) {
-              const hidden = Object.assign({}, (cur && cur.hidden_components) || {});
-              renames.forEach(r => sgMoveKey(hidden, r.from, r.to));
-              f.hidden_components = hidden;
-            }
+          // 名稱變了的元件：資料庫最新內容（含 5G-RRU 的改名標記）、畫面、載入時快照三方對照
+          const rn = sgCollectRenames(f, [cur, sgMine, sgBase], sgBase), taken = sgTakenNames(f);
+          renamesBy[sgProjectId] = rn; takenBy[sgProjectId] = taken;
+          if (rn.length) {
+            f.tcPlacement = CompMerge.clone(f.tcPlacement);   // 標註與畫面共用參照 → 先複製再搬
+            applyRn({ tcPlacement: f.tcPlacement }, rn, taken);
           }
+          // TH/ME 頁的資料：TH/ME 頁載入同一個專案 → 由它那一筆寫（沿用這裡算好的改名）；
+          // 沒有 → 在資料庫最新的那份上搬，快選帶入、還沒存的元件大小／高度也在這裡只填空格
+          if (!clOnSg && (pend2Other || rn.length)) {
+            const specs = CompMerge.clone((cur && cur.thermal_specs) || {});
+            const hidden = CompMerge.clone((cur && cur.hidden_components) || {});
+            const r = applyRn({ thermal_specs: specs, hidden_components: hidden }, rn, taken);
+            if (pend2Other) sgMergeSpec2Into(specs, pend2Other);
+            if (pend2Other || r.changed.thermal_specs) f.thermal_specs = specs;
+            if (r.changed.hidden_components) f.hidden_components = hidden;
+          }
+          if (!vdOn(sgProjectId)) moveDbStores(f, cur, ['validation_data', 'vd_hidden_components'], rn, taken);
+          sgClearRenameMarks(f);   // 這個專案以名稱當 key 的資料都在這一批裡搬好了
+          sgRn = rn; sgTaken = taken;
           sgWritten = f;
           return f;
         } });
@@ -11888,14 +12067,39 @@ async function saveAllTabs() {
         ops.push({ type: 'update', col: 'projects', id: currentProjectId, fields: (cur) => {
           const f = { thermal_specs: thermalSpecs, hidden_components: hiddenComponents };
           clMerge = clDerivedComps ? mergeInto(f, clBase, clDerivedComps, cur, resolutions) : null;
+          let rn, taken;
+          if (clOnSg) { rn = renamesBy[currentProjectId] || []; taken = takenBy[currentProjectId]; }
+          else {
+            const fin = clDerivedComps ? f : (cur || {});   // 元件清單不寫 → 名稱以資料庫的為準
+            rn = sgCollectRenames(fin, [cur, currentProjectData, clBase], clBase); taken = sgTakenNames(fin);
+          }
+          if (rn.length) {
+            f.thermal_specs = CompMerge.clone(f.thermal_specs); f.hidden_components = CompMerge.clone(f.hidden_components);
+            applyRn(f, rn, taken);
+          }
+          if (clDerivedComps && !clOnSg) {
+            // 元件清單由這一筆寫 → 標註與 Tab3 的資料（沒有頁面載入的話）也在這裡搬，搬完清標記
+            moveDbStores(f, cur, ['tcPlacement'], rn, taken);
+            if (!vdOn(currentProjectId)) moveDbStores(f, cur, ['validation_data', 'vd_hidden_components'], rn, taken);
+            sgClearRenameMarks(f);
+            renamesBy[currentProjectId] = rn; takenBy[currentProjectId] = taken;
+          }
+          clRn = rn; clTaken = taken;
           clWritten = f;
           return f;
         } });
       }
       if (hasVd) {
-        ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: {
-          validation_data: vdValidationData,
-          vd_hidden_components: vdHiddenComps
+        ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: (cur) => {
+          const f = { validation_data: vdValidationData, vd_hidden_components: vdHiddenComps };
+          let rn = renamesBy[vdProjectId], taken = takenBy[vdProjectId];
+          if (!rn) { rn = sgCollectRenames(cur || {}, [cur, vdProjectData], null); taken = sgTakenNames(cur || {}); }
+          if (rn.length) {
+            f.validation_data = CompMerge.clone(f.validation_data); f.vd_hidden_components = CompMerge.clone(f.vd_hidden_components);
+            applyRn(f, rn, taken);
+          }
+          vdRn = rn; vdTaken = taken;
+          return f;
         } });
       }
       return ops;
@@ -11920,13 +12124,23 @@ async function saveAllTabs() {
           CompMerge.CATS.forEach(k => { if (sgWritten[k]) currentProjectData[k] = CompMerge.clone(sgWritten[k]); });
           clProjectBase = sgBaseFrom(sgWritten);
         }
-        delete sgPendingRenames[sgProjectId];
         if (pend2Other) delete sgPendingSpec2[sgProjectId];   // 已寫回，不再重複併入
+        if (sgRn.length) sgApplyRenames({ tcPlacement: sgProjectData.tcPlacement }, sgRn, sgTaken);
       }
       if (clWritten && clDerivedComps && currentProjectData) {
         CompMerge.CATS.forEach(k => { if (clWritten[k]) currentProjectData[k] = CompMerge.clone(clWritten[k]); });
         clProjectBase = sgBaseFrom(clWritten);
       }
+      // 寫入時搬的是複本 → 記憶體裡各頁的資料與元件清單副本也套同一批改名（畫面才對得上剛寫進去的內容）
+      if (hasCl && clRn.length) {
+        sgApplyRenames({ thermal_specs: thermalSpecs, hidden_components: hiddenComponents }, clRn, clTaken);
+        if (currentProjectData) sgRenameCopy(currentProjectData, clRn);
+      }
+      if (hasVd && vdRn.length) {
+        sgApplyRenames({ validation_data: vdValidationData, vd_hidden_components: vdHiddenComps }, vdRn, vdTaken);
+        if (vdProjectData) sgRenameCopy(vdProjectData, vdRn);
+      }
+      sgRenameClashToast(saveClashes);
 
       // SharePoint:整批寫完後只釋放鎖 + 重新上鎖「一次」
       if (dbAdapter.isSharePointMode()) {
@@ -11963,12 +12177,14 @@ async function saveAllTabs() {
         clProjectBase = sgBaseFrom(currentProjectData);
         thermalSpecs = currentProjectData?.thermal_specs ?? {};
         hiddenComponents = currentProjectData?.hidden_components ?? {};
+        if (currentProjectData) sgLoadRenames(currentProjectData, { thermal_specs: thermalSpecs, hidden_components: hiddenComponents }, null);
         if (typeof renderAllCategories === 'function') renderAllCategories();
       }
       if (hasSg) {
         sgProjectData = await dbAdapter.getDoc('projects', sgProjectId);
         if (sgProjectData) CompMerge.ensureProjectCids(sgProjectData);
         sgProjectBase = sgBaseFrom(sgProjectData);
+        if (sgProjectData) sgLoadRenames(sgProjectData, { tcPlacement: sgProjectData.tcPlacement, thermal_specs: sgProjectData.thermal_specs }, null);
         if (typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
       }
       if (hasVd) {
@@ -12769,6 +12985,11 @@ async function vdOnProjectChange() {
   try {
     vdProjectData = await dbAdapter.getDoc('projects', vdProjectId);
     if (!vdProjectData) { vdShowStatus('專案不存在。', 'error'); return; }
+
+    // 改過名的元件（5G-RRU 的改名標記、Tab1 還沒存的改名）：實測資料先換到新名稱，才接得上對應的元件
+    // （否則舊名稱那一列會被當成「手動加的」留著，新名稱另外多一列空白的）
+    sgLoadRenames(vdProjectData, { validation_data: vdProjectData.validation_data,
+                                   vd_hidden_components: vdProjectData.vd_hidden_components }, vdProjectId);
 
     // Build validation data: auto-load from Tab 1 only; saved manual additions are preserved
     const saved = vdProjectData.validation_data || {};
