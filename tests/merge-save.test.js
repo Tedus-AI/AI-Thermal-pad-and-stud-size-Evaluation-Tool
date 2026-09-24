@@ -15,6 +15,10 @@
  *   [G] 共用欄位空值不寫 key：新增元件沒有 Power(W)；清空瓦數／數量 → 刪 key；每顆有 _cid。
  *   [H] EE 匯入元件大小 → 跟手動輸入一樣觸發凸台／TIM 連動。
  *   [I] 標註圖片清孤兒：只列「完全相同專案 id」的圖（不會刪到 id 以同樣字開頭的另一個專案）。
+ *   [J] Tab1 改名 → Tab3 的實測資料（validation_data）／「要驗證」清單（vd_hidden_components）／標註一起搬
+ *       （Tab3 同專案 → 當場搬；不同專案 → 存檔時在資料庫最新內容上搬；新名稱只有空白列 → 取代；有資料 → 不覆蓋）。
+ *   [K] 5G-RRU 改名（元件上的 `_renamed_from`）→ 載入各頁時先搬記憶體、存檔時在最新內容上搬並清掉標記；
+ *       我們開著專案時 5G-RRU 才改名也一樣；舊名稱是另一顆元件的現名 → 不搬；TH/ME 頁單獨寫元件清單時也會搬。
  *
  * 執行：
  *   npx http-server . -p 8125 -c-1 &      # 於 repo 根目錄
@@ -160,15 +164,16 @@ const PROJ = {
   await seed({ X: PROJ, Y: { project_name: 'Y 案', rf_data: [], digital_data: [], pwr_data: [], thermal_specs: {} } });
   await loadTab1('X'); await loadTab2('Y');
   await rename('LNA_main');
-  const e2 = await page.evaluate(() => ({ pending: JSON.parse(JSON.stringify(sgPendingRenames)), ySpecs: Object.keys(thermalSpecs) }));
-  ok('兩頁不同專案：先記下來、不動 TH/ME 頁（別的專案）的資料', e2.pending.X && e2.pending.X[0].from === 'LNA' && e2.pending.X[0].to === 'LNA_main' && e2.ySpecs.length === 0, e2);
+  const e2 = await page.evaluate(() => ({ ySpecs: Object.keys(thermalSpecs) }));
+  ok('兩頁不同專案：不動 TH/ME 頁（別的專案）的資料', e2.ySpecs.length === 0, e2);
   await page.evaluate(() => { window.__db.projects.X.thermal_specs.PA.timType = 'Pad'; });   // 存檔前別人又改了 thermal_specs
   await page.evaluate(() => saveAllTabs());
   const e2db = await dbX();
   ok('存檔時在資料庫最新的 thermal_specs 上搬（別人剛改的 PA 也保留）',
      e2db.thermal_specs.LNA_main && e2db.thermal_specs.LNA_main.heatSourceSize === '3×3' && !e2db.thermal_specs.LNA &&
      e2db.thermal_specs.PA.timType === 'Pad' && e2db.hidden_components.LNA_main === true, e2db.thermal_specs);
-  ok('存完清掉待搬清單', await page.evaluate(() => !sgPendingRenames.X));
+  ok('資料庫與畫面都沒有留下改名標記', e2db.rf_data.every(c => !('_renamed_from' in c)) &&
+     await page.evaluate(() => sgProjectData.rf_data.every(c => !('_renamed_from' in c))));
 
   await seed({ X: Object.assign({}, PROJ, { thermal_specs: { PA: { heatDirection: 'IC top' }, LNA: { heatSourceSize: '3×3' }, LNA_main: { heatSourceSize: '7×7' } } }) });
   await loadTab1('X'); await loadTab2('X');
@@ -245,6 +250,113 @@ const PROJ = {
   });
   ok('只列出 FDD_4T4R_60W 自己的 2 張（v2 的圖不會被當成孤兒刪掉、不認得的檔不列）',
      JSON.stringify(i) === JSON.stringify(['FDD_4T4R_60W_rf_1700000000000.jpg', 'FDD_4T4R_60W_digital_1700000000002.jpg']), i);
+
+  // ── Tab3 載入（與 seed 的其他兩頁一樣，選單要有這個專案）
+  const loadTab3 = (id) => page.evaluate(async (id) => {
+    const s = document.getElementById('vd-project-select');
+    s.innerHTML = '<option value="">--</option>' + Object.keys(window.__db.projects).map(k => '<option value="' + k + '">' + k + '</option>').join('');
+    s.value = id; await vdOnProjectChange(); }, id);
+  const VD_LNA = { component: 'LNA', qty: 1, pd_est: 1, pd_est_rt: 0, pd_source: 'hot', pd_meas: '0.9', temp_sim: '70', temp_meas: '72', temp_sim_cal: '', note: 'bench' };
+  const TCP = () => ({ rf: { pages: [{ id: 'p1', imageData: '', annotations: [{ id: 'a1', componentRef: 'LNA', x: 0.5, y: 0.5 },
+                                                                            { id: 'a2', componentRef: 'PA', x: 0.2, y: 0.2 }] }] } });
+  const PROJ3 = () => Object.assign(JSON.parse(JSON.stringify(PROJ)), {
+    validation_data: { rf: [JSON.parse(JSON.stringify(VD_LNA))] }, vd_hidden_components: { 'rf|LNA': false }, tcPlacement: TCP() });
+
+  console.log('\n[J] Tab1 改名 → Tab3 實測資料／要驗證清單／標註一起搬');
+  await seed({ X: PROJ3() }); await loadTab1('X'); await loadTab3('X');
+  await rename('LNA_main');
+  const j1 = await page.evaluate(() => ({ row: vdValidationData.rf.find(r => r.component === 'LNA_main'), old: vdValidationData.rf.find(r => r.component === 'LNA'),
+    hid: vdHiddenComps['rf|LNA_main'], oldHid: 'rf|LNA' in vdHiddenComps, copy: vdProjectData.rf_data[1].Component,
+    tcp: sgProjectData.tcPlacement.rf.pages[0].annotations.map(a => a.componentRef) }));
+  ok('Tab3 同專案：實測那一列當場搬到新名稱（量測值、備註都在），舊名稱不留', j1.row && j1.row.pd_meas === '0.9' && j1.row.temp_meas === '72' && j1.row.note === 'bench' && !j1.old, j1);
+  ok('「要驗證」清單跟著搬、Tab3 那份元件名稱也改了、標註參照也改了（PA 的不動）',
+     j1.hid === false && !j1.oldHid && j1.copy === 'LNA_main' && j1.tcp[0] === 'LNA_main' && j1.tcp[1] === 'PA', j1);
+  await page.evaluate(() => saveAllTabs());
+  let jdb = await dbX();
+  ok('存檔後資料庫：實測列／要驗證清單／標註都掛在新名稱', jdb.validation_data.rf.some(r => r.component === 'LNA_main' && r.pd_meas === '0.9') &&
+     !jdb.validation_data.rf.some(r => r.component === 'LNA') && jdb.vd_hidden_components['rf|LNA_main'] === false && !('rf|LNA' in jdb.vd_hidden_components) &&
+     jdb.tcPlacement.rf.pages[0].annotations[0].componentRef === 'LNA_main', jdb.validation_data);
+  ok('TH/ME 頁沒有載入 → 它的資料也在資料庫最新內容上搬好了', jdb.thermal_specs.LNA_main && !jdb.thermal_specs.LNA && jdb.hidden_components.LNA_main === true, jdb.thermal_specs);
+
+  await seed({ X: PROJ3(), Y: { project_name: 'Y 案', rf_data: [{ Component: 'Q1', Qty: 1, 'Power(W)': 2 }], digital_data: [], pwr_data: [],
+                                 validation_data: { rf: [{ component: 'Q1', pd_meas: '2.1' }] } } });
+  await loadTab1('X'); await loadTab3('Y');
+  await rename('LNA_main');
+  ok('Tab3 載入別的專案：不動它的資料', await page.evaluate(() => vdValidationData.rf.length === 1 && vdValidationData.rf[0].component === 'Q1'));
+  await page.evaluate(() => { window.__db.projects.X.validation_data.rf.push({ component: 'PA', pd_meas: '31', note: '別人剛填' }); });   // 存檔前別人又填了一筆
+  await page.evaluate(() => saveAllTabs());
+  jdb = await dbX();
+  ok('存檔時在資料庫最新的實測資料上搬（別人剛填的 PA 也保留）', jdb.validation_data.rf.some(r => r.component === 'LNA_main' && r.pd_meas === '0.9') &&
+     !jdb.validation_data.rf.some(r => r.component === 'LNA') && jdb.validation_data.rf.some(r => r.component === 'PA' && r.pd_meas === '31') &&
+     jdb.vd_hidden_components['rf|LNA_main'] === false, jdb.validation_data);
+  ok('別的專案（Y）的實測資料沒被動到', await page.evaluate(() => window.__db.projects.Y.validation_data.rf[0].component === 'Q1'));
+
+  const blankRow = { component: 'LNA_main', qty: 1, pd_est: 1, pd_est_rt: 0, pd_source: 'hot', pd_meas: '', temp_sim: '', temp_meas: '', temp_sim_cal: '', note: '' };
+  await seed({ X: Object.assign(PROJ3(), { validation_data: { rf: [JSON.parse(JSON.stringify(VD_LNA)), blankRow] } }) });
+  await loadTab1('X'); await rename('LNA_main'); await page.evaluate(() => saveAllTabs());
+  jdb = await dbX();
+  ok('新名稱只有一列空白（自動產生的）→ 用舊名稱那一列取代', jdb.validation_data.rf.length === 1 && jdb.validation_data.rf[0].component === 'LNA_main' && jdb.validation_data.rf[0].pd_meas === '0.9', jdb.validation_data);
+  await seed({ X: Object.assign(PROJ3(), { validation_data: { rf: [JSON.parse(JSON.stringify(VD_LNA)), Object.assign({}, blankRow, { pd_meas: '1.2' })] } }) });
+  await loadTab1('X'); await rename('LNA_main'); await page.evaluate(() => saveAllTabs());
+  jdb = await dbX();
+  ok('新名稱已經有量測值 → 不覆蓋（兩列都保留）', jdb.validation_data.rf.length === 2 && jdb.validation_data.rf.some(r => r.component === 'LNA' && r.pd_meas === '0.9') &&
+     jdb.validation_data.rf.some(r => r.component === 'LNA_main' && r.pd_meas === '1.2'), jdb.validation_data);
+
+  console.log('\n[K] 5G-RRU 改名（_renamed_from）→ 本工具搬以名稱當 key 的資料');
+  // 5G-RRU 已經存過（元件都有 id）；它把 LNA 改名成 LNA_5g，資料還掛在 LNA 底下
+  const WITH_IDS = () => { const p = PROJ3(); ['rf_data', 'digital_data', 'pwr_data'].forEach(f => p[f].forEach((c, n) => { c._cid = f + n; })); return p; };
+  const RENAMED = () => { const p = WITH_IDS(); Object.assign(p.rf_data[1], { Component: 'LNA_5g', _renamed_from: 'LNA' }); return p; };
+  await seed({ X: RENAMED() }); await loadTab1('X'); await loadTab2('X'); await loadTab3('X');
+  const k1 = await page.evaluate(() => ({ spec: thermalSpecs.LNA_5g, oldSpec: 'LNA' in thermalSpecs, hidden: hiddenComponents.LNA_5g,
+    vd: vdValidationData.rf.filter(r => /LNA/.test(r.component)).map(r => [r.component, r.pd_meas]), vh: vdHiddenComps['rf|LNA_5g'],
+    tcp: sgProjectData.tcPlacement.rf.pages[0].annotations[0].componentRef, toast: (document.getElementById('ro-toast') || {}).textContent || '' }));
+  ok('載入 TH/ME 頁：規格與隱藏清單已換到新名稱（那一列不會空白）', k1.spec && k1.spec.heatSourceSize === '3×3' && !k1.oldSpec && k1.hidden === true, k1);
+  ok('載入 Tab3：實測值接上新名稱（不會多一列空白的、舊名稱也不留）', JSON.stringify(k1.vd) === JSON.stringify([['LNA_5g', '0.9']]) && k1.vh === false, k1);
+  ok('載入 Tab1：標註參照換到新名稱，並提示「存檔後寫回資料庫」', k1.tcp === 'LNA_5g' && /改過名稱/.test(k1.toast) && /存檔後寫回/.test(k1.toast), k1);
+  await page.evaluate(() => saveAllTabs());
+  let kdb = await dbX();
+  ok('存檔後資料庫：四份資料都掛在新名稱、改名標記清掉', kdb.thermal_specs.LNA_5g && !kdb.thermal_specs.LNA && kdb.hidden_components.LNA_5g === true &&
+     kdb.validation_data.rf.some(r => r.component === 'LNA_5g' && r.pd_meas === '0.9') && kdb.vd_hidden_components['rf|LNA_5g'] === false &&
+     kdb.tcPlacement.rf.pages[0].annotations[0].componentRef === 'LNA_5g' && !('_renamed_from' in kdb.rf_data[1]), kdb.rf_data[1]);
+
+  // 我們三頁都開著這個專案時，5G-RRU 才改名存檔 → 我們改瓦數存檔
+  await seed({ X: WITH_IDS() }); await loadTab1('X'); await loadTab2('X'); await loadTab3('X');
+  await page.evaluate(() => { Object.assign(window.__db.projects.X.rf_data[1], { Component: 'LNA_5g', _renamed_from: 'LNA' });   // 5G-RRU 剛存檔
+                              sgProjectData.rf_data[0]['Power(W)'] = 33; });
+  await page.evaluate(() => saveAllTabs());
+  kdb = await dbX();
+  ok('開著時對方才改名：名稱用對方的，我們手上的資料（TH/ME、實測、標註）寫入時搬到新名稱',
+     kdb.rf_data[1].Component === 'LNA_5g' && kdb.rf_data[0]['Power(W)'] === 33 && kdb.thermal_specs.LNA_5g && !kdb.thermal_specs.LNA &&
+     kdb.validation_data.rf.some(r => r.component === 'LNA_5g' && r.pd_meas === '0.9') && !kdb.validation_data.rf.some(r => r.component === 'LNA') &&
+     kdb.tcPlacement.rf.pages[0].annotations[0].componentRef === 'LNA_5g' && !('_renamed_from' in kdb.rf_data[1]), kdb);
+  const k2m = await page.evaluate(() => ({ spec: !!thermalSpecs.LNA_5g && !thermalSpecs.LNA, tab2: currentProjectData.rf_data[1].Component,
+    vd: vdValidationData.rf.some(r => r.component === 'LNA_5g'), vdCopy: vdProjectData.rf_data[1].Component,
+    tcp: sgProjectData.tcPlacement.rf.pages[0].annotations[0].componentRef }));
+  ok('畫面也換成新名稱（TH/ME 頁、Tab3、標註），再存一次不會把舊名稱寫回去', k2m.spec && k2m.tab2 === 'LNA_5g' && k2m.vd && k2m.vdCopy === 'LNA_5g' && k2m.tcp === 'LNA_5g', k2m);
+
+  // 只有 Tab1 開著（TH/ME 頁、Tab3 沒載入）→ 存檔時在資料庫最新內容上搬
+  await seed({ X: RENAMED() }); await loadTab1('X');
+  await page.evaluate(() => saveAllTabs());
+  kdb = await dbX();
+  ok('只開 Tab1：TH/ME 頁與 Tab3 的資料在資料庫最新內容上搬好、標記清掉', kdb.thermal_specs.LNA_5g && !kdb.thermal_specs.LNA &&
+     kdb.validation_data.rf.some(r => r.component === 'LNA_5g') && kdb.vd_hidden_components['rf|LNA_5g'] === false && !('_renamed_from' in kdb.rf_data[1]), kdb);
+
+  // 舊名稱現在是另一顆元件的名稱（改名後又新增了一顆叫 LNA 的）→ 那是它的資料，不搬
+  await seed({ X: Object.assign(RENAMED(), {}) });
+  await page.evaluate(() => { window.__db.projects.X.rf_data.push({ Component: 'LNA', Qty: 1, 'Power(W)': 0.5, _cid: 'rfNew' }); });
+  await loadTab1('X'); await page.evaluate(() => saveAllTabs());
+  kdb = await dbX();
+  ok('舊名稱是另一顆元件的現名 → 不搬（LNA 的資料留給它）、標記照樣清掉', kdb.thermal_specs.LNA && !kdb.thermal_specs.LNA_5g &&
+     kdb.validation_data.rf.some(r => r.component === 'LNA' && r.pd_meas === '0.9') && !('_renamed_from' in kdb.rf_data[1]), kdb.thermal_specs);
+
+  // TH/ME 頁單獨載入這個專案（Tab1 開別的）且推導出新的導熱方式 → 由 TH/ME 頁那一筆寫元件清單，也要搬、要清標記
+  await seed({ X: RENAMED(), Y: { project_name: 'Y 案', rf_data: [], digital_data: [], pwr_data: [] } });
+  await loadTab1('Y'); await loadTab2('X');
+  await page.evaluate(() => saveAllTabs());
+  kdb = await dbX();
+  ok('TH/ME 頁單獨寫元件清單：規格、標註、實測都搬到新名稱，標記清掉', kdb.rf_data[0].Board_Type === 'IC top' && kdb.thermal_specs.LNA_5g && !kdb.thermal_specs.LNA &&
+     kdb.tcPlacement.rf.pages[0].annotations[0].componentRef === 'LNA_5g' && kdb.validation_data.rf.some(r => r.component === 'LNA_5g') &&
+     !('_renamed_from' in kdb.rf_data[1]), kdb);
 
   ok('頁面無 JS 例外', errors.length === 0, errors.slice(0, 3));
   await browser.close();

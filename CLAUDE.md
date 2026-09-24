@@ -106,7 +106,9 @@
 >
 > 內部欄位（底線開頭，兩個工具都原樣保留、**不列入** carry 白名單）：`_cid`（元件 id，存檔三方合併配對用，
 > 兩邊都會補發，見下方「存檔三方合併」）、`_defaults_ok`（5G-RRU 寫：使用者確認過這顆不是舊版罐頭預設值）、
-> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`／`_ref_*`（5G-RRU 的排除與快選參照）。
+> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`／`_ref_*`（5G-RRU 的排除與快選參照）、
+> `_renamed_from`（5G-RRU 寫：改過名的元件，本工具以名稱當 key 的資料還掛在哪個名稱底下；本工具存檔搬完就清掉，
+> 見下方「元件改名」）。
 
 ##### ⚠ 不捏造 5G-RRU 專屬欄位（`sgMakeComp`）
 
@@ -358,17 +360,35 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
 - ⚠ **既有規格書檔案不會跟著搬**：每顆元件的 `SpecFile.path` 存的是完整路徑，所以下載
   照常；只有改名後「新上傳」的檔案會進新資料夾。這點在彈窗說明裡有明講，不要拿掉。
 
-#### 元件改名 → TH/ME 頁以元件名稱當 key 的資料一起搬（`sgRenameSpecRefs`）
+#### 元件改名 → 以元件名稱當 key 的資料一起搬（兩個工具都能改名）⚠️
 
-`thermal_specs`（元件大小、主散熱路徑、TIM…）與 `hidden_components` 都用 `sgSpecKey(元件名)` 當 key。
-原本 Tab1 改名只搬了標註圖的 `componentRef` → 那些資料全變孤兒：TH/ME 頁那一列變空白、推導不出導熱方式／
-E-Pad，到 5G-RRU 就變成必填紅框。
+本工具有好幾份資料用「元件名稱」當 key，改名時全部要跟著搬，否則變孤兒（TH/ME 頁那一列變空白、推導不出
+導熱方式／E-Pad → 到 5G-RRU 變必填紅框；實測值掛在舊名稱底下、新名稱另外多一列空白的）：
 
-- 兩頁同專案 → 直接搬記憶體裡的 `thermalSpecs`／`hiddenComponents`，並把 TH/ME 頁那份元件清單的名稱一起改；
-  快選帶入、還沒存的尺寸（`sgPendingSpec2`）也跟著搬。
-- 兩頁不同專案 → 記在 `sgPendingRenames[專案]`，`saveAllTabs` 在**資料庫最新的** `thermal_specs`／
-  `hidden_components` 上搬（跟著 Tab1 的寫入）；換專案時清空（沒存的改名不搬）。
-- 新名稱已經有自己的資料 → **不覆蓋**（兩份都保留，提示使用者到 TH/ME 頁確認）。
+| 資料 | 位置 | key |
+|---|---|---|
+| TH/ME 頁規格、隱藏清單 | `thermal_specs`、`hidden_components` | `sgSpecKey(名稱)`（不分分類）|
+| Tab3 實測、要驗證清單 | `validation_data[分類][].component`、`vd_hidden_components` | 名稱、`分類\|名稱` |
+| Tab1 標註 | `tcPlacement[分類].pages[].annotations[].componentRef` | 名稱 |
+
+改名有兩個來源，最後都在**存檔時、寫入當下的最新內容上**統一搬（`sgCollectRenames` → `sgApplyRenames`）：
+
+- **本工具 Tab1 改名**（`sgOnCompEdit` → `sgRenameSpecRefs`）：畫面上正好載入同一個專案的 TH/ME 頁／Tab3 當場搬
+  （它們那份元件清單的名稱一起改），快選帶入還沒存的尺寸（`sgPendingSpec2`）也跟著走。沒載入的頁**不必記下來**
+  （原本的 `sgPendingRenames` 已移除）：存檔時比對「資料庫裡這顆元件的名稱」與「要寫的名稱」就知道要搬。
+- **5G-RRU 改名**：它不碰這些資料，存檔時在元件上標 **`_renamed_from` ＝ 資料庫裡這些資料掛在哪個名稱底下**
+  （它寫入當下拿資料庫最新內容算：沒改名不標、改回原名不標、連改兩次仍指向最早的名稱）。本工具：
+  - 載入各頁時（`sgLoadRenames`：Tab1 的標註與手上那份 `thermal_specs`、TH/ME 頁、Tab3）先照標記搬**記憶體**裡那一份，
+    畫面才對得上，並提示「存檔後寫回資料庫」；Tab1 同專案有還沒存的改名時，也把該頁的元件清單副本換成 Tab1 的名稱。
+  - 存檔時搬好**所有**以名稱當 key 的資料，才在同一次寫入裡清掉 `_renamed_from`（`sgClearRenameMarks`）。
+- 存檔時每顆元件的「候選舊名」＝它的 `_renamed_from`＋資料庫最新／畫面／載入時快照裡的名稱（用 `_cid` 對；
+  資料庫舊資料還沒有 id 時用快照裡的名稱對）。同一個專案在一批寫入裡可能有三筆（Tab1／TH/ME 頁／Tab3）：
+  **寫元件清單的那一筆算出改名**，同批後面的寫入沿用（`writeBatch` 依序計算）、各自搬自己要寫的那份；
+  沒有頁面載入的那份就在資料庫最新內容上搬（`moveDbStores`）。寫入時搬的是複本，成功後記憶體再套同一批改名。
+- 守則：**新名稱已經有資料 → 不覆蓋**（兩份都保留、提示）；Tab3 新名稱只有自動產生的空白列（沒有任何量測值／備註）
+  → 用舊名稱那一列取代。**舊名稱現在是另一顆元件的名稱 → 不搬**（那是它的資料）。
+- 合併時不比對 `_renamed_from`（`SG_MERGE_DERIVED`；兩個工具寫入時都會重新決定它），不會為它跳衝突。
+- 契約測試：`tests/merge-save.test.js` [E]／[J]／[K]；5G-RRU 端 `tests/merge-save.test.js` [I]。
 
 #### 存檔三方合併（`compMerge.js`）⚠️ 兩個 repo 共用同一份
 
