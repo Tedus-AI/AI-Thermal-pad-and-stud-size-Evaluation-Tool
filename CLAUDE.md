@@ -15,7 +15,9 @@
   "pwr_library":     { ... },   // 共用
   "projects": {
     "<project_id>": {
-      // 5G-RRU 寫: meta, project_name, global_params, rf_data, digital_data, pwr_data
+      // 5G-RRU 寫: meta, project_name, global_params, rf_data, digital_data, pwr_data,
+      //            layout3d（5G-RRU 3D 頁的調整：元件橫向位置／轉向、I/O、天線座、屏蔽罩設定；
+      //                      以元件 _cid 為 key，所以元件改名不影響。本工具不讀不寫、updateDoc 原樣保留）
       // AI-Thermal Tab2 寫: thermal_specs, hidden_components,
       //                     param_temp, param_temp_custom,
       //                     param_backoff, param_backoff_rt,
