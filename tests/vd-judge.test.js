@@ -11,6 +11,8 @@
  *   [B] 比對環溫 Ta：預設取專案環溫（含自訂、Tab1 同專案記憶體值）；✂ 手動指定 → 存成 vd_ta；↺ 改回 → 寫 null 清掉
  *   [C] 未解鎖時 Ta 的按鈕跟著鎖
  *   [D] 匯出 Excel：計算欄有值、Pd 依選的來源、附「判定規則」工作表
+ *   [E] 備註欄是 📝 icon：沒寫反灰、有寫上色；滑過顯示完整內容（保留換行）；點開視窗編輯；
+ *       未解鎖時只能看；匯出 PDF 改印備註文字；Tab1 的 📝 也是同一個滑過預覽
  *
  * 執行：
  *   npx http-server . -p 8125 -c-1 &      # 於 repo 根目錄
@@ -44,7 +46,7 @@ const PROJ = () => ({
   project_name: 'Demo', param_temp: '55', rf_data: [], pwr_data: [],
   digital_data: ROWS.map(r => ({ Component: r[0], Qty: 1, 'Power(W)': r[1], ...(r[0] === 'U2202' ? { 'Power_RT(W)': 0.05 } : {}) })),
   validation_data: { digital: ROWS.map(r => ({ component: r[0], qty: 1, pd_est: r[1], pd_est_rt: 0, pd_source: 'hot', pd_meas: r[2],
-    temp_sim: r[3], temp_meas: r[4], temp_sim_cal: r[5], note: '' })) },
+    temp_sim: r[3], temp_meas: r[4], temp_sim_cal: r[5], note: r[0] === 'U5000' ? 'Pi mode\n第二行說明' : '' })) },
   vd_hidden_components: Object.fromEntries(ROWS.map(r => ['digital|' + r[0], false])),
 });
 
@@ -156,6 +158,62 @@ const PROJ = () => ({
   const col = n => u[hdr.indexOf(n)];
   ok('計算欄有值（原本匯出是空白）：Pd誤差% 34.9、溫升誤差% 13.1、判定文字', col('Pd誤差%') === 34.9 && col('溫升誤差%') === 13.1 && col('實測溫升(°C)') === 31.2 && /❌/.test(col('Pd判定')) && /⚠/.test(col('溫度判定')), u);
   ok('附「判定規則」工作表（含 Ta 來源）', Array.isArray(xl['判定規則']) && xl['判定規則'].some(r => /55°C/.test(r[1]) && /專案環溫/.test(r[1])), xl['判定規則']);
+
+  console.log('\n[E] 備註 icon');
+  await seed({ X: PROJ() });
+  await loadTab3();
+  const btnSel = n => `#vd-container tr:has(td.comp-name-cell) button.sg-note-btn[data-note-name="${n}"]`;
+  // 先捲到畫面裡再滑過（捲動會收起預覽，跟真實操作一樣）
+  const hoverOn = async (sel) => { await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'center' }), sel);
+    await page.waitForTimeout(150); await page.hover(sel); await page.waitForTimeout(50); };
+  const E1 = await page.evaluate(() => {
+    const b = n => document.querySelector(`#vd-container button.sg-note-btn[data-note-name="${n}"]`);
+    return { has: b('U5000').classList.contains('has-note'), none: !b('U3009').classList.contains('has-note'),
+      grey: getComputedStyle(b('U3009')).filter, color: getComputedStyle(b('U5000')).filter, textarea: !!document.querySelector('#vd-container textarea') };
+  });
+  ok('有寫備註 → 上色（has-note）、沒寫 → 反灰（grayscale）、表格裡不再有大輸入框', E1.has && E1.none && /grayscale/.test(E1.grey) && E1.color === 'none' && !E1.textarea, E1);
+  await hoverOn(btnSel('U5000'));
+  let tip = await page.evaluate(() => { const t = document.querySelector('.note-tip'); return t && { text: t.querySelector('.note-tip-b').textContent, h: t.querySelector('.note-tip-h').textContent }; });
+  ok('滑過 → 顯示完整備註（含換行）與元件名', tip && tip.text === 'Pi mode\n第二行說明' && /U5000/.test(tip.h), tip);
+  await hoverOn(btnSel('U3009'));
+  tip = await page.evaluate(() => document.querySelector('.note-tip')?.textContent || '');
+  ok('沒寫的 → 提示「尚未填寫備註・點一下新增」', /尚未填寫備註/.test(tip) && /點一下新增/.test(tip), tip);
+  await page.mouse.move(5, 5);
+  ok('滑開 → 預覽消失', await page.evaluate(() => !document.querySelector('.note-tip')));
+  await page.click(btnSel('U3009'));
+  await page.waitForSelector('#sg-note-modal[style*="flex"]');
+  ok('點 icon → 開備註視窗、預覽收起', await page.evaluate(() => /U3009/.test(document.getElementById('sg-note-comp').textContent) && !document.querySelector('.note-tip')));
+  await page.fill('#sg-note-text', '  量測點在 IC 背面  ');
+  await page.keyboard.press('Control+Enter');
+  const E2 = await page.evaluate(() => ({ note: vdValidationData.digital.find(i => i.component === 'U3009').note,
+    has: document.querySelector('#vd-container button.sg-note-btn[data-note-name="U3009"]').classList.contains('has-note'), dirty: hasUnsavedEdits() }));
+  ok('Ctrl+Enter 存入（去頭尾空白）→ icon 變上色、算未存變更', E2.note === '量測點在 IC 背面' && E2.has && E2.dirty, E2);
+  await page.evaluate(() => saveAllTabs());
+  ok('存檔寫進 validation_data', await page.evaluate(() => window.__db.projects.X.validation_data.digital.find(i => i.component === 'U3009').note === '量測點在 IC 背面'));
+  await page.evaluate(() => { isProtected = true; vdRender(); });
+  const E3 = await page.evaluate(() => { const b = document.querySelector('#vd-container button.sg-note-btn[data-note-name="U5000"]'); return { disabled: b.disabled }; });
+  ok('未解鎖：icon 還能滑過、點開（只能看）', !E3.disabled, E3);
+  await page.click(btnSel('U5000'));
+  ok('未解鎖：視窗唯讀、沒有「確定」', await page.evaluate(() => document.getElementById('sg-note-text').readOnly && document.getElementById('sg-note-save').style.display === 'none'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { isProtected = false; vdRender(); });
+  const pdf = await page.evaluate(async () => {
+    let snap = null;
+    const keepH = window.html2canvas, keepJ = window.jspdf;
+    window.html2canvas = async (el) => { snap = [...el.querySelectorAll('.vd-note-print')].map(d => d.textContent).filter(Boolean); const c = document.createElement('canvas'); c.width = c.height = 10; return c; };
+    window.jspdf = { jsPDF: class { constructor() { this.internal = { pageSize: { getWidth: () => 400, getHeight: () => 280 } }; } addImage() {} save() {} } };
+    try { await vdExportPdf(); } finally { window.html2canvas = keepH; window.jspdf = keepJ; }
+    return { snap, left: document.querySelectorAll('.vd-note-print').length, icons: [...document.querySelectorAll('#vd-container .sg-note-btn')].every(b => b.style.display === '') };
+  });
+  ok('匯出 PDF：備註印成文字，匯出完恢復 icon', pdf.snap && pdf.snap.includes('Pi mode\n第二行說明') && pdf.snap.includes('量測點在 IC 背面') && pdf.left === 0 && pdf.icons, pdf);
+  // Tab1 的 📝 用同一個滑過預覽
+  await page.evaluate(async () => {
+    const s = document.getElementById('sg-project-select'); s.innerHTML = '<option value="">--</option><option value="X">X</option>'; s.value = 'X';
+    await sgOnProjectChange(); switchTab('specgen');
+    sgProjectData.digital_data[0].note = 'Tab1 備註'; sgRenderProjectComponents();
+  });
+  await hoverOn('#sg-project-components button.sg-note-btn.has-note');
+  ok('Tab1：滑過 📝 也顯示完整備註', await page.evaluate(() => document.querySelector('.note-tip .note-tip-b')?.textContent === 'Tab1 備註'));
 
   ok('頁面無 JS 例外', errors.length === 0, errors);
   console.log(`\n通過 ${pass} 項，失敗 ${fail} 項`);
