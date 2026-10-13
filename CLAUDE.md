@@ -443,6 +443,35 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
   `getCollection` 仍回快取本身，呼叫端只能讀。
 - 契約測試：`tests/merge-save.test.js`、`tests/comp-merge.unit.test.js`、`tests/optimistic-concurrency.test.js`（T12–T16）。
 
+#### 元件位置標註（`tcPlacement`）頁面格式 v2 —— 只有本工具讀寫
+
+編輯器（Tab1「📍 元件位置標註」，`tcpOpenModal`）是固定 **1280×800 的畫布**，整塊用 `transform: scale()` 貼合視窗、可再放大／平移；
+座標全部存「相對圖」或「畫布 px」，換螢幕不會飄（UX 慣例 8）。互動與圖片工具參考 Report Builder 的標註頁。
+
+```
+tcPlacement[rf|digital|pwr].pages[] = {
+  id, title, isCustomTitle, imageData('sp:<路徑>' 或 data URL), v: 2,
+  imgBox {x,y,w,h}   畫布上看得到的圖框（裁切後）
+  crop   {x,y,w,h}   裁切視窗（0~1，相對轉向後的整張圖；沒有 key＝整張）—— 非破壞，隨時可還原
+  imgRot 0|90|180|270、imgFh   CSS 顯示（先鏡像再旋轉）—— 不重新壓縮、不重新上傳
+  imgAdj {b,c,s}     亮度／對比／飽和度（%，CSS filter）—— 無損
+  labelSize 'S'|'M'|'L'、showIdx
+  annotations: [{ id, x, y（0~100，相對轉向後的整張圖）, componentRef, lx, ly（標籤左上，畫布 px）}]
+}
+```
+
+- **舊資料（v1：`imgFrame` 工作區 px、`labelX/labelY`、`lc`）開啟時才轉換**（`tcpNormalizePage`），點的 `x/y` 意義不變；
+  轉換走 `tcpQuiet`：原本沒有未存變更 → 轉完重設乾淨基準（唯讀檢視打開也不會變成「有未存變更」）。
+  其他分類沒打開過的頁維持 v1，存檔原樣寫回，打開時再轉。⚠ 還停在舊版前端的使用者打開 v2 頁會看不到標籤
+  （版本橫幅會提醒更新）；舊版若再「旋轉／翻轉」會把圖燒進點陣圖、卻不動 `imgRot` → 新版看起來轉兩次。
+- **換圖／刪圖／刪頁都不再立刻刪 SharePoint 上的檔**（原本按了就刪，沒存檔就離開時資料庫指著已刪的檔）；
+  存檔成功後由 `tcpAuditImages` 對帳清孤兒。`tcpCollectUsedImagePaths` 把這次開啟期間**復原紀錄**還指著的圖也算在用，
+  否則存檔後 Ctrl+Z 會把參照還原到一個已被刪掉的檔。
+- 復原／取消復原（`tcpPushHist`，每頁各一份、上限 60 步）只在記憶體，不寫進資料庫；連續方向鍵微調合併成一步。
+- 放入的圖：長邊上限 2000 px、JPEG 0.82（原本 1000 px／0.72，PCB 細字放大後看不清）。
+- 「💾 儲存」＝`saveAllTabs`（存全部分頁，UX 慣例 10）；開著時被上鎖 → `tcpSyncPlacementBtns` 立刻切成唯讀檢視。
+- 契約測試：`tests/tcp-editor.test.js`。
+
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 
 檔名是 `${projectId}_${catKey}_${ts}.jpg`，專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，剩下的才是專案 id，
