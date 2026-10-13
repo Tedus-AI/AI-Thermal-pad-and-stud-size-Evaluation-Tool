@@ -18,7 +18,7 @@
       // 5G-RRU 寫: meta, project_name, global_params, rf_data, digital_data, pwr_data,
       //            layout3d（5G-RRU 3D 頁的調整：元件橫向位置／轉向、I/O、天線座、屏蔽罩設定、FDD 通道配對開關 pair、
       //                      鰭片截斷 cut；元件的調整以元件 _cid 為 key，所以元件改名不影響。本工具不讀不寫、updateDoc 原樣保留）
-      // AI-Thermal Tab2 寫: thermal_specs, hidden_components,
+      // AI-Thermal Tab2 寫: thermal_specs（含 Thermal Via 頁的 thermal_specs[元件].via）, hidden_components,
       //                     param_temp, param_temp_custom,
       //                     param_backoff, param_backoff_rt,
       //                     param_duplex, param_duplex_rt,
@@ -520,6 +520,57 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - 高功率徽章是琥珀色（不是錯誤，紅色保留給 Fail）。
 - 契約測試：`tests/calc-tab.test.js`。
 
+#### Thermal Via 計算頁（原獨立工具 thermal-via-calculator 移植）⚠️
+
+頁籤在「凸台&TIM尺寸速算」與「使用者建議與改善」之間（`switchTab('via')`，`tabMap.via = 4`、`feedback = 5`）。
+計算核心是純函式檔 **`viaCalc.js`**（`ViaCalc`，畫面／匯出／測試共用），畫面與資料連動在 `index.html` 的 `via*` 函式。
+
+- **專案選單與 TH/ME 頁是同一個**（`#via-project-select` 鏡像 `#project-select`，換一邊另一邊跟著換）。
+  via 設計存在 **`thermal_specs[sgSpecKey(元件名)].via`**，兩頁編輯的是記憶體裡同一份 `thermalSpecs` →
+  存檔（TH/ME 頁那一筆寫入）、未存變更偵測（`_clDirtyView`）、元件改名搬資料（`sgApplyRenames`／`sgMoveKey` 整筆搬）
+  全部沿用既有機制，**不要另開一個 `projects[id]` 的 key**。5G-RRU 不讀 `thermal_specs`、原樣保留 → 不是跨工具 schema 變更。
+- `via` 物件（**空值一律不寫 key**；空的 `via`／spec 物件要刪掉，否則「看一眼」就變成未存變更 → `viaCleanup`）：
+
+  | key | 意義 |
+  |---|---|
+  | `shape` | `'circle'`（沒有 key＝矩形）|
+  | `padD` | 圓形焊盤直徑 mm。**矩形的 L×W 就是 TH/ME 頁的 `epadSize`**（同一欄，不另存一份；本頁改的就是它）|
+  | `pattern` | `'staggered'`（沒有 key＝矩陣）|
+  | `qty`／`diaMil` | **有 key＝本頁的試算值**（✂ 解鎖後、或 EE 清單沒填時）；沒有 key＝取 EE 清單的 `TV_Qty`／`TV_ID_mil` |
+  | `pitchMil` | 中心間距（mil；畫面可切 mm，存一律 mil）|
+  | `pcbT` | 有 key＝本頁指定；沒有＝取 5G-RRU 專案參數 `global_params.t_PCB`（**唯讀參照，本工具不寫 global_params**）|
+  | `plating` | 鍍銅厚度 mm（沒有 key＝預設 1 mil）|
+  | `fill`／`fillK` | 塞孔材料（`ViaCalc.FILLS` 的 key，必填）／自訂 K |
+
+  **計算結果（K_eff、R_th…）不存**，每次由輸入重算（單一事實來源）。
+- **納入條件**（`viaReasons`）：EE 清單 `TV_ID_mil` 或 `TV_Qty` 有值（`'N/A'`／空白／0 不算），或主散熱路徑是 Thermal Via
+  （TH/ME 頁的 `heatDirection` 優先；沒選或舊值才看元件的 `Board_Type` —— 與 `sgHeatPathOf` 同一套）。
+  不再符合條件但有 `via` 資料 → 列在清單最下面「不在納入條件內（資料保留）」，**不刪**。
+- **未完善提示**：頁首摘要＋「待完善清單」（缺哪些欄位、哪些有干涉，點一下跳過去）＋分頁按鈕上的數字徽章（`viaUpdateBadge`，
+  未完善＋配置有問題的顆數）。EE 頁改 TH Via 內徑／Qty 時徽章就地更新（`sgOnCompEdit`／`sgOnTvChange` 呼叫）。
+- **有來源的欄位**（UX 慣例 2）：Via 數量／內徑鎖定顯示 EE 清單的值（白底黑字＋✂）；✂ → 本頁試算值（琥珀色提醒與 EE 清單不同）；
+  「↺ 取 EE 清單值」刪掉試算值；「⇪ 寫回 EE 清單」**只在 EE/RF/PWR 頁載入同一個專案時可用**（寫進 `sgProjectData` 那顆元件、
+  跟著 EE 頁的存檔與三方合併寫入），寫回後刪掉試算值。EE 頁沒載入同一個專案時停用並說明 —— 不可改寫 TH/ME 頁那份元件副本
+  （兩頁各持一份元件清單，見「存檔三方合併」）。E-PAD：TH/ME 頁沒填時暫用 5G-RRU 的 `Pad_L`/`Pad_W`（`Board_Type` 是
+  Thermal Via 或 `_pad_from === 'epadSize'` 才算數），鎖定＋✂（✂＝帶入成 `epadSize`）。
+- **元件清單來源**：EE 頁正好載入同一個專案時用它記憶體裡的元件（含還沒存的 TH Via 內徑／Qty、新增的元件），否則用 TH/ME 頁的副本。
+- **重繪**：打字（`input`）只換表單以外的部分（`viaRender({ keepForm: true })`，游標不跳）；提交（`change`）下一個 tick 整頁重繪並把焦點
+  放回 `data-fid` 相同的那一格（`viaCommit`）。TH/ME 頁 `renderAllCategories` 結尾呼叫 **`viaRenderSoon`（下一個 tick）**——
+  ⚠ 不可改成同步：EE 頁改名是「先搬 TH/ME 資料並重繪、再寫新名稱」，同步重繪會拿舊名稱對不上新 key，選取跳到別顆。
+- **唯讀**：`via-container` 在 `RO_CONTAINER_BAR`；元件清單、待完善清單、mil/mm 切換、換算框標 `sg-spec-ro`（未解鎖照樣能看、能切換）。
+- **計算模型與修正**（詳見 `viaCalc.js` 檔頭）：E-PAD 內穿板方向一維、面積加權並聯
+  `K_eff = (N·A_cu·K_Cu + N·A_fill·K_fill + A_FR4·K_FR4) ÷ A_pad`、`R_th = t ÷ (K_eff·A_pad)`（°C/W），與舊工具逐字相同。
+  **中心間距不影響 K_eff**，只用於排列／干涉檢查。相對舊工具修正：自動間距與畫圖改用同一個排列（`ViaCalc.grid`）、
+  交錯排列納入 √3/2 列距、邊距以孔壁計（舊版只算中心）、單顆不需要間距、最後一列置中、via 總面積 > 焊盤判為不成立
+  （舊版照算 → 高估）、圓形偶數顆不再「中心＋3」、干涉拆成「孔壁重疊＝錯誤／中心距 < 2 倍內徑＝提醒」、熱阻單位 °C/W、
+  剖面圖厚度方向另外縮放（小焊盤原本畫出界）。
+- 與 5G-RRU 的關係：5G-RRU 目前所有 Thermal Via 元件共用專案參數 `K_Via`／`Via_Eff`；本頁算出的 K_eff 低於 `K_Via` 時提醒
+  「5G-RRU 端這顆的基板熱阻可能被低估」。**本工具不寫回 5G-RRU 的任何欄位**；若要讓 5G-RRU 逐顆採用 K_eff，需兩個 repo 一起新增
+  per-component 欄位（並列入兩邊的 carry 白名單）。
+- ⚠ 「使用者建議與改善」的「發生分頁」下拉**還沒有**「Thermal Via 計算」：回饋的讀取來源是 SharePoint List（`PRIMARY_FEEDBACK: 'list'`），
+  它的 `Tab` 欄是固定選項的 choice 欄（`docs/lists-migration.md`），要先在 List 加這個選項，再同步加到兩個下拉。
+- 契約測試：`tests/via-calc.unit.test.js`（純 Node，公式與舊版對照、排列、自動間距、檢查）、`tests/via-tab.test.js`（headless）。
+
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 
 檔名是 `${projectId}_${catKey}_${ts}.jpg`，專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，剩下的才是專案 id，
@@ -618,7 +669,7 @@ await dbAdapter.updateDoc('projects', docId, {
 ### 運作方式
 
 - 原始碼裡只放佔位符 `__APP_VERSION__`（出現在 `index.html` 的 `window.APP_VERSION`、
-  7 支本地 JS（含兩個 repo 共用的 `compMerge.js`）的 `?v=__APP_VERSION__` 快取戳記、以及 `version.json`）。
+  8 支本地 JS（含兩個 repo 共用的 `compMerge.js`、Thermal Via 計算核心 `viaCalc.js`）的 `?v=__APP_VERSION__` 快取戳記、以及 `version.json`）。
 - `.github/workflows/deploy-pages.yml` 在每次 push 到 `main` 時，用
   `TZ='Asia/Taipei' date +%Y.%m.%d.%H%M`＋短 SHA 算出版本號，`sed` 戳進上述佔位符，
   再部署到 GitHub Pages。**因此每次 push 都會自動戳新版本，不靠人記憶。**
