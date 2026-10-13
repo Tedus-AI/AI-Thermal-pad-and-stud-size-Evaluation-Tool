@@ -1388,6 +1388,27 @@
   .vd-err-green  { color: #217346; font-weight: 700; }
   .vd-err-orange { color: #d4760a; font-weight: 700; }
   .vd-err-red    { color: #e00000; font-weight: 700; }
+  .vd-sub { font-size: 0.7rem; font-weight: 500; opacity: 0.8; margin-top: 1px; white-space: nowrap; }
+  /* 誤差判定規則（放在 #vd-container 裡：鎖定與 PDF 匯出都涵蓋） */
+  .vd-rules { margin-bottom: 16px; padding: 10px 16px; background: #f8f9fb; border-radius: 8px; border: 1px solid #e0e6ed; font-size: 0.82rem; color: #555; }
+  .vd-rules-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 5px; }
+  .vd-rules-row > span { display: inline-flex; align-items: center; gap: 5px; }
+  .vd-rules-h { font-size: 0.86rem; color: #333; }
+  .vd-rules-same { color: #888; font-size: 0.76rem; }
+  .vd-rules-k { min-width: 30px; color: #333; }
+  .vd-rules-basis { font-size: 0.74rem; color: #666; background: #eef1f6; border-radius: 4px; padding: 1px 6px; }
+  .vd-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .vd-dot.g { background: #217346; } .vd-dot.o { background: #d4760a; } .vd-dot.r { background: #e00000; }
+  .vd-ta { margin-left: auto; gap: 6px; color: #333; font-weight: 600; }
+  .vd-ta-val { color: #111; font-weight: 700; }
+  .vd-ta-src { color: #888; font-weight: 400; font-size: 0.76rem; }
+  .vd-ta-input { width: 64px; padding: 3px 6px; border: 1.5px solid #cbd5e1; border-radius: 5px; font-size: 0.82rem; text-align: center; }
+  .vd-ta-btn { font-size: 0.74rem; padding: 2px 8px; border-radius: 5px; border: 1px solid #cbd5e1; background: #fff; color: #555; cursor: pointer; }
+  .vd-ta-btn:hover { border-color: #94a3b8; background: #f1f5f9; }
+  .vd-rules-more { margin: 4px 0 2px; }
+  .vd-rules-more summary { cursor: pointer; color: #2563eb; font-size: 0.78rem; }
+  .vd-rules-more ul { margin: 6px 0 2px; padding-left: 20px; line-height: 1.7; }
+  .vd-rules-note { margin-top: 4px; font-weight: 600; color: #333; }
   .vd-pd-sel {
     border: 1px solid #ccc; border-radius: 4px; padding: 2px 4px;
     font-size: 0.78rem; background: #fff; color: #333; cursor: pointer;
@@ -4991,27 +5012,6 @@
       </div>
     </div>
 
-    <!-- 誤差判定規則圖例 -->
-    <div id="vd-legend" style="display:none; margin-bottom:16px; padding:10px 16px; background:#f8f9fb; border-radius:8px; border:1px solid #e0e6ed; font-size:0.82rem; color:#555;">
-      <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:center;">
-        <span style="font-weight:700; font-size:0.85rem; color:#333;">誤差判定規則：</span>
-        <span style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-          <span style="font-weight:600;">相對誤差%</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#217346;"></span> ≤ 5%</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d4760a;"></span> 5~10%</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e00000;"></span> ≥ 10%</span>
-        </span>
-        <span style="color:#ccc;">│</span>
-        <span style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-          <span style="font-weight:600;">絕對溫差</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#217346;"></span> ≤ 3°C</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d4760a;"></span> 3~5°C</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e00000;"></span> ≥ 5°C</span>
-        </span>
-      </div>
-      <div style="margin-top:6px; font-weight:600; color:#333;">RF/EE/PWR 填寫：Pd(實測值) 欄位；TH 填寫：溫度相關值欄位</div>
-    </div>
-
     <div id="vd-container">
       <div class="empty-state">
         <div class="icon">&#128202;</div>
@@ -6104,7 +6104,7 @@ function _clDirtyView() {
 }
 function _vdDirtyView() {
   if (!vdProjectId) return null;
-  return { vd: vdValidationData || {}, hc: vdHiddenComps || {} };
+  return { vd: vdValidationData || {}, hc: vdHiddenComps || {}, ta: vdTaManual };
 }
 function snapSgClean() { const v = _sgDirtyView(); _cleanSnap.sg = v ? _safeStr(v) : null; }
 function snapClClean() { const v = _clDirtyView(); _cleanSnap.cl = v ? _safeStr(v) : null; }
@@ -12585,6 +12585,9 @@ async function saveAllTabs() {
       if (hasVd) {
         ops.push({ type: 'update', col: 'projects', id: vdProjectId, fields: (cur) => {
           const f = { validation_data: vdValidationData, vd_hidden_components: vdHiddenComps };
+          // 比對環溫：手動指定才寫；改回「取專案環溫」時寫 null 把舊值清掉（updateDoc 是 shallow merge，不寫 key 清不掉）
+          if (vdTaManual !== null) f.vd_ta = vdTaManual;
+          else if (cur && cur.vd_ta != null) f.vd_ta = null;
           let rn = renamesBy[vdProjectId], taken = takenBy[vdProjectId];
           if (!rn) { rn = sgCollectRenames(cur || {}, [cur, vdProjectData], null); taken = sgTakenNames(cur || {}); }
           if (rn.length) {
@@ -13408,6 +13411,7 @@ let vdProjectId = null;
 let vdProjectData = null;
 let vdValidationData = {};   // { rf: [...], digital: [...], pwr: [...] }
 let vdHiddenComps = {};
+let vdTaManual = null;       // 比對環溫 Ta（°C）：使用者手動指定才有值；null＝取專案環溫（存成 projects[id].vd_ta）
 
 const VD_CAT_MAP = {
   RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;' },
@@ -13458,6 +13462,7 @@ async function vdLoadProjects() {
       vdProjectData = null;
       vdValidationData = {};
       vdHiddenComps = {};
+      vdTaManual = null;
       vdRender();
     }
 
@@ -13480,6 +13485,7 @@ async function vdOnProjectChange() {
   vdProjectData = null;
   vdValidationData = {};
   vdHiddenComps = {};
+  vdTaManual = null;
 
   if (!vdProjectId) { vdRender(); snapVdClean(); return; }
 
@@ -13537,6 +13543,7 @@ async function vdOnProjectChange() {
     }
 
     vdHiddenComps = vdProjectData.vd_hidden_components || {};
+    vdTaManual = (typeof vdProjectData.vd_ta === 'number' && isFinite(vdProjectData.vd_ta)) ? vdProjectData.vd_ta : null;
     vdShowStatus('已載入專案：' + (vdProjectData.project_name || vdProjectId), 'success');
     vdRender();
     snapVdClean();   // 載入即為乾淨基準
@@ -13551,36 +13558,118 @@ function vdCalcRelError(est, meas) {
   return ((e - m) / m * 100);
 }
 
-function vdCalcAbsDiff(simCal, meas) {
-  const s = parseFloat(simCal), m = parseFloat(meas);
-  if (isNaN(s) || isNaN(m)) return null;
-  return s - m;
-}
+/* ── 誤差判定：與 Thermal-Test-Report-Builder「比對頁」同一套規則（改門檻要兩邊一起改）──
+   溫度以「溫升」為基準：CFD 預測的是溫升 ΔT = P × Rth，Ta 只是邊界條件；拿 °C 溫度當分母，
+   同樣的模型誤差在 Ta 越高時 % 越小（°C 沒有真正的零點，比值沒有物理意義）。
+     實測溫升  = 溫度(實測) − Ta
+     溫差(°C)  = 溫度(模擬校正) − 溫度(實測)           正值＝模擬高估（保守）、負值＝低估（較危險）
+     溫升誤差% = 溫差 / 實測溫升 × 100                  實測溫升 ≤ 0 時不算 %，只看溫差
+   判定取「% 門檻」與「絕對溫差下限」較寬鬆者；下限對應熱電偶量測不確定度（約 ±1~2°C），
+   避免低溫升元件因 1~2°C 的差異被誤判。
+   Pd：Pd 誤差% = (估值 − 實測) / 實測 × 100（正值＝估值偏高、保守）。功耗誤差會等比例變成
+   溫升誤差（ΔT = P × Rth），所以門檻和溫度一樣用 10% / 20%；有實測溫升時另算「對溫度的影響」
+   ≈ Pd 誤差% × 實測溫升（把整個溫升都算在自己的功耗上，偏保守），影響 ≤ 2°C / 4°C 也算 ✅ / ⚠
+   —— 小功率元件差 20% 但溫度只差零點幾度時不判紅。 */
+const VD_DEV = { goodPct: 10, warnPct: 20, goodC: 2, warnC: 4 };
+const VD_JUDGE_CLASS = { good: 'vd-err-green', warn: 'vd-err-orange', bad: 'vd-err-red' };
+const VD_JUDGE_TEXT = { good: '✅ 符合', warn: '⚠ 注意', bad: '❌ 超出' };
 
-function vdErrorClass(val) {
-  if (val === null) return '';
-  const abs = Math.abs(val);
-  if (abs <= 5) return 'vd-err-green';
-  if (abs < 10) return 'vd-err-orange';
-  return 'vd-err-red';
+function vdNum(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = parseFloat(v);
+  return isFinite(n) ? n : null;
 }
+// pct / absC 任一為 null 就只看另一個；兩個都沒有 → 不判定
+function vdJudge(pct, absC) {
+  const p = pct === null ? Infinity : Math.abs(pct), a = absC === null ? Infinity : Math.abs(absC);
+  if (p === Infinity && a === Infinity) return null;
+  if (p <= VD_DEV.goodPct || a <= VD_DEV.goodC) return 'good';
+  if (p <= VD_DEV.warnPct || a <= VD_DEV.warnC) return 'warn';
+  return 'bad';
+}
+// 專案環溫（Tab1 的「環境溫度」）；Tab1 正好載入同一個專案時用它記憶體裡的最新值
+function vdProjectTa() {
+  const src = (sgProjectId && sgProjectId === vdProjectId && sgProjectData) ? sgProjectData : vdProjectData;
+  if (!src) return null;
+  const sel = src.param_temp || '55';
+  return vdNum(sel === 'custom' ? src.param_temp_custom : sel);
+}
+function vdTa() { return vdTaManual !== null ? vdTaManual : vdProjectTa(); }
+
+// 一列的所有計算值（畫面、Excel 匯出共用，單一事實來源）
+function vdRowCalc(item, ta) {
+  const pdVal = item.pd_source === 'rt' ? item.pd_est_rt : item.pd_est;
+  const pdErr = vdCalcRelError(pdVal, item.pd_meas);
+  const sim = vdNum(item.temp_sim_cal), meas = vdNum(item.temp_meas);
+  const measRise = (meas !== null && ta !== null) ? meas - ta : null;
+  const tempDiff = (sim !== null && meas !== null) ? sim - meas : null;
+  const tempErr = (tempDiff !== null && measRise > 0) ? tempDiff / measRise * 100 : null;
+  const pdImpact = (pdErr !== null && measRise > 0) ? pdErr / 100 * measRise : null;
+  return {
+    pdVal, pdErr, pdImpact, pdJudge: pdErr === null ? null : vdJudge(pdErr, pdImpact),
+    measRise, tempDiff, tempErr, tempJudge: tempDiff === null ? null : vdJudge(tempErr, tempDiff),
+  };
+}
+// 某個溫升下，✅／⚠ 對應的 ±°C 範圍（滑鼠提示用）
+function vdBandText(rise) {
+  if (!(rise > 0)) return '';
+  const g = Math.max(VD_DEV.goodPct / 100 * rise, VD_DEV.goodC), w = Math.max(VD_DEV.warnPct / 100 * rise, VD_DEV.warnC);
+  return `實測溫升 ${rise.toFixed(1)}°C → ✅ 範圍 ±${g.toFixed(1)}°C、⚠ 範圍 ±${w.toFixed(1)}°C`;
+}
+const vdSigned = (v, d = 1) => (v > 0 ? '+' : '') + v.toFixed(d);
 
 function vdFmtError(val) {
   if (val === null) return '-';
   return val.toFixed(1) + '%';
 }
 
-function vdTempDiffClass(val) {
-  if (val === null) return '';
-  const abs = Math.abs(val);
-  if (abs <= 3) return 'vd-err-green';
-  if (abs < 5) return 'vd-err-orange';
-  return 'vd-err-red';
-}
-
 function vdFmtDiff(val) {
   if (val === null) return '-';
   return val.toFixed(1) + '°C';
+}
+
+/* 比對環溫 Ta：預設取專案環溫（鎖定顯示＋✂ 手動指定，UX 慣例 2）；清空或按 ↺ 回到預設 */
+function vdOnTaUnlock() {
+  vdTaManual = vdProjectTa() ?? 25;
+  vdRender();
+  const el = document.getElementById('vd-ta-input');
+  if (el) { el.focus(); el.select(); }
+}
+function vdOnTaChange(el) {
+  vdTaManual = vdNum(el.value);
+  vdRender();
+}
+function vdOnTaReset() { vdTaManual = null; vdRender(); }
+
+function vdRulesHtml() {
+  const g = VD_DEV.goodPct, w = VD_DEV.warnPct, gc = VD_DEV.goodC, wc = VD_DEV.warnC;
+  const dot = c => `<i class="vd-dot ${c}"></i>`;
+  const projTa = vdProjectTa(), ta = vdTa();
+  const taCtl = vdTaManual !== null
+    ? `<input type="number" step="any" id="vd-ta-input" class="vd-ta-input" value="${escapeAttr(vdTaManual)}" onchange="vdOnTaChange(this)" title="測試時的環境溫度（溫升的基準）">°C
+       <button type="button" class="vd-ta-btn" onclick="vdOnTaReset()" title="改回取專案環溫${projTa !== null ? '（' + projTa + '°C）' : ''}">↺ 取專案環溫</button>`
+    : `<span class="vd-ta-val" title="取自元件清單的專案環境溫度">${ta === null ? '—' : ta + '°C'}</span>
+       <span class="vd-ta-src">（取自專案環溫）</span>
+       <button type="button" class="vd-ta-btn" onclick="vdOnTaUnlock()" title="測試時的環溫與專案環溫不同時，手動指定">✂ 手動指定</button>`;
+  return `<div class="vd-rules">
+    <div class="vd-rules-row"><b class="vd-rules-h">誤差判定規則</b><span class="vd-rules-same">與 Thermal Test Report 比對頁相同</span>
+      <span class="vd-ta">比對環溫 Ta：${taCtl}</span></div>
+    <div class="vd-rules-row"><b class="vd-rules-k">溫度</b><span class="vd-rules-basis">以溫升為基準</span>
+      <span>${dot('g')}|溫升誤差%| ≤ ${g}% 或 |溫差| ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></div>
+    <div class="vd-rules-row"><b class="vd-rules-k">Pd</b><span class="vd-rules-basis">以實測為基準</span>
+      <span>${dot('g')}|Pd 誤差%| ≤ ${g}% 或 對溫度影響 ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></div>
+    <details class="vd-rules-more"><summary>公式與依據</summary>
+      <ul>
+        <li>實測溫升 = 溫度(實測) − Ta；溫差 = 溫度(模擬校正) − 溫度(實測)；<b>溫升誤差% = 溫差 ÷ 實測溫升 × 100</b>（實測溫升 ≤ 0 時只看溫差）。</li>
+        <li><b>Pd 誤差% = (Pd 估值 − Pd 實測) ÷ Pd 實測 × 100</b>；對溫度影響 ≈ Pd 誤差% × 實測溫升（沒有實測溫度時只看 %）。</li>
+        <li>正值＝估值／模擬偏高（保守）；<b>負值＝低估（偏樂觀，較危險）</b>，建議在備註說明原因。</li>
+        <li>為何用溫升：模擬算的是溫升 ΔT = P × Rth，Ta 是邊界條件；拿 °C 溫度當分母，同樣誤差在 Ta 越高時 % 越小（例：差 3°C、溫升 30°C，Ta 25 時 5.5%、Ta 55 時 3.5%；以溫升計固定 10%）。</li>
+        <li>${gc}°C／${wc}°C 下限對應熱電偶量測不確定度（Type T 約 ±1°C、Type K 約 ±2.2°C）。±${g}% 約等於 ±${g / 100}×實測溫升 °C，例：溫升 40°C 時約 ±${(g * 0.4).toFixed(0)}°C。</li>
+        <li>Pd 也用 ${g}%／${w}%：功耗誤差會等比例變成溫升誤差，兩邊門檻一致才互相對得上。</li>
+      </ul>
+    </details>
+    <div class="vd-rules-note">RF/EE/PWR 填寫：Pd(實測值) 欄位；TH 填寫：溫度相關值欄位</div>
+  </div>`;
 }
 
 function vdOnPdSourceChange(sel) {
@@ -13593,28 +13682,28 @@ function vdOnPdSourceChange(sel) {
 
 function vdRender() {
   const container = document.getElementById('vd-container');
-  const legendEl = document.getElementById('vd-legend');
 
   if (!vdProjectData || Object.keys(vdValidationData).length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="icon">&#128202;</div><p>請先載入專案列表並選擇專案，即可載入驗證元件清單。</p></div>`;
-    if (legendEl) legendEl.style.display = 'none';
     ['vd-export-excel-btn','vd-export-pdf-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
     return;
   }
 
-  if (legendEl) legendEl.style.display = 'block';
-  let html = '';
+  const ta = vdTa();
+  // 判定規則放在容器裡：未解鎖時 Ta 的按鈕跟著鎖、匯出 PDF 也印得到規則
+  const rulesOpen = !!container.querySelector('.vd-rules-more[open]');
+  let html = vdRulesHtml();
 
   const theadHtml = `<thead><tr>
           <th>元件名稱</th>
           <th>Pd(估值)</th>
           <th>Pd(實測值)</th>
-          <th>Pd-相對誤差%</th>
+          <th title="(Pd 估值 − Pd 實測) ÷ Pd 實測 × 100；下方小字＝對溫度的影響">Pd 誤差%</th>
           <th>溫度<br>(初始模擬值)</th>
           <th>溫度(實測)</th>
           <th>溫度(模擬校正)</th>
-          <th>溫度-相對誤差%<br>(模擬校正-實測)</th>
-          <th>絕對溫差<br>(模擬校正-實測)</th>
+          <th title="(模擬校正 − 實測) ÷ (實測 − Ta) × 100">溫升誤差%<br>(模擬校正−實測)÷實測溫升</th>
+          <th>絕對溫差<br>(模擬校正−實測)</th>
           <th>備註</th>
           <th style="width:46px">隱藏</th>
         </tr></thead>`;
@@ -13629,10 +13718,12 @@ function vdRender() {
     items.forEach((item, idx) => {
       const hideKey = `${catLower}|${item.component}`;
       const isHidden = vdIsHidden(hideKey);
-      const pdVal = item.pd_source === 'rt' ? item.pd_est_rt : item.pd_est;
-      const pdErr = vdCalcRelError(pdVal, item.pd_meas);
-      const tempErr = vdCalcRelError(item.temp_sim_cal, item.temp_meas);
-      const tempDiff = vdCalcAbsDiff(item.temp_sim_cal, item.temp_meas);
+      const c = vdRowCalc(item, ta);
+      const pdCls = VD_JUDGE_CLASS[c.pdJudge] || '', tCls = VD_JUDGE_CLASS[c.tempJudge] || '';
+      const pdTip = c.pdErr === null ? '' : (c.pdErr > 0 ? '估值高於實測（保守）' : c.pdErr < 0 ? '估值低於實測（偏樂觀，較危險）' : '估值等於實測')
+        + (c.pdImpact !== null ? `；對溫度影響 ≈ ${vdSigned(c.pdErr)}% × 實測溫升 ${c.measRise.toFixed(1)}°C = ${vdSigned(c.pdImpact)}°C` : '；沒有實測溫升，只看 %');
+      const riseTip = c.tempDiff === null ? '' : c.measRise === null ? '沒有比對環溫 Ta，只看溫差'
+        : c.measRise > 0 ? vdBandText(c.measRise) : '實測溫度不高於 Ta，沒有溫升可當分母，只看溫差';
       const pdSrc = item.pd_source || 'hot';
       const pdCell = item.pd_est_rt
         ? `<select class="vd-pd-sel" data-cat="${catLower}" data-idx="${idx}" onchange="vdOnPdSourceChange(this)">` +
@@ -13645,12 +13736,12 @@ function vdRender() {
         <td class="comp-name-cell readonly-cell">${escapeHtml(item.component)}</td>
         <td class="readonly-cell">${pdCell}</td>
         <td><input type="number" step="any" value="${escapeAttr(item.pd_meas !== '' && item.pd_meas !== undefined ? item.pd_meas : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="pd_meas" onchange="vdOnEdit(this)"></td>
-        <td class="${vdErrorClass(pdErr)}">${vdFmtError(pdErr)}</td>
+        <td class="${pdCls}" title="${escapeAttr(pdTip)}">${vdFmtError(c.pdErr)}${c.pdImpact !== null ? `<div class="vd-sub">≈ ${vdSigned(c.pdImpact)}°C</div>` : ''}</td>
         <td><input type="number" step="any" value="${escapeAttr(item.temp_sim !== '' && item.temp_sim !== undefined ? item.temp_sim : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim" onchange="vdOnEdit(this)"></td>
         <td><input type="number" step="any" value="${escapeAttr(item.temp_meas !== '' && item.temp_meas !== undefined ? item.temp_meas : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_meas" onchange="vdOnEdit(this)"></td>
         <td><input type="number" step="any" value="${escapeAttr(item.temp_sim_cal !== '' && item.temp_sim_cal !== undefined ? item.temp_sim_cal : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim_cal" onchange="vdOnEdit(this)"></td>
-        <td class="${vdErrorClass(tempErr)}">${vdFmtError(tempErr)}</td>
-        <td class="${vdTempDiffClass(tempDiff)}">${vdFmtDiff(tempDiff)}</td>
+        <td class="${tCls}" title="${escapeAttr(riseTip)}">${vdFmtError(c.tempErr)}${c.measRise !== null && c.tempDiff !== null ? `<div class="vd-sub">溫升 ${c.measRise.toFixed(1)}°C</div>` : ''}</td>
+        <td class="${tCls}" title="${escapeAttr(riseTip)}">${vdFmtDiff(c.tempDiff)}</td>
         <td class="note-cell"><textarea data-cat="${catLower}" data-idx="${idx}" data-field="note" onchange="vdOnEdit(this)">${escapeHtml(item.note || '')}</textarea></td>
         <td style="text-align:center;">
           <input type="checkbox" class="hide-checkbox" data-cat="${catLower}" data-comp="${escapeAttr(item.component)}"
@@ -13688,6 +13779,7 @@ function vdRender() {
 
   ['vd-export-excel-btn','vd-export-pdf-btn'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
   container.innerHTML = html;
+  if (rulesOpen) container.querySelector('.vd-rules-more')?.setAttribute('open', '');
   applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
 }
 
@@ -13730,16 +13822,36 @@ async function vdSaveValidation() { return saveAllTabs(); }
 function vdExportExcel() {
   if (!vdProjectData) return;
   const wb = XLSX.utils.book_new();
+  const ta = vdTa();
   for (const [catKey, catInfo] of Object.entries(VD_CAT_MAP)) {
     const catLower = catKey.toLowerCase();
     const items = (vdValidationData[catLower] || []).filter(i => !vdIsHidden(`${catLower}|${i.component}`));
-    const headers = ['元件名稱','Pd估值(W)','Pd實測(W)','Pd相對誤差%','溫度初始模擬','溫度實測','溫度模擬校正','溫度相對誤差%','絕對溫差','備註'];
-    const rows = items.map(i => [
-      i.component||'', i.pd_est??'', i.pd_meas??'', '', i.temp_sim??'', i.temp_meas??'', i.temp_sim_cal??'', '', '', i.note||''
-    ]);
+    const headers = ['元件名稱','Pd估值(W)','Pd實測(W)','Pd誤差%','Pd誤差對溫度影響(°C)','Pd判定',
+      '溫度初始模擬(°C)','溫度實測(°C)','溫度模擬校正(°C)','比對環溫Ta(°C)','實測溫升(°C)','溫差(°C)','溫升誤差%','溫度判定','備註'];
+    const r1 = v => (v === null || v === undefined || v === '' || !isFinite(v)) ? '' : Math.round(v * 10) / 10;
+    const rows = items.map(i => {
+      const c = vdRowCalc(i, ta);
+      return [i.component || '', vdNum(c.pdVal) ?? '', vdNum(i.pd_meas) ?? '', r1(c.pdErr), r1(c.pdImpact), VD_JUDGE_TEXT[c.pdJudge] || '',
+        vdNum(i.temp_sim) ?? '', vdNum(i.temp_meas) ?? '', vdNum(i.temp_sim_cal) ?? '', ta ?? '', r1(c.measRise), r1(c.tempDiff), r1(c.tempErr),
+        VD_JUDGE_TEXT[c.tempJudge] || '', i.note || ''];
+    });
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     XLSX.utils.book_append_sheet(wb, ws, catKey);
   }
+  // 判定規則一起帶走（數字要能回答「怎麼算的」）
+  const g = VD_DEV.goodPct, w = VD_DEV.warnPct, gc = VD_DEV.goodC, wc = VD_DEV.warnC;
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['項目', '說明'],
+    ['比對環溫 Ta', `${ta ?? '—'}°C（${vdTaManual !== null ? '手動指定' : '取自專案環溫'}）`],
+    ['實測溫升', '溫度(實測) − Ta'],
+    ['溫差', '溫度(模擬校正) − 溫度(實測)；正值＝模擬高估（保守），負值＝低估'],
+    ['溫升誤差%', '溫差 ÷ 實測溫升 × 100（實測溫升 ≤ 0 時只看溫差）'],
+    ['溫度判定', `✅ |溫升誤差%| ≤ ${g}% 或 |溫差| ≤ ${gc}°C；⚠ ≤ ${w}% 或 ≤ ${wc}°C；❌ 其餘`],
+    ['Pd誤差%', '(Pd 估值 − Pd 實測) ÷ Pd 實測 × 100；正值＝估值偏高（保守），負值＝低估'],
+    ['Pd誤差對溫度影響', 'Pd誤差% × 實測溫升（沒有實測溫度時空白）'],
+    ['Pd判定', `✅ |Pd誤差%| ≤ ${g}% 或 對溫度影響 ≤ ${gc}°C；⚠ ≤ ${w}% 或 ≤ ${wc}°C；❌ 其餘`],
+    ['依據', `與 Thermal Test Report 比對頁相同；${gc}°C／${wc}°C 下限對應熱電偶量測不確定度`],
+  ]), '判定規則');
   const name = (vdProjectData.project_name || 'project').replace(/[\\/*?:[\]]/g,'');
   XLSX.writeFile(wb, `${name}_驗證資料_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
@@ -13752,7 +13864,10 @@ async function vdExportPdf() {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
   const hiddenZones = container.querySelectorAll('.sg-hidden-comp-zone');
   hiddenZones.forEach(el => { el.style.display = 'none'; });
+  const more = container.querySelector('.vd-rules-more'), wasOpen = more && more.open;
+  if (more) more.open = true;                        // 公式與依據一起印
   const canvas = await html2canvas(container, { scale: 1.5, useCORS: true, backgroundColor: '#fff' });
+  if (more) more.open = wasOpen;
   hiddenZones.forEach(el => { el.style.display = ''; });
   const imgData = canvas.toDataURL('image/jpeg', 0.92);
   const pageW = pdf.internal.pageSize.getWidth();
