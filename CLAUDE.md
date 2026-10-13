@@ -488,6 +488,8 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   鎖定顯示＋「✂ 手動指定」（UX 慣例 2）→ 存 `projects[id].vd_ta`；「↺ 取專案環溫」→ 存檔時寫 `null` 清掉（shallow merge 不寫 key 清不掉）。
 - 判定規則（含可展開的「公式與依據」）放在 `#vd-container` 裡：未解鎖時 Ta 按鈕一起鎖、匯出 PDF 時展開一起印；
   匯出 Excel 帶計算欄與「判定規則」工作表（原本計算欄匯出是空白）。
+- 備註欄是 📝 icon（與 Tab1 同一套：`.sg-note-btn`，沒寫反灰、有寫上色；`noteModalOpen` 共用編輯視窗；
+  滑過 `noteTipShow` 顯示完整內容）。匯出 PDF 時暫時把 icon 換成備註文字再截圖。
 - 契約測試：`tests/vd-judge.test.js`。
 
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）

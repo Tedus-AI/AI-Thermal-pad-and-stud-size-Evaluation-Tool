@@ -1370,7 +1370,8 @@
   .vd-table tbody td.comp-name-cell {
     text-align: left; font-weight: 600; color: #1a3a6b; white-space: nowrap;
   }
-  .vd-table tbody td.note-cell { text-align: left; min-width: 120px; }
+  .vd-table tbody td.note-cell { text-align: center; width: 56px; }
+  .vd-note-print { text-align: left; white-space: pre-wrap; font-size: 0.74rem; line-height: 1.4; min-width: 120px; max-width: 260px; }
   .vd-table input[type="number"],
   .vd-table input[type="text"],
   .vd-table textarea {
@@ -1639,6 +1640,18 @@
   /* 已有備註 → 彩色且加底色，一眼看出哪些元件有備註 */
   .sg-note-btn.has-note { filter: none; opacity: 1; background: #fef9c3; border-color: #fde047; }
   .sg-note-btn.has-note:hover { background: #fef08a; border-color: #facc15; }
+  /* 📝 滑過預覽（Tab1／Tab3 共用；position: fixed＋夾在視窗內） */
+  .note-tip {
+    position: fixed; z-index: 1250; width: max-content; max-width: min(380px, 90vw);
+    background: #fffef5; border: 1px solid #facc15; border-radius: 8px; padding: 8px 11px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18); pointer-events: none; color: #1f2937;
+  }
+  .note-tip.empty { background: #fff; border-color: #cbd5e1; }
+  .note-tip-h { font-size: 0.74rem; font-weight: 700; color: #92400e; margin-bottom: 4px; }
+  .note-tip.empty .note-tip-h { color: #64748b; }
+  .note-tip-b { font-size: 0.84rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 45vh; overflow: hidden; }
+  .note-tip.empty .note-tip-b { color: #94a3b8; font-size: 0.8rem; }
+  .note-tip-more { margin-top: 4px; font-size: 0.72rem; color: #92400e; }
 
   /* 上傳＝藍色箭頭、下載＝紅色箭頭（用純文字箭頭，才吃得到 CSS color；emoji 不吃色） */
   .sg-spec-btn.sg-spec-up,
@@ -7889,13 +7902,12 @@ function sgRenderProjectComponents() {
       const rthCell =
         `<button class="sg-rth-btn sg-spec-ro${rthArr.length ? ' has-rth' : ''}" ` +
         `title="${escapeAttr(rthTip)}" onclick="sgRthOpen('${c}',${i})">${escapeHtml(rthLabel)}</button>`;
-      // 備註：改為筆記本 icon 按鈕（點開才編輯），大幅縮小欄寬；tooltip 顯示內容摘要。
+      // 備註：筆記本 icon 按鈕（點開才編輯），大幅縮小欄寬；滑過顯示完整內容（noteTipShow）。
       // 標 sg-spec-ro → 唯讀(未解鎖)時仍可點開「檢視」備註，但視窗內不可編輯。
       const noteVal = comp.note || '';
-      const notePreview = noteVal.length > 60 ? (noteVal.slice(0, 60) + '…') : noteVal;
       const noteCell =
-        `<button class="sg-note-btn sg-spec-ro${noteVal ? ' has-note' : ''}" ` +
-        `title="${escapeAttr(noteVal ? ('備註：' + notePreview) : '新增備註')}" ` +
+        `<button type="button" class="sg-note-btn sg-spec-ro${noteVal ? ' has-note' : ''}" ` +
+        `data-note="${escapeAttr(noteVal)}" data-note-name="${escapeAttr(comp.Component || '')}" aria-label="備註" ` +
         `onclick="sgNoteOpen('${c}',${i})">📝</button>`;
       const specCell =
         `<div class="sg-spec-btns">` +
@@ -9331,27 +9343,95 @@ async function timLibSave() {
   }
 }
 
-/* ── 備註編輯視窗 ──
-   備註欄改為 icon 按鈕以縮小欄寬；點開才編輯。未解鎖時仍可點開「檢視」，但唯讀。 */
+/* ── 備註編輯視窗（Tab1 元件清單、Tab3 模擬與實測驗證共用）──
+   備註欄是 📝 icon 按鈕（沒寫＝反灰、有寫＝上色），滑過顯示完整內容（noteTip*），點開才編輯。
+   未解鎖時仍可點開「檢視」，但唯讀。t = { name, value, save(v) }。 */
 let _sgNoteTarget = null;
 
-function sgNoteOpen(cat, idx) {
-  const comp = _sgSpecComp(cat, idx);
-  if (!comp) return;
-  _sgNoteTarget = { cat, idx };
+function noteModalOpen(t) {
   const m = document.getElementById('sg-note-modal');
   const ta = document.getElementById('sg-note-text');
   const saveBtn = document.getElementById('sg-note-save');
   const who = document.getElementById('sg-note-comp');
   if (!m || !ta) return;
-  if (who) who.textContent = '元件：' + (comp.Component || '(未命名)');
-  ta.value = comp.note || '';
+  noteTipHide();
+  _sgNoteTarget = t;
+  if (who) who.textContent = '元件：' + (t.name || '(未命名)');
+  ta.value = t.value || '';
   ta.readOnly = isProtected;                       // 未解鎖 → 只能看
   ta.placeholder = isProtected ? '（未解鎖，僅供檢視）' : '輸入備註…（Ctrl+Enter 儲存、Esc 取消）';
   if (saveBtn) saveBtn.style.display = isProtected ? 'none' : '';
   m.style.display = 'flex';
   setTimeout(() => { if (!isProtected) ta.focus(); }, 40);
 }
+
+function sgNoteOpen(cat, idx) {
+  const comp = _sgSpecComp(cat, idx);
+  if (!comp) return;
+  noteModalOpen({ name: comp.Component, value: comp.note || '', save: (v) => {
+    const c = _sgSpecComp(cat, idx);
+    if (!c) return;
+    if (v) c.note = v; else delete c.note;
+    const y = window.scrollY;
+    sgRenderProjectComponents();
+    window.scrollTo(0, y);
+  } });
+}
+
+function vdNoteOpen(cat, idx) {
+  const item = vdValidationData[cat] && vdValidationData[cat][idx];
+  if (!item) return;
+  noteModalOpen({ name: item.component, value: item.note || '', save: (v) => {
+    const it = vdValidationData[cat] && vdValidationData[cat][idx];
+    if (!it) return;
+    it.note = v;                                   // Tab3 每一列本來就有 note 欄（空字串＝沒寫）
+    const y = window.scrollY;
+    vdRender();
+    window.scrollTo(0, y);
+  } });
+}
+
+/* 📝 滑過預覽：完整內容、保留換行，夾在視窗內（UX 慣例 6）。
+   不用 title：瀏覽器的提示要等約 1 秒、長文會被截斷、也不保留換行。 */
+let _noteTipEl = null, _noteTipFor = null;
+function noteTipShow(btn) {
+  noteTipHide();
+  const text = btn.dataset.note || '';
+  const tip = document.createElement('div');
+  tip.className = 'note-tip' + (text ? '' : ' empty');
+  const h = document.createElement('div');
+  h.className = 'note-tip-h';
+  h.textContent = '📝 ' + (btn.dataset.noteName || '備註');
+  const b = document.createElement('div');
+  b.className = 'note-tip-b';
+  b.textContent = text || ('尚未填寫備註' + (isProtected ? '' : '・點一下新增'));
+  tip.append(h, b);
+  document.body.appendChild(tip);
+  if (text && b.scrollHeight > b.clientHeight + 1) {   // 太長被截掉 → 提示點開看全部
+    const more = document.createElement('div');
+    more.className = 'note-tip-more';
+    more.textContent = '…點一下看全部';
+    tip.appendChild(more);
+  }
+  const r = btn.getBoundingClientRect(), w = tip.offsetWidth, ht = tip.offsetHeight;
+  let top = r.bottom + 6;
+  if (top + ht > window.innerHeight - 8) top = Math.max(8, r.top - ht - 6);
+  tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)) + 'px';
+  tip.style.top = top + 'px';
+  _noteTipEl = tip; _noteTipFor = btn;
+}
+function noteTipHide() {
+  if (_noteTipEl) _noteTipEl.remove();
+  _noteTipEl = null; _noteTipFor = null;
+}
+// 用 mousemove（不是 mouseover）：捲動時預覽會收起，游標停在原地稍微一動就再顯示
+document.addEventListener('mousemove', (e) => {
+  const btn = e.target && e.target.closest ? e.target.closest('.sg-note-btn') : null;
+  if (btn === _noteTipFor) return;
+  if (btn) noteTipShow(btn); else noteTipHide();
+});
+document.addEventListener('pointerdown', noteTipHide, true);
+window.addEventListener('scroll', noteTipHide, true);
 
 function sgNoteClose() {
   const m = document.getElementById('sg-note-modal');
@@ -9363,15 +9443,10 @@ function sgNoteSave() {
   if (isProtected) { sgNoteClose(); return; }
   const t = _sgNoteTarget;
   if (!t) return;
-  const comp = _sgSpecComp(t.cat, t.idx);
-  if (!comp) { sgNoteClose(); return; }
   const ta = document.getElementById('sg-note-text');
   const v = (ta ? ta.value : '').trim();
-  if (v) comp.note = v; else delete comp.note;
   sgNoteClose();
-  const y = window.scrollY;
-  sgRenderProjectComponents();
-  window.scrollTo(0, y);
+  t.save(v);
 }
 
 /* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出）。
@@ -13742,7 +13817,7 @@ function vdRender() {
         <td><input type="number" step="any" value="${escapeAttr(item.temp_sim_cal !== '' && item.temp_sim_cal !== undefined ? item.temp_sim_cal : '')}" data-cat="${catLower}" data-idx="${idx}" data-field="temp_sim_cal" onchange="vdOnEdit(this)"></td>
         <td class="${tCls}" title="${escapeAttr(riseTip)}">${vdFmtError(c.tempErr)}${c.measRise !== null && c.tempDiff !== null ? `<div class="vd-sub">溫升 ${c.measRise.toFixed(1)}°C</div>` : ''}</td>
         <td class="${tCls}" title="${escapeAttr(riseTip)}">${vdFmtDiff(c.tempDiff)}</td>
-        <td class="note-cell"><textarea data-cat="${catLower}" data-idx="${idx}" data-field="note" onchange="vdOnEdit(this)">${escapeHtml(item.note || '')}</textarea></td>
+        <td class="note-cell"><button type="button" class="sg-note-btn sg-spec-ro${item.note ? ' has-note' : ''}" data-note="${escapeAttr(item.note || '')}" data-note-name="${escapeAttr(item.component)}" aria-label="備註" onclick="vdNoteOpen('${catLower}',${idx})">📝</button></td>
         <td style="text-align:center;">
           <input type="checkbox" class="hide-checkbox" data-cat="${catLower}" data-comp="${escapeAttr(item.component)}"
             ${isHidden ? 'checked' : ''} onchange="vdOnHideToggle(this)"
@@ -13866,7 +13941,19 @@ async function vdExportPdf() {
   hiddenZones.forEach(el => { el.style.display = 'none'; });
   const more = container.querySelector('.vd-rules-more'), wasOpen = more && more.open;
   if (more) more.open = true;                        // 公式與依據一起印
+  // 畫面上備註是 📝 icon → PDF 改印備註文字（沒寫就留白）
+  const noteBtns = [...container.querySelectorAll('.vd-table .sg-note-btn')];
+  const notePrints = noteBtns.map(b => {
+    const d = document.createElement('div');
+    d.className = 'vd-note-print';
+    d.textContent = b.dataset.note || '';
+    b.style.display = 'none';
+    b.after(d);
+    return d;
+  });
   const canvas = await html2canvas(container, { scale: 1.5, useCORS: true, backgroundColor: '#fff' });
+  notePrints.forEach(d => d.remove());
+  noteBtns.forEach(b => { b.style.display = ''; });
   if (more) more.open = wasOpen;
   hiddenZones.forEach(el => { el.style.display = ''; });
   const imgData = canvas.toDataURL('image/jpeg', 0.92);
