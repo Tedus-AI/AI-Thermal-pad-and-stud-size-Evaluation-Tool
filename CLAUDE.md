@@ -700,6 +700,9 @@ await dbAdapter.updateDoc('projects', docId, {
 - 前端（`index.html` 的 `setupUpdateChecker`）載入後延遲首檢、每 5 分鐘、切回分頁時，
   以 `cache:'no-store'` 抓 `version.json` 與烙印的 `APP_VERSION` 比對；不同才跳橫幅，
   相同則完全靜默。
+- 版本徽章 `#version-badge` 在**最上方標題列**（`.header`，標題右邊、小字）：只顯示日期時間
+  （`v2026.10.13.1557`，去掉 `-<短 SHA>`），完整版本號放 tooltip；與線上相同時加「✓ 最新」。
+  標題列放了徽章 → 1400px 以下收掉中文副標，標題列維持一行（登入後含姓名＋email 也一樣）。
 
 ### 規則
 
@@ -711,6 +714,26 @@ await dbAdapter.updateDoc('projects', docId, {
 3. **GitHub Pages 的 Source 必須設為「GitHub Actions」**（Settings → Pages），
    否則 workflow 戳的版本不會上線。
 4. 參考 PR #140（`claude/version-conflict-single-user-IQ20W`）。
+
+## 編輯鎖：分頁列右邊一顆膠囊（`#lock-pill`），取代各頁的「密碼保護」橫幅 ⚠️
+
+原本 EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via、使用者建議與改善五頁頂端各有一條約 100px 高的
+密碼保護橫幅（`.protect-bar`），已全部拿掉，收成分頁列右邊（原本版本徽章的位置）一顆膠囊，內容整體上移約 100px。
+
+- **範圍跟著目前分頁**（`railIsFeedbackActive`）：「使用者建議與改善」→ 開發者密碼（`fbToggleProtection`，0420）、
+  其他分頁 → 資料庫密碼（`toggleProtection`，0000）。與右側工具列的 🔒 是**同一個狀態**：`railSyncLockIcon()` 開頭呼叫
+  `lockPillSync()`，`switchTab` 也會經它更新；兩個密碼框不同時開。
+- 狀態：鎖定（琥珀）「🔒 唯讀 ⓘ [解鎖編輯]」→ 按下才展開「密碼框＋[解鎖]＋✕」與提示文字（Enter 送出；Esc／✕／點外面收起；
+  空白不送）；已解鎖（綠）「🔓 編輯中（可儲存） [鎖定]」；回饋頁是「回饋管理唯讀」／「開發者模式」；SharePoint 取鎖中
+  「取得鎖定中…」＋按鈕停用、點外面不收起。展開中換分頁＝換範圍 → 自動收起（不會把資料庫密碼送到開發者鎖）。
+- 「若僅載入資料閱讀，請勿解鎖資料庫…」提示：鎖定時在 ⓘ 的 tooltip，展開密碼框時直接顯示在膠囊下方。
+- `toggleProtection(pwd)`／`fbToggleProtection(pwd)` 的密碼一律**由參數傳入**（膠囊、工具列都一樣），不再讀各頁的隱藏欄位；
+  不帶參數＝讀膠囊的密碼框。上鎖（已解鎖時再按）不需密碼，有未儲存變更時照舊先問 儲存／放棄／取消。
+- 唯讀時點編輯區（`RO_CONTAINER_BAR` 的四個容器）→ toast 指路到「解鎖編輯」＋膠囊閃動（`ro-flash`，琥珀）；膠囊在螢幕外才捲過去。
+- 版面：分頁列右邊讓出右側浮動工具列（與 TH/ME 頁同一條 `clamp((1648px − 100vw)/2)` 規則）；1420px 以下展開時收掉狀態字、
+  密碼框縮窄，「編輯中（可儲存）」收成「編輯中」——否則 1366 會擠到第二行（內容跳動）。
+- `.protect-bar` 的 CSS 還留在檔案裡（與其他選擇器寫在一起），已沒有任何元素使用。
+- 契約測試：`tests/lock-pill.test.js`（1920／1536／1366 × 鎖定／展開／已解鎖／回饋頁展開都要同一行、不被工具列蓋住）。
 
 ## 使用者體驗（UX）慣例 ⚠️ — 動任何 UI 前必讀
 
