@@ -18,6 +18,8 @@
  *       在 EE 頁改名 → via 資料跟著搬、選取跟著走
  *   [J] 未解鎖（唯讀）：輸入停用、元件清單／單位切換／換算仍可用
  *   [K] 版面：1920／1536／1366 沒有橫向捲軸；匯出 Excel 有每顆元件一列＋公式工作表
+ *   [L] 暫不納入熱流評估：待完善清單每列可勾選 → 移出清單／計數／徽章、歸到「暫不納入」群組，via 資料保留；
+ *       原因欄打字不跳游標；取消勾選恢復；未解鎖時勾選停用；存檔寫進 via.skip；匯出狀態；鍍銅厚度選項標成孔壁電鍍銅
  *
  * 執行：
  *   npx http-server . -p 8125 -c-1 &      # 於 repo 根目錄
@@ -102,10 +104,11 @@ const PROJ = () => ({
   const st = () => page.evaluate(() => {
     const items = [...document.querySelectorAll('#via-list .via-item')].map(b => ({
       name: b.querySelector('.vi-name').textContent, st: b.querySelector('.via-st').className.replace('via-st st-', ''),
-      orphan: b.classList.contains('orphan'), sel: b.classList.contains('sel') }));
-    const todo = [...document.querySelectorAll('.via-todo-row')].map(r => r.textContent.replace(/\s+/g, ' ').trim());
+      orphan: b.classList.contains('orphan'), skip: b.classList.contains('skip'), sel: b.classList.contains('sel') }));
+    const todo = [...document.querySelectorAll('.via-todo .via-todo-go')].map(r => r.textContent.replace(/\s+/g, ' ').trim());
+    const skipped = [...document.querySelectorAll('.via-skipped .via-todo-go')].map(r => r.textContent.replace(/\s+/g, ' ').trim());
     const badge = document.getElementById('via-tab-badge');
-    return { items, todo, badge: badge.style.display === 'none' ? '' : badge.textContent,
+    return { items, todo, skipped, badge: badge.style.display === 'none' ? '' : badge.textContent,
       head: (document.getElementById('via-ed-head') || {}).textContent || '', out: (document.getElementById('via-out') || {}).textContent || '',
       form: (document.getElementById('via-form') || {}).textContent || '' };
   });
@@ -148,7 +151,7 @@ const PROJ = () => ({
   ok('LDO-1 缺 E-PAD 尺寸、Via 內徑；Q6505 缺 Via 數量', S.todo.some(t => /LDO-1/.test(t) && /缺 E-PAD 尺寸/.test(t) && /缺 Via 內徑/.test(t)) && S.todo.some(t => /Q6505/.test(t) && /缺 Via 數量/.test(t)), S.todo);
   ok('分頁徽章 = 4', S.badge === '4', S.badge);
   ok('摘要計數', await page.evaluate(() => /納入 5 顆/.test(document.querySelector('.via-summary').textContent) && /未完善 4/.test(document.querySelector('.via-summary').textContent)));
-  await page.click('.via-todo-row:has-text("LDO-1")');
+  await page.click('.via-todo .via-todo-go:has-text("LDO-1")');
   S = await st();
   ok('點待完善清單 → 跳到該元件', S.items.find(i => i.sel).name === 'LDO-1' && /LDO-1/.test(S.head));
 
@@ -317,6 +320,59 @@ const PROJ = () => ({
   await page.evaluate(() => _applyUnlockedUI());
   ok('解鎖 → 輸入可用、儲存可用', await page.evaluate(() => !document.querySelector('#via-form select[data-fid="fill"]').disabled && !document.getElementById('via-save-btn').disabled));
 
+  console.log('\n[L] 暫不納入熱流評估');
+  await sel('U850-Si5518');
+  S = await st();
+  const before = { todo: S.todo.length, badge: Number(S.badge || 0), inc: S.items.filter(i => !i.orphan && !i.skip).length };
+  ok('待完善清單每一列都有「暫不納入」勾選＋可點的元件名稱', await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.via-todo .via-todo-row')];
+    return rows.length > 0 && rows.every(r => r.querySelector('.via-skip-cb input[type=checkbox]') && r.querySelector('.via-todo-go'));
+  }));
+  await page.evaluate(() => { viaVia('Q6505', true).fill = 'air'; viaRender(); });
+  await page.click('.via-todo .via-todo-row:has-text("Q6505") .via-skip-cb input');
+  S = await st();
+  ok('勾選 → 移出待完善清單、徽章 −1、目前選取的元件不變', !S.todo.some(t => /Q6505/.test(t)) && Number(S.badge || 0) === before.badge - 1 && /U850/.test(S.head), { todo: S.todo, badge: S.badge, before });
+  ok('資料：via.skip = true，原本的 via 資料（塞孔材料）保留', await page.evaluate(() => thermalSpecs['Q6505'].via.skip === true && thermalSpecs['Q6505'].via.fill === 'air'));
+  ok('摘要：納入 −1、多一個「⏸ 暫不納入 1」', await page.evaluate((n) => {
+    const t = document.querySelector('.via-summary').textContent; return t.includes('納入 ' + n + ' 顆') && /暫不納入 1/.test(t); }, before.inc - 1));
+  ok('左側清單：歸到「⏸ 暫不納入熱流評估」群組', S.items.some(i => i.name === 'Q6505' && i.skip) && await page.evaluate(() => /暫不納入熱流評估（1）/.test(document.getElementById('via-list').textContent)));
+  ok('「暫不納入」清單預設收合、列出 Q6505（沒寫原因）', await page.evaluate(() => { const d = document.querySelector('.via-skipped'); return d && !d.open; }) && S.skipped.some(t => /Q6505/.test(t) && /沒寫原因/.test(t)), S.skipped);
+  await page.click('.via-skipped > summary');
+  await page.click('.via-skipped .via-todo-go:has-text("Q6505")');
+  S = await st();
+  ok('點名稱 → 跳到該元件：狀態「⏸ 暫不納入熱流評估」、上方有原因欄、下面的 via 欄位照樣可填',
+    /暫不納入熱流評估/.test(S.head) && await page.isVisible('#via-form input[data-fid="skipNote"]') && await page.isVisible('#via-form select[data-fid="fill"]'));
+  ok('展開狀態在重繪後維持', await page.evaluate(() => document.querySelector('.via-skipped').open));
+  await page.click('#via-form input[data-fid="skipNote"]');
+  await page.keyboard.type('Tj 150°C 餘裕大');
+  ok('打原因：游標不跳、寫進 via.skipNote、清單即時顯示原因', await page.evaluate(() =>
+    document.activeElement && document.activeElement.dataset.fid === 'skipNote' && thermalSpecs['Q6505'].via.skipNote === 'Tj 150°C 餘裕大'
+    && /原因：Tj 150°C 餘裕大/.test(document.querySelector('.via-skipped').textContent)));
+  await page.click('#via-ed-head .via-skip-cb input');
+  S = await st();
+  ok('取消勾選 → 回到待完善清單、skip／skipNote 刪掉、其他 via 資料保留', S.todo.some(t => /Q6505/.test(t)) && await page.evaluate(() =>
+    !('skip' in thermalSpecs['Q6505'].via) && !('skipNote' in thermalSpecs['Q6505'].via) && thermalSpecs['Q6505'].via.fill === 'air') && Number(S.badge || 0) === before.badge, S.todo);
+  // 已完成的元件也能從編輯區上方勾
+  await sel('U850-Si5518');
+  await page.click('#via-ed-head .via-skip-cb input');
+  S = await st();
+  ok('已完成的元件也能在編輯區上方勾「暫不納入」', S.items.some(i => i.name === 'U850-Si5518' && i.skip) && await page.evaluate(() => thermalSpecs['U850-Si5518'].via.skip === true));
+  await page.evaluate(() => relock());
+  ok('未解鎖：「暫不納入」勾選停用，元件名稱仍可點', await page.evaluate(() =>
+    [...document.querySelectorAll('.via-skip-cb input')].every(e => e.disabled) && [...document.querySelectorAll('.via-todo-go')].every(e => !e.disabled)));
+  await page.evaluate(() => _applyUnlockedUI());
+  await page.click('#via-ed-head .via-skip-cb input');
+  await page.click('.via-todo .via-todo-row:has-text("Q6505") .via-skip-cb input');
+  await page.evaluate(async () => { await saveAllTabs(); });
+  db = await page.evaluate(() => window.__db.projects.X);
+  ok('存檔：via.skip 寫進資料庫；U850 取消後沒有殘留 skip', db.thermal_specs.Q6505.via.skip === true && db.thermal_specs.Q6505.via.fill === 'air' && !('skip' in db.thermal_specs['U850-Si5518'].via), db.thermal_specs.Q6505);
+  await sel('PreDriver-B3');
+  const pl = await page.evaluate(() => ({ opts: [...document.querySelectorAll('#via-form select[data-fid="plating"] option')].map(o => o.textContent),
+    hint: document.getElementById('via-form').textContent }));
+  ok('鍍銅厚度：選項標成孔壁電鍍銅（20 µm Class 2／25.4 µm ≈ Class 3 預設／35 µm 加厚），說明不是表層銅箔',
+    pl.opts.some(t => /20 µm/.test(t) && /Class 2/.test(t)) && pl.opts.some(t => /25\.4 µm/.test(t) && /預設/.test(t)) && pl.opts.some(t => /35 µm/.test(t) && /加厚/.test(t))
+    && !pl.opts.some(t => /oz/.test(t)) && /不是表層銅箔/.test(pl.hint), pl.opts);
+
   console.log('\n[K] 版面與匯出');
   for (const w of [1920, 1536, 1366]) {
     await page.setViewportSize({ width: w, height: 900 });
@@ -333,6 +389,8 @@ const PROJ = () => ({
   ok('匯出 Excel：每顆納入元件＋不在條件內但有資料的元件各一列、有公式工作表', sh && sh.aoa.length === 1 + 6 && xl.wb.sheets[1].n === '公式與常數' && /ThermalVia/.test(xl.fn), sh && sh.aoa.map(r => r[1]));
   const u850 = sh.aoa.find(r => r[1] === 'U850-Si5518');
   ok('U850 那一列：K_eff 13.114（導熱膠 K=2）、R_th、穿板溫降', u850 && u850[23] === 13.114 && u850[24] > 0 && u850[28] > 0, u850);
+  const q65 = sh.aoa.find(r => r[1] === 'Q6505');
+  ok('暫不納入的元件也匯出，狀態「暫不納入熱流評估」', q65 && q65[3] === '暫不納入熱流評估', q65);
 
   ok('沒有 JS 錯誤', errors.length === 0, errors);
   await browser.close();

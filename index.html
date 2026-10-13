@@ -4734,13 +4734,35 @@
   .via-todo { border: 1px solid #fed7aa; background: #fffaf3; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
   .via-todo-h { font-weight: 700; color: #9a3412; font-size: 0.88rem; margin: 0 4px 6px; }
   .via-todo-list { max-height: 228px; overflow: auto; }
-  .via-todo-row {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%;
-    padding: 5px 8px; border: none; border-radius: 8px; background: transparent;
-    font-size: 0.82rem; color: var(--gm-text); text-align: left; cursor: pointer;
-  }
+  /* 一列＝左邊「暫不納入」勾選（寫入）＋右邊點一下跳到該元件（唯讀也可用；不可把 checkbox 包進 button） */
+  .via-todo-row { display: flex; align-items: center; gap: 6px; border-radius: 8px; padding: 0 4px; }
   .via-todo-row:hover { background: #ffedd5; }
-  .via-todo-row b { font-weight: 700; }
+  .via-todo-go {
+    flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+    padding: 5px 4px; border: none; background: transparent; border-radius: 8px;
+    font-size: 0.82rem; color: var(--gm-text); text-align: left; cursor: pointer; font-family: inherit;
+  }
+  .via-todo-go b { font-weight: 700; }
+  .via-skip-cb {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px;
+    border: 1px solid #d6d3c9; border-radius: 999px; background: #fff; cursor: pointer;
+    font-size: 0.72rem; font-weight: 600; color: var(--gm-text-2); white-space: nowrap;
+  }
+  .via-skip-cb:hover { border-color: #94a3b8; }
+  .via-skip-cb input { margin: 0; width: 13px; height: 13px; cursor: pointer; accent-color: #64748b; }
+  .via-skip-cb input:disabled { cursor: not-allowed; }
+  .via-skip-cb.head { margin-left: auto; }
+  .via-skipped { border: 1px solid var(--gm-border); background: #f8f7f3; border-radius: 12px; padding: 8px 12px; margin-bottom: 14px; }
+  .via-skipped > summary { cursor: pointer; font-weight: 700; font-size: 0.86rem; color: #475569; padding: 2px 4px; }
+  .via-skipped[open] > summary { margin-bottom: 6px; }
+  .via-skipped .via-todo-row:hover { background: #eef1f5; }
+  .via-skip-note { font-size: 0.76rem; color: #475569; }
+  .via-skip-note.none { color: var(--gm-text-3); }
+  .via-count.skip { background: #f1f5f9; border-color: #e2e8f0; color: #475569; }
+  .via-list-cat.skip { color: #475569; }
+  .via-item.skip .vi-name { color: #64748b; }
+  .via-pill.st-skip { background: #e2e8f0; color: #334155; }
+  .via-skip-sec { background: #f1f5f9; border-color: #e2e8f0; }
   .via-alldone { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; border-radius: 12px; padding: 9px 14px; margin-bottom: 14px; font-size: 0.86rem; font-weight: 600; }
   .via-none { border: 1px dashed var(--gm-border); background: var(--gm-bg-soft); color: var(--gm-text-2); border-radius: 12px; padding: 18px; font-size: 0.88rem; line-height: 1.7; }
   .via-chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: #fff; border: 1px solid #fed7aa; color: #c2410c; white-space: nowrap; }
@@ -14274,6 +14296,8 @@ async function vdExportPdf() {
      pcbT     PCB 厚度 mm（有 key＝本頁指定；沒有＝取 5G-RRU 專案參數 global_params.t_PCB）
      plating  鍍銅厚度 mm（沒有 key＝預設 1 mil）
      fill     塞孔材料（ViaCalc.FILLS 的 key）；fillK＝自訂 K
+     skip     true＝暫不納入熱流評估（例：規格溫度很高、不建模）：不列入待完善清單、計數與分頁徽章；
+              其他 via 資料原樣保留，取消勾選（刪 key）即恢復。skipNote＝原因（選填）
    計算結果不存（每次由上面的值算，單一事實來源）。
    專案選單與 TH/ME 頁共用：編輯的是記憶體裡同一份 thermalSpecs → 存檔、未存變更偵測、
    元件改名搬資料（sgApplyRenames 整筆搬 thermal_specs[key]）都沿用 TH/ME 頁既有的機制。 */
@@ -14286,11 +14310,13 @@ const VIA_ST = {
   todo:   { icon: '✎', text: '未完善' },
   err:    { icon: '❌', text: '配置有問題' },
   orphan: { icon: '·', text: '不在納入條件內' },
+  skip:   { icon: '⏸', text: '暫不納入熱流評估' },
 };
 let viaSel = null;          // 目前選取的元件（specKey）
 let viaMsg = null;          // { key, cls, html }：自動間距等動作的一次性訊息
 let _viaUnitMem = 'mil';    // localStorage 不能用時的備援
 const viaCustomUi = new Set();   // 「自訂鍍銅厚度」暫態：選了自訂但還沒打數字時，輸入框也要出現
+let viaSkippedOpen = false; // 「暫不納入熱流評估」清單展開狀態（重繪時維持）
 
 function viaUnit() {
   try { const u = localStorage.getItem(VIA_UNIT_LS); if (u === 'mm' || u === 'mil') return u; } catch (e) {}
@@ -14366,11 +14392,16 @@ function viaRowsAll() {
   });
   return out;
 }
+function viaIsSkipped(spec) { return !!(spec && spec.via && spec.via.skip === true); }
+/* inc＝納入且要評估、skip＝符合納入條件但勾了「暫不納入熱流評估」、orphan＝不符合條件但有 via 資料 */
 function viaPartition(rows) {
-  const inc = rows.filter(r => r.reasons.length);
-  const incKeys = new Set(inc.map(r => r.key));
-  const orphan = rows.filter(r => !r.reasons.length && viaHasData(r.spec) && !incKeys.has(r.key));
-  return { inc, orphan };
+  const met = rows.filter(r => r.reasons.length);
+  const inc = met.filter(r => !viaIsSkipped(r.spec));
+  const skip = met.filter(r => viaIsSkipped(r.spec));
+  const metKeys = new Set(met.map(r => r.key));
+  const orphan = rows.filter(r => !r.reasons.length && viaHasData(r.spec) && !metKeys.has(r.key));
+  inc.forEach(r => { r.grp = 'inc'; }); skip.forEach(r => { r.grp = 'skip'; }); orphan.forEach(r => { r.grp = 'orphan'; });
+  return { inc, skip, orphan };
 }
 
 /* ── 一顆元件的有效輸入（含每個值的來源）＋計算＋檢查 ─────────────── */
@@ -14521,24 +14552,24 @@ function viaRender(opts) {
     return;
   }
   const rows = viaRowsAll();
-  const { inc, orphan } = viaPartition(rows);
-  inc.concat(orphan).forEach(r => { r.ev = viaEval(r); });
-  const all = inc.concat(orphan);
+  const parts = viaPartition(rows);
+  const { inc, skip, orphan } = parts;
+  const all = inc.concat(skip, orphan);
+  all.forEach(r => { r.ev = viaEval(r); });
   if (!viaSel || !all.some(r => r.key === viaSel)) {
-    const first = inc.find(r => r.ev.status === 'err' || r.ev.status === 'todo') || inc[0] || orphan[0];
+    const first = inc.find(r => r.ev.status === 'err' || r.ev.status === 'todo') || inc[0] || skip[0] || orphan[0];
     viaSel = first ? first.key : null;
   }
   const sel = all.find(r => r.key === viaSel) || null;
-  const isOrphan = !!sel && !inc.includes(sel);
 
   const ae = document.activeElement;
   const inForm = ae && ae.closest && ae.closest('#via-form');
   const formEl = document.getElementById('via-form');
   if (opts.keepForm && inForm && sel && formEl && formEl.dataset.key === sel.key) {
     const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
-    set('via-summary', viaSummaryHtml(inc, orphan));
-    set('via-list', viaListHtml(inc, orphan));
-    set('via-ed-head', viaHeadHtml(sel, isOrphan));
+    set('via-summary', viaSummaryHtml(parts));
+    set('via-list', viaListHtml(parts));
+    set('via-ed-head', viaHeadHtml(sel));
     set('via-out', viaOutHtml(sel));
     viaUpdateBadge(inc);
     return;
@@ -14553,12 +14584,12 @@ function viaRender(opts) {
   const rulesOpen = !!c.querySelector('details.via-rules[open]');
 
   c.innerHTML =
-    `<div id="via-summary">${viaSummaryHtml(inc, orphan)}</div>` +
+    `<div id="via-summary">${viaSummaryHtml(parts)}</div>` +
     (all.length
       ? `<div class="via-layout">
-           <div class="via-list" id="via-list">${viaListHtml(inc, orphan)}</div>
+           <div class="via-list" id="via-list">${viaListHtml(parts)}</div>
            <div class="via-ed">
-             <div class="via-ed-head" id="via-ed-head">${sel ? viaHeadHtml(sel, isOrphan) : ''}</div>
+             <div class="via-ed-head" id="via-ed-head">${sel ? viaHeadHtml(sel) : ''}</div>
              ${sel ? `<div class="via-ed-body"><div id="via-form" data-key="${escapeAttr(sel.key)}">${viaFormHtml(sel)}</div><div id="via-out">${viaOutHtml(sel)}</div></div>` : ''}
            </div>
          </div>`
@@ -14594,59 +14625,84 @@ function viaCommit() {
   viaCommit._t = setTimeout(() => viaRender(), 0);
 }
 
-function viaSummaryHtml(inc, orphan) {
+function viaSummaryHtml(parts) {
+  const { inc, skip } = parts;
   const cnt = { ok: 0, warn: 0, todo: 0, err: 0 };
   inc.forEach(r => { cnt[r.ev.status]++; });
   const pill = (k, label) => `<span class="via-count ${k}${cnt[k] ? '' : ' zero'}">${label} ${cnt[k]}</span>`;
   let h = `<div class="via-summary">
       <span class="via-count">納入 <b>${inc.length}</b> 顆</span>
       ${pill('todo', '✎ 未完善')}${pill('err', '❌ 配置有問題')}${pill('warn', '⚠ 有提醒')}${pill('ok', '✅ 完成')}
-      <span class="via-rule-line">納入條件：EE/RF/PWR 清單填了「TH Via 內徑」或「TH Via Qty」，或 TH/ME 頁的主散熱路徑是 Thermal Via（沒選時看 5G-RRU 的導熱方式）。</span>
+      <span class="via-count skip${skip.length ? '' : ' zero'}" title="勾了「暫不納入熱流評估」的元件：不列入待完善清單、計數與分頁徽章">⏸ 暫不納入 ${skip.length}</span>
+      <span class="via-rule-line">納入條件：EE/RF/PWR 清單填了「TH Via 內徑」或「TH Via Qty」，或 TH/ME 頁的主散熱路徑是 Thermal Via（沒選時看 5G-RRU 的導熱方式）。
+        規格溫度很高、不建模的元件可勾「暫不納入」。</span>
     </div>`;
+  // 一列：左邊「暫不納入」勾選（寫入，未解鎖時停用）；右邊點一下跳到該元件（唯讀也可用）
+  const row = (r, inner) => `<div class="via-todo-row">
+      <label class="via-skip-cb" title="勾選＝暫不納入熱流評估（例：規格溫度很高、不建模）：移出這份清單、計數與分頁徽章；via 資料保留，取消勾選即恢復">
+        <input type="checkbox" data-key="${escapeAttr(r.key)}"${r.grp === 'skip' ? ' checked' : ''} onchange="viaToggleSkip(this.dataset.key, this.checked)">暫不納入</label>
+      <button type="button" class="via-todo-go sg-spec-ro" data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)">${inner}</button></div>`;
   const todo = inc.filter(r => r.ev.status === 'todo' || r.ev.status === 'err');
   if (todo.length) {
-    h += `<div class="via-todo"><div class="via-todo-h">⚠ 還沒完善 Via 資訊、或配置有問題的元件（${todo.length}）— 點一下直接跳到該元件</div><div class="via-todo-list">` +
+    h += `<div class="via-todo"><div class="via-todo-h">⚠ 還沒完善 Via 資訊、或配置有問題的元件（${todo.length}）— 點名稱跳到該元件；不建模的元件勾「暫不納入」</div><div class="via-todo-list">` +
       todo.map(r => {
         const chips = r.ev.miss.map(k => `<span class="via-chip">缺 ${escapeHtml(viaMissLabel(k, r.ev.r))}</span>`)
           .concat(r.ev.issues.filter(i => i.lv === 'err').map(i => `<span class="via-chip red">${escapeHtml(i.chip)}</span>`)).join('');
-        return `<button type="button" class="via-todo-row sg-spec-ro" data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)">
-          <span class="via-st st-${r.ev.status}">${VIA_ST[r.ev.status].icon}</span>
-          <span class="via-cat-tag ${r.css}">${r.cat}</span><b>${escapeHtml(r.name)}</b>${chips}</button>`;
+        return row(r, `<span class="via-st st-${r.ev.status}">${VIA_ST[r.ev.status].icon}</span>
+          <span class="via-cat-tag ${r.css}">${r.cat}</span><b>${escapeHtml(r.name)}</b>${chips}`);
       }).join('') + `</div></div>`;
   } else if (inc.length) {
     h += `<div class="via-alldone">✅ 納入的 ${inc.length} 顆元件 Via 資訊都已完善、配置沒有干涉。</div>`;
-  } else {
+  } else if (!skip.length) {
     h += `<div class="via-none">這個專案目前沒有元件符合納入條件。<br>
       到「EE/RF/PWR-專案元件清單」填寫元件的 <b>TH Via 內徑(mil)</b> 或 <b>TH Via Qty</b>，
       或到「TH/ME-專案元件清單」把 <b>主散熱路徑</b> 選成 <b>Thermal Via</b>，元件就會出現在這裡。</div>`;
+  }
+  if (skip.length) {
+    h += `<details class="via-skipped"${viaSkippedOpen ? ' open' : ''} ontoggle="viaSkippedOpen = this.open">
+        <summary>⏸ 暫不納入熱流評估的元件（${skip.length}）— 取消勾選即恢復納入</summary><div class="via-todo-list">` +
+      skip.map(r => {
+        const note = String((r.spec.via && r.spec.via.skipNote) || '').trim();
+        return row(r, `<span class="via-cat-tag ${r.css}">${r.cat}</span><b>${escapeHtml(r.name)}</b>` +
+          (note ? `<span class="via-skip-note">原因：${escapeHtml(note)}</span>` : '<span class="via-skip-note none">（沒寫原因）</span>'));
+      }).join('') + `</div></details>`;
   }
   return h;
 }
 function viaItemMeta(r) {
   const ev = r.ev;
+  if (r.grp === 'skip') return '暫不納入';
   if (ev.status === 'todo') return '缺 ' + ev.miss.length + ' 項';
   if (ev.res && ev.res.ok) return 'K ' + viaFmt(ev.res.keff, 1);
   return ev.status === 'err' ? '干涉' : '';
 }
-function viaListHtml(inc, orphan) {
-  const item = (r, orph) => `<button type="button" class="via-item sg-spec-ro${r.key === viaSel ? ' sel' : ''}${orph ? ' orphan' : ''}"
-      data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)" title="${escapeAttr(r.name + '｜' + VIA_ST[orph ? 'orphan' : r.ev.status].text)}">
-      <span class="via-st st-${r.ev.status}">${VIA_ST[r.ev.status].icon}</span>
+function viaListHtml(parts) {
+  const { inc, skip, orphan } = parts;
+  const item = (r) => {
+    const st = r.grp === 'inc' ? r.ev.status : r.grp;
+    return `<button type="button" class="via-item sg-spec-ro${r.key === viaSel ? ' sel' : ''}${r.grp !== 'inc' ? ' ' + r.grp : ''}"
+      data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)" title="${escapeAttr(r.name + '｜' + VIA_ST[st].text)}">
+      <span class="via-st st-${st}">${VIA_ST[st === 'orphan' ? r.ev.status : st].icon}</span>
       <span class="vi-name">${escapeHtml(r.name)}</span><span class="vi-meta">${escapeHtml(viaItemMeta(r))}</span></button>`;
+  };
   let h = '';
   Object.entries(CATEGORIES).forEach(([cat, info]) => {
     const rs = inc.filter(r => r.cat === cat);
     if (!rs.length) return;
-    h += `<div class="via-list-cat"><span class="via-cat-tag ${info.css}">${cat}</span>${rs.length} 顆</div>` + rs.map(r => item(r, false)).join('');
+    h += `<div class="via-list-cat"><span class="via-cat-tag ${info.css}">${cat}</span>${rs.length} 顆</div>` + rs.map(item).join('');
   });
+  if (skip.length) {
+    h += `<div class="via-list-cat skip" title="勾了「暫不納入熱流評估」的元件（例：規格溫度很高、不建模）。via 資料保留，取消勾選即恢復">⏸ 暫不納入熱流評估（${skip.length}）</div>` +
+      skip.map(item).join('');
+  }
   if (orphan.length) {
     h += `<div class="via-list-cat orphan" title="這些元件有 via 設計資料，但 TH Via 內徑／Qty 已改成 N/A、主散熱路徑也不是 Thermal Via。資料保留不刪，條件恢復就會回到上面">不在納入條件內（資料保留）</div>` +
-      orphan.map(r => item(r, true)).join('');
+      orphan.map(item).join('');
   }
   return h || '<div class="via-hint" style="padding:8px;">（沒有元件）</div>';
 }
-function viaHeadHtml(row, isOrphan) {
-  const ev = row.ev, st = isOrphan ? 'orphan' : ev.status;
+function viaHeadHtml(row) {
+  const ev = row.ev, st = row.grp === 'inc' ? ev.status : row.grp;
   const P = parseFloat(row.comp['Power(W)']);
   const reasons = row.reasons.length
     ? '納入原因：' + row.reasons.map(x => `<span class="via-chip reason">${escapeHtml(x.text)}</span>`).join('')
@@ -14655,7 +14711,9 @@ function viaHeadHtml(row, isOrphan) {
     <span class="via-ed-name">${escapeHtml(row.name)}</span>
     <span class="via-pill st-${st}">${VIA_ST[st].icon} ${VIA_ST[st].text}</span>
     <span class="via-ed-meta">發熱 ${isFinite(P) ? viaFmt(P, 3) + ' W' : '—'}・數量 ${escapeHtml(row.comp.Qty ?? '—')}</span>
-    <div class="via-ed-reasons">${reasons}</div>`;
+    <div class="via-ed-reasons">${reasons}${row.grp !== 'orphan' ? `
+      <label class="via-skip-cb head" title="勾選＝暫不納入熱流評估（例：規格溫度很高、不建模）：移出待完善清單、計數與分頁徽章；via 資料保留，取消勾選即恢復">
+        <input type="checkbox" data-key="${escapeAttr(row.key)}" data-fid="skip-head"${row.grp === 'skip' ? ' checked' : ''} onchange="viaToggleSkip(this.dataset.key, this.checked)">暫不納入熱流評估</label>` : ''}</div>`;
 }
 
 /* 有來源的欄位（Via 數量／內徑 → EE 清單；PCB 厚度 → 5G-RRU 參數）：
@@ -14691,6 +14749,12 @@ function viaFormHtml(row) {
     `<button type="button" class="${cls || ''}${cur === val ? ' on' : ''}" data-fid="${k}-${val}" onclick="viaSet('${k}','${val}')">${label}</button>`).join('') + `</div>`;
   const area = ViaCalc.padArea(d);
   let h = '';
+  if (row.grp === 'skip') {
+    h += `<div class="via-sec via-skip-sec"><div class="via-sec-h">⏸ 暫不納入熱流評估</div>
+      <div class="via-hint" style="margin-bottom:6px;">不列入待完善清單、計數與分頁徽章；下面的 via 資料照樣保留、也可以繼續填。取消上方的勾選即恢復納入。</div>
+      <div class="via-row"><label>原因</label><div class="via-ctl"><input class="via-in" style="width:100%;" type="text" data-fid="skipNote"
+        value="${escapeAttr(v.skipNote || '')}" placeholder="選填，例：Tj 規格 150°C、餘裕大，不建模" oninput="viaOnSkipNote(this)" onchange="viaCommit()"></div></div></div>`;
+  }
 
   // ── 焊盤（E-PAD）──
   h += `<div class="via-sec"><div class="via-sec-h"><span class="bar"></span>焊盤 <span class="en">E-PAD</span>
@@ -14768,7 +14832,7 @@ function viaFormHtml(row) {
         <option value="custom"${plCustom ? ' selected' : ''}>自訂…</option>
       </select>
       ${plCustom ? `<input class="via-in${v.plating !== undefined && !(ViaCalc.num(v.plating) > 0) ? ' invalid' : ''}" type="number" step="any" min="0" data-k="plating" data-fid="plating-c" value="${escapeAttr(v.plating ?? '')}" oninput="viaOnNum(this)" onchange="viaCommit()"><span class="via-unit">mm</span>` : ''}
-    </div></div>`;
+    </div><div class="via-hint">孔壁電鍍銅（不是表層銅箔）。IPC-6012 通孔孔銅平均：Class 2 ≥ 20 µm、Class 3 ≥ 25 µm；以 PCB 廠製作規範（Fab note）為準</div></div>`;
   h += `<div class="via-row"><label>塞孔材料</label><div class="via-ctl">
       <select class="via-sel" data-fid="fill" onchange="viaSet('fill', this.value)">
         <option value=""${!r.fill ? ' selected' : ''}>— 請選擇 —</option>
@@ -14892,7 +14956,9 @@ function viaRulesHtml(open) {
       <code>K_eff = (N·A_cu·K_Cu + N·A_fill·K_fill + A_FR4·K_FR4) ÷ A_pad</code>、<code>R_th = t ÷ (K_eff × A_pad)</code>（°C/W）。</div>
     <div><code>r_in = 內徑 ÷ 2</code>（成品孔徑，就是 Layout 上標的孔徑）、<code>r_out = r_in + 鍍銅厚度</code>；
       <code>A_cu = π(r_out² − r_in²)</code>、<code>A_fill = π·r_in²</code>、<code>A_FR4 = A_pad − N·π·r_out²</code>。</div>
-    <div><b>常數</b>：K_Cu = ${ViaCalc.K_CU}、K_FR4 = ${ViaCalc.K_FR4}（穿板方向）W/m·K；塞孔 ${fills} W/m·K；鍍銅預設 1 mil；1 mil = ${ViaCalc.MIL} mm。</div>
+    <div><b>常數</b>：K_Cu = ${ViaCalc.K_CU}、K_FR4 = ${ViaCalc.K_FR4}（穿板方向）W/m·K；塞孔 ${fills} W/m·K；1 mil = ${ViaCalc.MIL} mm。</div>
+    <div><b>鍍銅厚度</b>＝鑽孔後電鍍在孔壁上的銅（barrel plating），<b>不是表層銅箔</b>（表層銅＝基銅箔＋同一道電鍍，所以比孔銅厚）。
+      IPC-6012 通孔孔銅平均下限：Class 2 20 µm（最薄處 18）、Class 3 25 µm（最薄處 20）；預設 1 mil ≈ Class 3。以 PCB 廠製作規範（Fab note）為準。</div>
     <div><b>中心間距不影響等效 K</b>（公式裡沒有它）：只用來檢查排不排得下、會不會干涉，以及畫示意圖。</div>
     <div><b>檢查</b>：❌ 孔壁超出焊盤、孔壁互相重疊、via 總佔用面積大於焊盤（此時等效 K 不成立、不顯示）；
       ⚠ 孔壁離焊盤邊緣 &lt; ${ViaCalc.EDGE} mm、中心距 &lt; 2 倍內徑（常見加工下限，實際依 PCB 廠能力）。</div>
@@ -14901,7 +14967,8 @@ function viaRulesHtml(open) {
     <div><b>不含</b>：銅層的橫向擴散、焊錫層與空洞、鍍銅不均。R<sub>th</sub> 只是 E-PAD 正下方穿板的那一段，不是整條散熱路徑；
       「穿板溫降」假設熱全部經這一段，是偏保守的上限估計。</div>
     <div><b>納入條件</b>：EE/RF/PWR 清單的「TH Via 內徑」或「TH Via Qty」有填（不是 N/A），或 TH/ME 頁主散熱路徑是 Thermal Via
-      （TH/ME 頁沒選時看 5G-RRU 的導熱方式）。條件不再成立的元件，via 設計資料保留不刪，列在清單最下面。</div>
+      （TH/ME 頁沒選時看 5G-RRU 的導熱方式）。條件不再成立的元件，via 設計資料保留不刪，列在清單最下面。
+      規格溫度很高、不建模的元件可勾「暫不納入熱流評估」：移出待完善清單、計數與分頁徽章，via 資料保留，取消勾選即恢復。</div>
     <div><b>資料存放</b>：跟著專案與元件存（TH/ME 頁那份元件設定裡），按任一個儲存鍵＝全部分頁一起存；元件改名時資料跟著搬。
       Via 數量／內徑預設取 EE 清單（✂ 改成本頁的試算值，可「⇪ 寫回 EE 清單」）；E-PAD 與 TH/ME 頁同一欄；
       PCB 厚度預設取 5G-RRU 專案參數 t_PCB。計算結果不存，每次依輸入重算。</div>
@@ -14909,6 +14976,22 @@ function viaRulesHtml(open) {
 }
 
 /* ── 編輯 ─────────────────────────────────────────────────────── */
+/* 暫不納入熱流評估：只動 skip／skipNote，其他 via 資料原樣保留（取消勾選後接著填） */
+function viaToggleSkip(key, on) {
+  if (isProtected || !key) return;
+  if (on) { viaVia(key, true).skip = true; }
+  else {
+    const v = viaVia(key, false);
+    if (v) { delete v.skip; delete v.skipNote; viaCleanup(key); }
+  }
+  viaRender();
+}
+function viaOnSkipNote(el) {
+  if (isProtected || !viaSel) return;
+  const v = viaVia(viaSel, true), t = String(el.value).trim();
+  if (t) v.skipNote = t; else delete v.skipNote;
+  viaRender({ keepForm: true });
+}
 function viaVia(key, create) {
   let spec = thermalSpecs[key];
   if (!spec) { if (!create) return null; spec = thermalSpecs[key] = {}; }
@@ -15064,17 +15147,18 @@ function viaConv(el, from) {
 /* ── 匯出 Excel（納入的元件＋不在條件內但有資料的元件；公式與常數另一張工作表） ── */
 function viaExportExcel() {
   if (!viaProjectReady()) return;
-  const { inc, orphan } = viaPartition(viaRowsAll());
+  const { inc, skip, orphan } = viaPartition(viaRowsAll());
   const n = (x, dec) => (x === null || x === undefined || !isFinite(x)) ? '' : Number(Number(x).toFixed(dec));
   const head = ['分類', '元件名稱', '納入原因', '狀態', '缺漏／問題', '焊盤形狀', 'E-PAD L (mm)', 'E-PAD W (mm)', '直徑 D (mm)', '焊盤面積 (mm²)',
     '排列', 'Via 數量', '數量來源', '內徑 (mil)', '內徑 (mm)', '內徑來源', '中心間距 (mil)', '中心間距 (mm)', 'PCB 厚度 (mm)', 'PCB 厚度來源',
     '鍍銅厚度 (mm)', '塞孔材料', 'K_fill (W/m·K)', 'K_eff (W/m·K)', 'R_th (°C/W)', '銅面積比 (%)', '單顆 via 熱阻 (°C/W)', '發熱瓦數 (W)', '穿板溫降 (°C)'];
-  const rows = inc.concat(orphan).map(row => {
+  const rows = inc.concat(skip, orphan).map(row => {
     const ev = viaEval(row), r = ev.r, d = r.d, res = ev.res && ev.res.ok ? ev.res : null;
     const P = parseFloat(row.comp['Power(W)']);
     const probs = ev.miss.map(k => '缺 ' + viaMissLabel(k, r)).concat(ev.issues.filter(i => i.lv !== 'info').map(i => i.text));
+    if (row.grp === 'skip' && r.v.skipNote) probs.unshift('暫不納入原因：' + r.v.skipNote);
     return [row.cat, row.name, row.reasons.map(x => x.text).join('；') || '（不在納入條件內）',
-      inc.includes(row) ? VIA_ST[ev.status].text : VIA_ST.orphan.text, probs.join('；'),
+      VIA_ST[row.grp === 'inc' ? ev.status : row.grp].text, probs.join('；'),
       d.shape === 'circle' ? '圓形' : '方形', n(d.L, 4), n(d.W, 4), n(d.D, 4), n(ViaCalc.padArea(d) || null, 4),
       d.pattern === 'staggered' ? '交錯' : '矩陣', n(d.n, 0), r.qtyLocal ? '本頁試算值' : (r.srcQty !== null ? 'EE 清單' : ''),
       n(r.diaMil, 3), n(d.dia, 4), r.diaLocal ? '本頁試算值' : (r.srcDia !== null ? 'EE 清單' : ''),
@@ -15092,6 +15176,8 @@ function viaExportExcel() {
     ['R_th', 't ÷ (K_eff × A_pad)，t 與 A 用 mm 時 ×1000 → °C/W'],
     ['面積', 'r_in = 內徑/2、r_out = r_in + 鍍銅厚度；A_cu = π(r_out² − r_in²)、A_fill = π·r_in²、A_FR4 = A_pad − N·π·r_out²'],
     ['常數', `K_Cu = ${ViaCalc.K_CU}、K_FR4 = ${ViaCalc.K_FR4} W/m·K；1 mil = ${ViaCalc.MIL} mm；邊距 ${ViaCalc.EDGE} mm`],
+    ['鍍銅厚度', '孔壁電鍍銅（不是表層銅箔）；IPC-6012 通孔孔銅平均：Class 2 ≥ 20 µm、Class 3 ≥ 25 µm'],
+    ['暫不納入熱流評估', '勾選後不列入待完善清單、計數與分頁徽章；via 資料保留，取消勾選即恢復'],
     ['中心間距', '不影響 K_eff；只用來檢查排不排得下、會不會干涉'],
     ['檢查', `❌ 孔壁超出焊盤／孔壁重疊／via 總面積 > 焊盤；⚠ 孔壁離邊緣 < ${ViaCalc.EDGE} mm、中心距 < 2 倍內徑`],
     ['穿板溫降', '發熱瓦數 × R_th（假設熱全部經 E-PAD 下方的 via 區穿板，偏保守）'],

@@ -539,8 +539,9 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   | `qty`／`diaMil` | **有 key＝本頁的試算值**（✂ 解鎖後、或 EE 清單沒填時）；沒有 key＝取 EE 清單的 `TV_Qty`／`TV_ID_mil` |
   | `pitchMil` | 中心間距（mil；畫面可切 mm，存一律 mil）|
   | `pcbT` | 有 key＝本頁指定；沒有＝取 5G-RRU 專案參數 `global_params.t_PCB`（**唯讀參照，本工具不寫 global_params**）|
-  | `plating` | 鍍銅厚度 mm（沒有 key＝預設 1 mil）|
+  | `plating` | 鍍銅厚度 mm（沒有 key＝預設 1 mil）。⚠ 是**孔壁電鍍銅**（barrel plating），不是表層銅箔；選項：20 µm（IPC-6012 Class 2 平均）／25.4 µm（≈ Class 3，預設）／35 µm（加厚孔銅）／自訂。舊工具的「1 oz」標籤已改（值 0.035 不變）|
   | `fill`／`fillK` | 塞孔材料（`ViaCalc.FILLS` 的 key，必填）／自訂 K |
+  | `skip`／`skipNote` | `true`＝**暫不納入熱流評估**（例：規格溫度很高、不建模）／原因（選填）。取消勾選＝刪這兩個 key，其他 via 資料不動 |
 
   **計算結果（K_eff、R_th…）不存**，每次由輸入重算（單一事實來源）。
 - **納入條件**（`viaReasons`）：EE 清單 `TV_ID_mil` 或 `TV_Qty` 有值（`'N/A'`／空白／0 不算），或主散熱路徑是 Thermal Via
@@ -548,6 +549,11 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   不再符合條件但有 `via` 資料 → 列在清單最下面「不在納入條件內（資料保留）」，**不刪**。
 - **未完善提示**：頁首摘要＋「待完善清單」（缺哪些欄位、哪些有干涉，點一下跳過去）＋分頁按鈕上的數字徽章（`viaUpdateBadge`，
   未完善＋配置有問題的顆數）。EE 頁改 TH Via 內徑／Qty 時徽章就地更新（`sgOnCompEdit`／`sgOnTvChange` 呼叫）。
+- **暫不納入熱流評估**（`viaToggleSkip`）：待完善清單每一列左邊、編輯區上方各有一個勾選。勾了 → `via.skip = true`，
+  移出待完善清單、計數（「納入 N 顆」不含它）與分頁徽章，改列在「⏸ 暫不納入熱流評估」群組（可收合、顯示原因）與左側清單的同名群組；
+  via 資料原樣保留、也可以繼續填；取消勾選即恢復。`viaPartition` 回 `{ inc, skip, orphan }`（`row.grp`）。
+  ⚠ 列的結構是「`<label>` 勾選＋`<button class="via-todo-go">` 跳轉」並排 —— checkbox 不可包進 button（無效 HTML、點了會先觸發跳轉）；
+  勾選是寫入（未解鎖時停用），跳轉鈕標 `sg-spec-ro`（唯讀也能看）。
 - **有來源的欄位**（UX 慣例 2）：Via 數量／內徑鎖定顯示 EE 清單的值（白底黑字＋✂）；✂ → 本頁試算值（琥珀色提醒與 EE 清單不同）；
   「↺ 取 EE 清單值」刪掉試算值；「⇪ 寫回 EE 清單」**只在 EE/RF/PWR 頁載入同一個專案時可用**（寫進 `sgProjectData` 那顆元件、
   跟著 EE 頁的存檔與三方合併寫入），寫回後刪掉試算值。EE 頁沒載入同一個專案時停用並說明 —— 不可改寫 TH/ME 頁那份元件副本
@@ -565,8 +571,9 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   （舊版照算 → 高估）、圓形偶數顆不再「中心＋3」、干涉拆成「孔壁重疊＝錯誤／中心距 < 2 倍內徑＝提醒」、熱阻單位 °C/W、
   剖面圖厚度方向另外縮放（小焊盤原本畫出界）。
 - 與 5G-RRU 的關係：5G-RRU 目前所有 Thermal Via 元件共用專案參數 `K_Via`／`Via_Eff`；本頁算出的 K_eff 低於 `K_Via` 時提醒
-  「5G-RRU 端這顆的基板熱阻可能被低估」。**本工具不寫回 5G-RRU 的任何欄位**；若要讓 5G-RRU 逐顆採用 K_eff，需兩個 repo 一起新增
-  per-component 欄位（並列入兩邊的 carry 白名單）。
+  「5G-RRU 端這顆的基板熱阻可能被低估」。**本工具不寫回 5G-RRU 的任何欄位**。要讓 5G-RRU 逐顆採用 K_eff 的做法與理由見
+  `docs/5G-RRU-ThermalVia-K值-prompt.md`（建議：兩邊共用 `viaCalc.js` 的算法、各自從原始輸入當場算，**不要**另存一個元件欄位 ——
+  快選複製會帶出過期值、存檔推導只在兩頁同專案時才跑）。
 - ⚠ 「使用者建議與改善」的「發生分頁」下拉**還沒有**「Thermal Via 計算」：回饋的讀取來源是 SharePoint List（`PRIMARY_FEEDBACK: 'list'`），
   它的 `Tab` 欄是固定選項的 choice 欄（`docs/lists-migration.md`），要先在 List 加這個選項，再同步加到兩個下拉。
 - 契約測試：`tests/via-calc.unit.test.js`（純 Node，公式與舊版對照、排列、自動間距、檢查）、`tests/via-tab.test.js`（headless）。
