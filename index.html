@@ -584,17 +584,25 @@
     box-shadow: 0 2px 10px rgba(0,0,0,0.08);
     border-radius: 0 0 8px 8px;
   }
+  /* TH/ME 頁：22 吋（1920）與 17 吋筆電（125% 縮放＝1536 CSS px；含 1366）都不可出現橫向捲軸。
+     原本 min-width:1400px 加上各欄 min-width 合計約 1600px，比 1480px 的內容區還寬。
+     現在不設表格最小寬度，每一欄都給 min-width（放得下內容的下限，合計約 1230px）＋
+     width（建議寬度，合計約 1370px）：空間夠就照建議寬度、再多的依比例分給各欄；
+     不夠就往下限壓，壓到 1366 寬（再扣掉右側浮動工具列讓出的寬度）也放得下。
+     ⚠ 每一欄都要有 width：table-layout:auto 會把多出來的寬度先全部塞給「沒寫 width」的欄。
+     ⚠ 欄位裡的 input/select 是 width:100%，對表格的最小寬度貢獻是 0 —— 欄寬下限只由
+     min-width 與表頭（nowrap）決定，所以加欄位或改長表頭時要一起檢查這組數字
+     （tests/complist-layout.test.js 會在 1920／1536／1366 量測）。 */
   .comp-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
-    min-width: 1400px;
   }
   .comp-table th {
     background: #e8f0f8;
     color: #1a3a6b;
     font-weight: 700;
-    padding: 10px 6px;
+    padding: 8px 4px;
     text-align: center;
     border-bottom: 2px solid #c5d9ee;
     white-space: nowrap;
@@ -602,15 +610,33 @@
   }
   .comp-table th.readonly-col { background: #e8f0f8; }
   .comp-table th.editable-col { background: #fff3e0; color: #e65100; }
-  /* ⚠ 這兩欄原本寫 width:180px + max-width:180px，但本表是 table-layout:auto 且
-     min-width:1400px 撐在 overflow-x:auto 的外框裡 —— 空間不足時 `width` 只是建議值，
+  /* ⚠ 欄寬下限一定要用 min-width：本表是 table-layout:auto，空間不足時 `width` 只是建議值，
      會被壓到表頭的 min-content（實測 60px），把「10×10」截成「10×1C」。
-     改用 min-width：它會拉高欄位的最小寬度，不會被壓縮，足夠放到「12.5×12.5」。 */
-  .comp-table .heat-source-col { min-width: 96px; }
-  .comp-table .heat-source-height-col { min-width: 90px; }
-  .comp-table .boss-size-col { min-width: 96px; }
-  .comp-table .boss-surface-col { min-width: 120px; }
-  .comp-table .tim-type-col { min-width: 132px; }
+     min-width 的數字是「該欄最長的內容放得下」：元件大小／TIM Size 要放得下「12.5×12.5」
+     （鎖定時再加 ✂）、主散熱路徑要放得下「Copper Coin」、凸台大小要放得下「無凸台，刻花定位」、
+     TIM 厚度要放得下「0.05mm以下」。 */
+  .comp-table .idx-col { min-width: 24px; width: 24px; }
+  .comp-table .qty-col { min-width: 36px; width: 40px; }
+  .comp-table .power-col { min-width: 58px; width: 60px; }
+  .comp-table .heat-source-col { min-width: 82px; width: 92px; }
+  .comp-table .heat-source-height-col { min-width: 62px; width: 70px; }
+  .comp-table .tim-type-col { min-width: 104px; width: 116px; }
+  .comp-table .boss-size-col { min-width: 142px; width: 146px; }
+  .comp-table .boss-surface-col { min-width: 88px; width: 96px; }
+  .comp-table .tim-thickness-col { min-width: 106px; width: 108px; }
+  .comp-table .tim-size-col { min-width: 96px; width: 104px; }
+  /* 選項字串比舊的「IC top/IC bot/雙向」長（Thermal Via / Copper Coin），要夠寬才不會
+     把目前選到的值截斷。 */
+  .comp-table .heat-dir-col { min-width: 108px; width: 116px; }
+  .comp-table .ic-hsk-col { min-width: 64px; width: 76px; }
+  /* 備註：📝 icon（與 EE/RF/PWR 頁、模擬與實測驗證頁同一套），欄寬只要放得下一顆按鈕 */
+  .comp-table .note-col { min-width: 44px; width: 44px; }
+  /* 元件名稱：建議寬度最大、多的寬度依比例它分得最多；真的放不下才換行
+     （長料號在 - 處斷開，底線連在一起的也能斷），不再用 nowrap 把整張表撐出橫向捲軸 */
+  .comp-table th.readonly-col.name-col,
+  .comp-table td.name-cell { min-width: 140px; width: 210px; }
+  /* 規格書欄：只有一顆 👁，給剛好的寬度就好（不要吃掉元件名稱的空間） */
+  .comp-table .spec-col { min-width: 46px; width: 46px; }
   /* TIM 選型：掛在「TIM Type」格底下的型號下拉 */
   .comp-table .tim-model-sub { margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1; }
   .comp-table .tim-model-sub .cell-select { font-size: 0.74rem; }
@@ -619,10 +645,6 @@
   }
   /* 型號已從型號庫移除 → 琥珀提示（紅色保留給 Fail/錯誤） */
   .comp-table .tim-model-gone .cell-select { border-color: #f0b429; background: #fff8e1; }
-  .comp-table .tim-thickness-col { min-width: 140px; }
-  /* 選項字串比舊的「IC top/IC bot/雙向」長（Thermal Via / Copper Coin），要夠寬才不會
-     把目前選到的值截斷；本表外層本來就是 overflow-x:auto，多這點寬度只是多捲一點。 */
-  .comp-table .heat-dir-col { min-width: 120px; }
   /* E-PAD 大小：主散熱路徑 = Thermal Via 時，長在「元件大小」格底下的分支欄 */
   .comp-table .epad-sub { margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e1; }
   .comp-table .epad-label {
@@ -636,17 +658,10 @@
     margin-top: 3px; font-size: 0.68rem; line-height: 1.25;
     color: #8a6100; cursor: help;
   }
-  .comp-table .ic-hsk-col { min-width: 90px; }
-  .comp-table .note-col { min-width: 150px; }
-  .comp-table .power-col { min-width: 90px; }
   .auto-calc-hint { background: #fffde7 !important; }
-  .comp-table th.readonly-col.name-col { min-width: 220px; }
-  .comp-table td.name-cell { min-width: 220px; }
-  /* 規格書欄：只有一顆 👁，給剛好的寬度就好（不要吃掉元件名稱的空間） */
-  .comp-table .spec-col { min-width: 56px; width: 56px; }
 
   .comp-table td {
-    padding: 8px 6px;
+    padding: 6px 4px;
     text-align: center;
     border-bottom: 1px solid #eee;
     color: #444;
@@ -658,7 +673,7 @@
     text-align: left;
     font-weight: 600;
     color: #1a3a6b;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .comp-table td.name-cell .name-input {
     border: 1px solid transparent;
@@ -685,16 +700,18 @@
   .comp-table td.name-cell .name-text {
     font-weight: 600;
     color: #1a3a6b;
-    padding: 2px 4px;
+    padding: 2px 2px;
     display: inline-block;
   }
   /* Pad 自動帶入鎖定欄：白底黑字、無框、不可編輯 + ✂ 解鎖鈕 */
   .comp-table .tim-locked-val {
-    display: inline-block; padding: 2px 4px; color: #111;
+    display: inline-block; padding: 2px 3px; color: #111;
     background: transparent; font-size: inherit; cursor: default;
   }
+  /* 鎖定值與 ✂ 同一行（不要讓 ✂ 掉到下一行）：欄寬下限因此＝值＋✂ 的寬度 */
+  .comp-table td.lock-cell { white-space: nowrap; }
   .comp-table .tim-unlock-btn {
-    margin-left: 4px; padding: 0 5px; font-size: 0.72rem; line-height: 1.5;
+    margin-left: 3px; padding: 0 4px; font-size: 0.72rem; line-height: 1.5;
     border: 1px solid #d1d5db; border-radius: 4px; background: #fff;
     color: #b45309; cursor: pointer; vertical-align: middle;
   }
@@ -706,6 +723,9 @@
 
   /* Editable cell inputs */
   .comp-table td.editable-cell { padding: 4px 3px; }
+  /* 本表的輸入框比一般欄位窄 → 內距縮小，把寬度留給內容（「12.5×12.5」才不會被截） */
+  .comp-table .cell-input { padding: 5px 4px; }
+  .comp-table .cell-select { padding: 5px 2px; }
   .cell-input {
     width: 100%;
     padding: 6px 8px;
@@ -933,7 +953,6 @@
     margin-left: 4px;
   }
 
-  .tim-size-col { min-width: 100px; }
 
   /* Hide checkbox */
   .hide-checkbox {
@@ -947,8 +966,18 @@
     text-decoration: line-through;
   }
   .comp-table th.hide-col, .comp-table td.hide-col {
-    width: 40px;
-    min-width: 40px;
+    width: 32px;
+    min-width: 32px;
+  }
+  /* 右側浮動工具列（預設位置：position:fixed、right:18px、寬 58px）在視窗 1648px 以下會蓋住
+     本頁最右邊的欄位（備註 📝 —— 滑過預覽就摸不到）與 EE 匯入鈕。工具列還在預設位置時，
+     本頁右側讓出它的寬度：1536 以下固定讓 56px（48px 重疊＋8px 間距），1536～1648 之間
+     內容區置中、重疊逐漸變小。使用者拖走工具列（.gm-moved）就不讓 —— 不知道它被放在哪；
+     ≤1100px 工具列本來就隱藏。 */
+  @media (min-width: 1101px) {
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist {
+      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
+    }
   }
 
   /* Hidden component collapsible zone (Tab 2 & Tab 3) */
@@ -1640,7 +1669,7 @@
   /* 已有備註 → 彩色且加底色，一眼看出哪些元件有備註 */
   .sg-note-btn.has-note { filter: none; opacity: 1; background: #fef9c3; border-color: #fde047; }
   .sg-note-btn.has-note:hover { background: #fef08a; border-color: #facc15; }
-  /* 📝 滑過預覽（Tab1／Tab3 共用；position: fixed＋夾在視窗內） */
+  /* 📝 滑過預覽（Tab1／TH/ME 頁／Tab3 共用；position: fixed＋夾在視窗內） */
   .note-tip {
     position: fixed; z-index: 1250; width: max-content; max-width: min(380px, 90vw);
     background: #fffef5; border: 1px solid #facc15; border-radius: 8px; padding: 8px 11px;
@@ -5710,7 +5739,7 @@ function bindReadonlyHints() {
     if (!c) return;
     c.addEventListener('click', (e) => {
       if (!isProtected) return;
-      if (e.target.closest('.btn-export, .tcp-view-btn, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用
+      if (e.target.closest('.btn-export, .tcp-view-btn, .sg-spec-ro, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用（唯讀檢視）
       showReadonlyHint(bid);
     }, true);
     _roHintBound = true;   // 至少綁到一個容器才算數
@@ -6787,6 +6816,8 @@ function renderAllCategories() {
   const container = document.getElementById('comp-container');
   const exportToolbar = document.getElementById('export-toolbar');
   const scrollY = window.scrollY;   // 重繪不可把使用者彈回頁面頂端（UX 慣例 1-2）
+  // 展開中的「被隱藏的元件」也要維持展開：否則重繪（改備註、主散熱路徑…）就收起來、頁面變短、捲動位置跟著跳
+  const openHidden = new Set([...container.querySelectorAll('details.hidden-comp-zone[open]')].map(d => d.dataset.cat));
 
   let html = '';
 
@@ -6811,6 +6842,7 @@ function renderAllCategories() {
     Note：以上凸台高度公差皆為 +/-0.1mm
   </div>`;
   container.innerHTML = html;
+  container.querySelectorAll('details.hidden-comp-zone').forEach(d => { if (openHidden.has(d.dataset.cat)) d.open = true; });
   exportToolbar.style.display = 'flex';
   applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
   window.scrollTo(0, scrollY);
@@ -6823,21 +6855,21 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
 
   const theadHtml = `<thead><tr>
           <th class="readonly-col hide-col">隱藏</th>
-          <th class="readonly-col">#</th>
+          <th class="readonly-col idx-col">#</th>
           <th class="readonly-col name-col">元件名稱</th>
           <th class="readonly-col spec-col" title="規格書線上瀏覽（唯讀）。上傳／取代／刪除請到「EE/RF/PWR-專案元件清單」">規格書</th>
-          <th class="readonly-col">數量</th>
+          <th class="readonly-col qty-col">數量</th>
           <th class="readonly-col power-col">發熱瓦數<br>(W)</th>
           <th class="editable-col heat-source-col">元件大小<br>(mm)</th>
-          <th class="editable-col heat-source-height-col">元件高度(max)<br>(mm)</th>
+          <th class="editable-col heat-source-height-col">元件高度<br>max (mm)</th>
           <th class="editable-col tim-type-col" title="TIM 種類。存檔時寫回共用資料庫的元件欄位（＝5G-RRU 元件清單的「介面材料」）；底下若有選型號會連型號一起寫，5G-RRU 就以該型號的 k 與填縫厚度算 R_TIM">TIM Type</th>
           <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
-          <th class="editable-col boss-surface-col">凸台表面處理</th>
+          <th class="editable-col boss-surface-col">凸台<br>表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
           <th class="editable-col heat-dir-col" title="元件的主要散熱路徑。存檔時寫成 5G-RRU 元件清單的「導熱方式」（Copper Coin／Thermal Via／IC top／None 同名對應），並決定 Pad 尺寸要帶 E-PAD 大小還是元件大小過去">主散熱路徑</th>
           <th class="editable-col ic-hsk-col">IC 距離<br>HSK</th>
-          <th class="editable-col note-col">備註</th>
+          <th class="editable-col note-col" title="📝 滑過看內容、點一下編輯（灰色＝還沒寫）">備註</th>
         </tr></thead>`;
 
   /* Split items into visible and hidden */
@@ -6869,7 +6901,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
 
   if (hiddenRows.length > 0) {
     html += `
-      <details class="hidden-comp-zone">
+      <details class="hidden-comp-zone" data-cat="${catKey}">
         <summary>被隱藏的元件（${hiddenRows.length} 項）</summary>
         <div class="comp-table-wrap">
         <table class="comp-table">
@@ -6940,6 +6972,10 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const icHskIsCustom = icToHSK && !icHskPresets.includes(icToHSK);
     const icHskSelVal = icHskIsCustom ? '\u81ea\u8a02' : icToHSK;
     const note         = spec.note           || '';
+    // 備註：📝 icon（與 EE/RF/PWR 頁、模擬與實測驗證頁同一套）。sg-spec-ro → 未解鎖時仍可點開檢視（唯讀）
+    const noteCell = `<button type="button" class="sg-note-btn sg-spec-ro${note ? ' has-note' : ''}" ` +
+      `data-comp="${escapeAttr(specKey)}" data-note="${escapeAttr(note)}" data-note-name="${escapeAttr(compName)}" ` +
+      `aria-label="備註" onclick="clNoteOpen(this)">📝</button>`;
     // TIM 選型（型號庫）：選了型號 → TIM 厚度改由型號的「預設厚度」帶入並鎖定，
     // 單一事實來源是型號庫，且不再受 TIM_THICKNESS_OPTIONS 固定清單限制
     // （型號可能是 1.2mm 這種清單裡沒有的值）。5G-RRU 端另取該型號的「填縫厚度」
@@ -7000,12 +7036,12 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 onchange="onToggleHide(this)"
                 title="\u52fe\u9078\u4ee5\u96b1\u85cf\u6b64\u5143\u4ef6\uff08\u532f\u51fa\u6642\u4e0d\u5305\u542b\uff09">
             </td>
-            <td class="readonly-cell">${idx + 1}</td>
+            <td class="readonly-cell idx-col">${idx + 1}</td>
             <td class="name-cell readonly-cell">
               <span class="name-text">${escapeHtml(compName)}</span>
             </td>
             <td class="readonly-cell spec-col">${th2SpecCell(comp, catKey, idx)}</td>
-            <td class="readonly-cell">${escapeHtml(qty)}</td>
+            <td class="readonly-cell qty-col">${escapeHtml(qty)}</td>
             <td class="readonly-cell power-col">${escapeHtml(power)}</td>
             <td class="editable-cell heat-source-col">
               <input class="cell-input" type="text"
@@ -7032,9 +7068,9 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
               ${timLibModelCell(specKey, timType, timModel, timModelGone)}
             </td>
             <td class="editable-cell boss-size-col">${bossSizeCell}</td>
-            <td class="editable-cell boss-surface-col">${bossSurfaceInner}</td>
-            <td class="editable-cell tim-thickness-col">${timThickInner}</td>
-            <td class="editable-cell tim-size-col">${timSizeInner}</td>
+            <td class="editable-cell boss-surface-col${lockSurface ? ' lock-cell' : ''}">${bossSurfaceInner}</td>
+            <td class="editable-cell tim-thickness-col${lockThick ? ' lock-cell' : ''}">${timThickInner}</td>
+            <td class="editable-cell tim-size-col${lockTimSize ? ' lock-cell' : ''}">${timSizeInner}</td>
             <td class="editable-cell heat-dir-col${heatDirLegacy ? ' heat-dir-legacy' : ''}">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
@@ -7048,13 +7084,8 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 ? `<div class="heat-dir-legacy-hint" title="\u820a\u6b04\u4f4d\u300c\u6563\u71b1\u65b9\u5411\u300d\u7684\u503c\u300c${escapeAttr(heatDirRaw)}\u300d\u5728\u65b0\u7684\u300c\u4e3b\u6563\u71b1\u8def\u5f91\u300d\u6c92\u6709\u5c0d\u61c9\uff08\u770b\u4e0d\u51fa\u662f Copper Coin \u9084\u662f Thermal Via\uff09\uff0c\u8acb\u91cd\u65b0\u9078\u64c7">\u26a0 \u820a\u503c\u300c${escapeHtml(heatDirRaw)}\u300d\u9700\u91cd\u9078</div>`
                 : ''}
             </td>
-            <td class="editable-cell ic-hsk-col">${icCellInner}</td>
-            <td class="editable-cell note-col">
-              <input class="cell-input" type="text"
-                data-comp="${escapeAttr(specKey)}" data-field="note"
-                value="${escapeAttr(note)}"
-                placeholder="\u2014" onchange="onCellChange(this)">
-            </td>
+            <td class="editable-cell ic-hsk-col${lockIc ? ' lock-cell' : ''}">${icCellInner}</td>
+            <td class="editable-cell note-col">${noteCell}</td>
           </tr>`;
     return rowHtml;
 }
@@ -7566,7 +7597,7 @@ function buildPdfHtml(categories) {
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.timSize)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.heatDirection)}</td>
               <td style="border:1px solid #eee;padding:5px 4px;text-align:center;">${escapeHtml(r.icToHSK)}</td>
-              <td style="border:1px solid #eee;padding:5px 4px;text-align:left;">${escapeHtml(r.note)}</td>
+              <td style="border:1px solid #eee;padding:5px 4px;text-align:left;white-space:pre-wrap;">${escapeHtml(r.note)}</td>
             </tr>`;
     });
 
@@ -9343,7 +9374,7 @@ async function timLibSave() {
   }
 }
 
-/* ── 備註編輯視窗（Tab1 元件清單、Tab3 模擬與實測驗證共用）──
+/* ── 備註編輯視窗（Tab1 元件清單、TH/ME 頁、Tab3 模擬與實測驗證共用）──
    備註欄是 📝 icon 按鈕（沒寫＝反灰、有寫＝上色），滑過顯示完整內容（noteTip*），點開才編輯。
    未解鎖時仍可點開「檢視」，但唯讀。t = { name, value, save(v) }。 */
 let _sgNoteTarget = null;
@@ -9375,6 +9406,23 @@ function sgNoteOpen(cat, idx) {
     const y = window.scrollY;
     sgRenderProjectComponents();
     window.scrollTo(0, y);
+  } });
+}
+
+/* TH/ME 頁：備註存在 thermal_specs[specKey].note（Tab2 自己的資料，不在元件物件上）。
+   清空 → 刪 key（整個 spec 空了就一起刪，與 onCellChange 同一套） */
+function clNoteOpen(btn) {
+  const key = btn && btn.dataset.comp;
+  if (!key) return;
+  noteModalOpen({ name: btn.dataset.noteName, value: (thermalSpecs[key] || {}).note || '', save: (v) => {
+    if (v) {
+      if (!thermalSpecs[key]) thermalSpecs[key] = {};
+      thermalSpecs[key].note = v;
+    } else if (thermalSpecs[key]) {
+      delete thermalSpecs[key].note;
+      if (Object.keys(thermalSpecs[key]).length === 0) delete thermalSpecs[key];
+    }
+    renderAllCategories();                         // 只換 📝 的狀態；捲動位置由 renderAllCategories 還原
   } });
 }
 

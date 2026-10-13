@@ -492,6 +492,23 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   滑過 `noteTipShow` 顯示完整內容）。匯出 PDF 時暫時把 icon 換成備註文字再截圖。
 - 契約測試：`tests/vd-judge.test.js`。
 
+#### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
+
+- 目標寬度：1920（22 吋）、1536（17 吋筆電 125% 縮放）、1600，並留餘裕到 1366。`.comp-table` **不設表格最小寬度**
+  （原本 `min-width:1400px`＋各欄下限合計約 1600px，比 1480px 的內容區還寬）。
+- **每一欄都要有 `min-width`（放得下內容的下限）＋`width`（建議寬度）**：`table-layout:auto` 會把多出來的寬度
+  先全部塞給「沒寫 width」的欄。欄裡的 input/select 是 `width:100%`、對最小寬度貢獻 0，所以下限只由 `min-width`
+  與表頭（nowrap）決定 —— **加欄位、改表頭、加長下拉選項時要一起調這組數字**，跑 `tests/complist-layout.test.js` 量。
+- 元件名稱不再 `nowrap`（`overflow-wrap:anywhere`）：多的寬度依比例它分得最多，真的放不下才在 `-` 處換行。
+  鎖定值＋✂ 的格子標 `lock-cell`（`nowrap`），✂ 不會掉到下一行。
+- 右側浮動工具列（`#tc-rail-wrapper`，fixed、right:18px）在 1648px 以下會蓋住最右欄（備註 📝）：工具列在預設位置時
+  `#tab-complist` 右側讓出 `clamp(0, (1648px − 100vw)/2, 56px)`；拖走（`.gm-moved`）就不讓。
+- 備註欄是 📝 icon（與 Tab1／Tab3 同一套），值仍存 `thermal_specs[key].note`：`clNoteOpen` → `noteModalOpen`，
+  清空 → 刪 key（spec 空了整個刪，與 `onCellChange` 同一套）。Excel／PDF 匯出照舊印文字，PDF 用 `pre-wrap` 保留換行。
+- 重繪（`renderAllCategories`）時展開中的「被隱藏的元件」維持展開（`details[data-cat]`），否則頁面變短、捲動位置會跳。
+- 唯讀時點 `.sg-spec-ro`（👁、📝 這類唯讀檢視鈕）不再跳「目前為唯讀狀態」提示（`bindReadonlyHints`）。
+- 契約測試：`tests/complist-layout.test.js`。
+
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 
 檔名是 `${projectId}_${catKey}_${ts}.jpg`，專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，剩下的才是專案 id，
