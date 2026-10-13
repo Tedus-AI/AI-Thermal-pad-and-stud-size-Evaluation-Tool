@@ -959,7 +959,8 @@
      ≤1100px 工具列本來就隱藏。 */
   @media (min-width: 1101px) {
     body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc {
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc,
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-via {
       padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
     }
   }
@@ -4706,6 +4707,172 @@
     padding: 2px 8px; font-weight: 700;
   }
   #version-badge.is-latest .vb-latest { display: inline-flex; }
+
+  /* ==================== Thermal Via 計算（原 thermal-via-calculator 移植） ====================
+     色彩：紅色只用在「干涉／不成立」（UX 慣例 7）；未完善＝橘、注意＝琥珀、完成＝綠。 */
+  .via-tab-badge {
+    display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 6px;
+    border-radius: 999px; background: #ea580c; color: #fff;
+    font-size: 0.7rem; font-weight: 700; line-height: 18px; text-align: center; vertical-align: 1px;
+  }
+  .tab-btn.active .via-tab-badge { background: #fff; color: #c2410c; }
+  .via-hd-sub { font-weight: 500; font-size: 0.78rem; color: var(--gm-text-3); margin-left: 6px; }
+
+  .via-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 12px; font-size: 0.84rem; }
+  .via-count {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 11px; border-radius: 999px;
+    background: #fff; border: 1px solid var(--gm-border); color: var(--gm-text-2); font-weight: 600; white-space: nowrap;
+  }
+  .via-count b { color: var(--gm-text); }
+  .via-count.ok   { background: #ecfdf3; border-color: #bbf7d0; color: #15803d; }
+  .via-count.warn { background: #fefce8; border-color: #fde68a; color: #a16207; }
+  .via-count.todo { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+  .via-count.err  { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+  .via-count.zero { opacity: 0.55; }
+  .via-rule-line { flex-basis: 100%; font-size: 0.76rem; color: var(--gm-text-3); }
+
+  .via-todo { border: 1px solid #fed7aa; background: #fffaf3; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+  .via-todo-h { font-weight: 700; color: #9a3412; font-size: 0.88rem; margin: 0 4px 6px; }
+  .via-todo-list { max-height: 228px; overflow: auto; }
+  .via-todo-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%;
+    padding: 5px 8px; border: none; border-radius: 8px; background: transparent;
+    font-size: 0.82rem; color: var(--gm-text); text-align: left; cursor: pointer;
+  }
+  .via-todo-row:hover { background: #ffedd5; }
+  .via-todo-row b { font-weight: 700; }
+  .via-alldone { border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; border-radius: 12px; padding: 9px 14px; margin-bottom: 14px; font-size: 0.86rem; font-weight: 600; }
+  .via-none { border: 1px dashed var(--gm-border); background: var(--gm-bg-soft); color: var(--gm-text-2); border-radius: 12px; padding: 18px; font-size: 0.88rem; line-height: 1.7; }
+  .via-chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: #fff; border: 1px solid #fed7aa; color: #c2410c; white-space: nowrap; }
+  .via-chip.red  { border-color: #fecaca; color: #b91c1c; }
+  .via-chip.amb  { border-color: #fde68a; color: #a16207; }
+  .via-chip.reason { background: #f8f6f0; border-color: var(--gm-border); color: var(--gm-text-2); }
+  .via-cat-tag { display: inline-block; font-size: 0.68rem; font-weight: 700; color: #fff; border-radius: 5px; padding: 1px 6px; }
+  .via-cat-tag.rf { background: #c0392b; } .via-cat-tag.digital { background: #2e6bb5; } .via-cat-tag.pwr { background: #e67e22; }
+
+  .via-layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .via-layout { grid-template-columns: minmax(0, 1fr); } }
+  .via-list {
+    background: var(--gm-surface); border: 1px solid var(--gm-border); border-radius: 16px; padding: 8px;
+    position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto;
+  }
+  .via-list-cat { display: flex; align-items: center; gap: 6px; font-size: 0.74rem; font-weight: 700; color: var(--gm-text-2); margin: 8px 6px 4px; }
+  .via-list-cat .via-cat-tag { font-size: 0.68rem; }
+  .via-list-cat.orphan { color: var(--gm-text-3); font-weight: 600; }
+  .via-item {
+    display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 8px; margin: 1px 0;
+    border: 1px solid transparent; border-radius: 9px; background: transparent;
+    font-size: 0.83rem; color: var(--gm-text); text-align: left; cursor: pointer;
+  }
+  .via-item:hover { background: var(--gm-tint-2); }
+  .via-item.sel { background: var(--gm-tint); border-color: #f0c8b4; }
+  .via-item .vi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .via-item .vi-meta { font-size: 0.72rem; color: var(--gm-text-3); white-space: nowrap; }
+  .via-item.orphan .vi-name { color: var(--gm-text-3); font-weight: 500; }
+  .via-st { flex: 0 0 auto; width: 18px; text-align: center; font-size: 0.8rem; }
+  .via-st.st-todo { color: #c2410c; font-weight: 800; }
+
+  .via-ed { background: var(--gm-surface); border: 1px solid var(--gm-border); border-radius: 16px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(45, 38, 25, 0.05), 0 8px 24px -16px rgba(45, 38, 25, 0.12); }
+  .via-ed-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 13px 18px;
+    border-bottom: 1px solid var(--gm-border-2); background: linear-gradient(180deg, #fdfbf4 0%, #f9f6ec 100%);
+  }
+  .via-ed-name { font-size: 1.04rem; font-weight: 700; color: var(--gm-text); overflow-wrap: anywhere; }
+  .via-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; }
+  .via-pill.st-ok   { background: #dcfce7; color: #166534; }
+  .via-pill.st-warn { background: #fef9c3; color: #854d0e; }
+  .via-pill.st-todo { background: #ffedd5; color: #9a3412; }
+  .via-pill.st-err  { background: #fee2e2; color: #991b1b; }
+  .via-pill.st-orphan { background: #f1f5f9; color: #475569; }
+  .via-ed-meta { margin-left: auto; font-size: 0.78rem; color: var(--gm-text-2); white-space: nowrap; }
+  .via-ed-reasons { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 0.76rem; color: var(--gm-text-3); }
+  .via-ed-body { display: grid; grid-template-columns: minmax(330px, 410px) minmax(0, 1fr); gap: 18px; padding: 16px 18px 18px; }
+  @media (max-width: 1240px) { .via-ed-body { grid-template-columns: minmax(0, 1fr); } }
+
+  .via-sec { border: 1px solid var(--gm-border-2); border-radius: 12px; padding: 11px 13px 6px; margin-bottom: 12px; background: var(--gm-bg-soft); }
+  .via-sec-h { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.86rem; color: var(--gm-text); margin-bottom: 9px; }
+  .via-sec-h .bar { width: 4px; height: 14px; border-radius: 2px; background: var(--gm-primary); }
+  .via-sec-h .bar.g { background: #16a34a; } .via-sec-h .bar.o { background: #d97706; }
+  .via-sec-h .en { font-weight: 500; font-size: 0.74rem; color: var(--gm-text-3); }
+  .via-sec-h .via-seg { margin-left: auto; }
+  .via-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 3px 10px; align-items: center; margin-bottom: 9px; }
+  .via-row > label { font-size: 0.79rem; font-weight: 600; color: var(--gm-text-2); }
+  .via-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+  .via-hint { grid-column: 2; font-size: 0.74rem; color: var(--gm-text-3); line-height: 1.45; }
+  .via-hint.amb { color: #a16207; } .via-hint.red { color: #b91c1c; font-weight: 600; } .via-hint.ok { color: #15803d; }
+  .via-in {
+    width: 104px; padding: 5px 8px; border: 1.5px solid var(--gm-border); border-radius: 8px;
+    font-size: 0.9rem; font-weight: 600; color: var(--gm-text); background: #fff; font-family: inherit;
+  }
+  .via-in.wide { width: 150px; }
+  .via-in:focus, .via-sel:focus { outline: none; border-color: var(--gm-primary); box-shadow: 0 0 0 3px rgba(193, 95, 60, 0.15); }
+  .via-in.invalid { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1); }
+  .via-in:disabled, .via-sel:disabled { background: #f6f5f1; color: #888; cursor: not-allowed; }
+  .via-sel {
+    padding: 5px 26px 5px 8px; border: 1.5px solid var(--gm-border); border-radius: 8px; font-size: 0.84rem; font-weight: 600;
+    color: var(--gm-text); background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right 7px center / 14px;
+    appearance: none; max-width: 100%; font-family: inherit;
+  }
+  .via-unit { font-size: 0.78rem; color: var(--gm-text-2); font-weight: 600; }
+  .via-seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: 999px; background: #efece3; }
+  .via-seg button {
+    border: none; background: transparent; padding: 3px 11px; border-radius: 999px; cursor: pointer;
+    font-size: 0.77rem; font-weight: 600; color: var(--gm-text-2); font-family: inherit;
+  }
+  .via-seg button.on { background: #fff; color: var(--gm-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
+  .via-seg button:disabled { cursor: not-allowed; }
+  /* 鎖定的參照值：白底黑字純文字＋✂（UX 慣例 2，不用反灰 input） */
+  .via-locked { color: #111; font-weight: 700; font-size: 0.92rem; }
+  .via-locked small { color: var(--gm-text-3); font-weight: 500; font-size: 0.74rem; }
+  .via-src { font-size: 0.72rem; color: var(--gm-text-3); background: #f3f1ea; border-radius: 5px; padding: 1px 6px; }
+  .via-unlock {
+    padding: 0 6px; font-size: 0.76rem; line-height: 1.6; border: 1px solid #d1d5db; border-radius: 5px;
+    background: #fff; color: #b45309; cursor: pointer;
+  }
+  .via-unlock:hover { background: #fef3c7; border-color: #f59e0b; }
+  .via-mini-btn {
+    padding: 2px 8px; font-size: 0.74rem; font-weight: 600; border: 1px solid #d6d3c9; border-radius: 6px;
+    background: #fff; color: var(--gm-text-2); cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .via-mini-btn:hover:not(:disabled) { background: var(--gm-tint-2); border-color: #c9b9a6; }
+  .via-mini-btn.wb { color: #1d4ed8; border-color: #bfdbfe; }
+  .via-mini-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .via-auto-btn {
+    padding: 4px 11px; font-size: 0.78rem; font-weight: 700; border-radius: 8px; cursor: pointer; font-family: inherit;
+    background: #ecfdf3; color: #15803d; border: 1px solid #bbf7d0; white-space: nowrap;
+  }
+  .via-auto-btn:hover:not(:disabled) { background: #dcfce7; }
+  .via-msg { grid-column: 2; font-size: 0.76rem; border-radius: 7px; padding: 4px 8px; line-height: 1.45; }
+  .via-msg.ok { background: #f0fdf4; color: #166534; } .via-msg.amb { background: #fefce8; color: #854d0e; } .via-msg.red { background: #fef2f2; color: #991b1b; }
+  .via-conv { display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: var(--gm-text-3); margin: 2px 2px 4px; }
+  .via-conv input { width: 74px; padding: 3px 6px; border: 1px solid var(--gm-border); border-radius: 6px; font-size: 0.8rem; font-family: inherit; }
+
+  .via-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+  @media (max-width: 1500px) { .via-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .via-tile { border: 1px solid var(--gm-border-2); border-radius: 12px; padding: 9px 12px; background: #fff; min-width: 0; }
+  .via-tile.hero { background: linear-gradient(180deg, #fdf1ea 0%, #f9e4d8 100%); border-color: #f0c8b4; }
+  .via-tile .l { font-size: 0.71rem; font-weight: 700; color: var(--gm-text-3); letter-spacing: 0.02em; }
+  .via-tile .v { font-size: 1.32rem; font-weight: 800; color: var(--gm-text); line-height: 1.25; white-space: nowrap; }
+  .via-tile.hero .v { color: #9a3412; }
+  .via-tile .u { font-size: 0.72rem; font-weight: 600; color: var(--gm-text-2); margin-left: 3px; }
+  .via-tile .s { font-size: 0.71rem; color: var(--gm-text-3); }
+  .via-lines { margin: 10px 0 0; display: flex; flex-direction: column; gap: 5px; }
+  .via-note { font-size: 0.79rem; padding: 5px 10px; border-radius: 8px; line-height: 1.5; }
+  .via-note.err  { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .via-note.warn { background: #fefce8; color: #854d0e; border: 1px solid #fde68a; }
+  .via-note.todo { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+  .via-note.info { background: #f7f6f2; color: #4a4842; border: 1px solid var(--gm-border-2); }
+  .via-viz { margin-top: 12px; border: 1px solid var(--gm-border-2); border-radius: 12px; background: #fff; padding: 8px 10px 10px; }
+  .via-viz svg { display: block; width: 100%; height: auto; max-height: 560px; }
+  .via-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.73rem; color: var(--gm-text-2); margin-top: 6px; }
+  .via-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; border: 1px solid rgba(0, 0, 0, 0.18); }
+
+  .via-rules { margin-top: 16px; border: 1px solid var(--gm-border); border-radius: 14px; background: var(--gm-surface); }
+  .via-rules > summary { cursor: pointer; padding: 11px 16px; font-weight: 700; font-size: 0.88rem; color: var(--gm-text); }
+  .via-rules-body { padding: 0 18px 14px; font-size: 0.82rem; color: var(--gm-text-2); line-height: 1.7; }
+  .via-rules-body > div { padding: 3px 0; }
+  .via-rules-body code { background: #f3f1ea; border-radius: 4px; padding: 0 5px; font-size: 0.78rem; }
 </style>
 </head>
 <body>
@@ -5000,6 +5167,7 @@
       <button class="tab-btn" onclick="switchTab('complist')">TH/ME-專案元件清單</button>
       <button class="tab-btn" onclick="switchTab('validation')">模擬與實測驗證</button>
       <button class="tab-btn" onclick="switchTab('calc')">凸台&amp;TIM尺寸速算</button>
+      <button class="tab-btn" onclick="switchTab('via')" title="Thermal Via 等效 K 值計算（原獨立工具 thermal-via-calculator）。數字徽章＝目前專案還沒完善 via 資訊、或配置有干涉的元件數">Thermal Via 計算<span id="via-tab-badge" class="via-tab-badge" style="display:none"></span></button>
       <button class="tab-btn" onclick="switchTab('feedback')">&#128172; 使用者建議與改善</button>
     </div>
     <span id="version-badge" title="軟體版本">
@@ -5104,6 +5272,47 @@
         <div class="rule-row">• <strong>Thermal Putty</strong>：若 TIM 選用 Thermal Putty，散熱器與熱源間距建議為 0.5mm；凸台尺寸應與 IC 一致，且其用量規範不適用 Thermal Pad。</div>
       </div>
     </div>
+  </div>
+
+  <!-- ==================== Thermal Via 計算（原獨立工具 thermal-via-calculator 移植） ====================
+       專案選單與 TH/ME-專案元件清單「同一個」：via 設計存在 thermal_specs[元件].via，
+       兩頁編輯的是記憶體裡同一份 thermalSpecs，存檔走 saveAllTabs（TH/ME 頁那一筆寫入）。 -->
+  <div id="tab-via" class="tab-content">
+
+    <div id="via-protect-bar" class="protect-bar">
+      <span class="protect-status" id="via-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
+      <input type="password" id="via-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
+      <button class="protect-unlock-btn" id="via-protect-btn" onclick="toggleProtection()">解鎖</button>
+      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+      <div class="card-header blue">&#9881;&#65039; Thermal Via 計算 <span class="via-hd-sub">等效 K 值・穿板熱阻・Via 配置檢查</span></div>
+      <div class="card-body">
+        <div class="comp-toolbar">
+          <div class="field">
+            <label>選擇專案 <span class="via-hd-sub" style="margin-left:2px;">（與 TH/ME-專案元件清單同一個專案，切換一邊另一邊跟著換）</span></label>
+            <select id="via-project-select" onchange="viaOnProjectChange()">
+              <option value="">-- 請先載入專案列表 --</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="via-load-btn" onclick="viaLoadProjects()">載入專案</button>
+          <button class="btn-export excel" id="via-export-excel-btn" onclick="viaExportExcel()" disabled style="padding:7px 14px; font-size:0.82rem;">&#128202; 匯出 Excel</button>
+          <button class="btn btn-save" id="via-save-btn" onclick="saveAllTabs()" disabled>儲存 Via 設計</button>
+          <span id="via-save-status" class="save-status"></span>
+        </div>
+        <div id="via-status" class="comp-status" style="display:none; margin:14px 0 0;"></div>
+      </div>
+    </div>
+
+    <div id="via-container">
+      <div class="empty-state">
+        <div class="icon">&#9881;&#65039;</div>
+        <p>請先載入專案列表並選擇專案。</p>
+        <p style="margin-top:8px; font-size:0.85rem; color:#aaa;">EE/RF/PWR 清單填了「TH Via 內徑／Qty」、或 TH/ME 頁主散熱路徑選了 Thermal Via 的元件，會自動列在這裡</p>
+      </div>
+    </div>
+
   </div>
 
   <!-- ==================== Tab 2: Component List ==================== -->
@@ -5569,6 +5778,7 @@
 <script src="graphListsDb.js?v=__APP_VERSION__"></script>
 <script src="dbAdapter.js?v=__APP_VERSION__"></script>
 <script src="compMerge.js?v=__APP_VERSION__"></script>
+<script src="viaCalc.js?v=__APP_VERSION__"></script>
 <script src="teamsContact.js?v=__APP_VERSION__"></script>
 
 <!-- SheetJS for Excel export -->
@@ -5612,10 +5822,10 @@ let fbIsProtected = true;        // 預設啟用保護（Tab5 開發者管理）
 
 /* ---- Helpers: apply unlocked/locked UI state ---- */
 function _applyUnlockedUI() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('via-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('via-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
 
   isProtected = false;
   bars.forEach(bar => bar.classList.add('unlocked'));
@@ -5630,6 +5840,8 @@ function _applyUnlockedUI() {
   if (eeImportBtn) { eeImportBtn.disabled = false; eeImportBtn.title = 'EE 匯入 Excel'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = false;
+  const viaSaveBtn = document.getElementById('via-save-btn');
+  if (viaSaveBtn) viaSaveBtn.disabled = !currentProjectId;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = false; sgNewProjBtn.title = '新增專案'; }
   const sgRenameBtn = document.getElementById('sg-rename-project-btn');
@@ -5640,10 +5852,10 @@ function _applyUnlockedUI() {
 }
 
 function relock() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
+  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('via-protect-bar')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
+  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('via-protect-status')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
 
   isProtected = true;
   bars.forEach(bar => bar.classList.remove('unlocked'));
@@ -5658,6 +5870,8 @@ function relock() {
   if (eeImportBtn) { eeImportBtn.disabled = true; eeImportBtn.title = '需先解鎖密碼保護才能使用'; }
   const vdSaveBtn = document.getElementById('vd-save-btn');
   if (vdSaveBtn) vdSaveBtn.disabled = true;
+  const viaSaveBtn = document.getElementById('via-save-btn');
+  if (viaSaveBtn) viaSaveBtn.disabled = true;
   const sgNewProjBtn = document.getElementById('sg-new-project-btn');
   if (sgNewProjBtn) { sgNewProjBtn.disabled = true; sgNewProjBtn.title = '需先解鎖密碼保護才能新增專案'; }
   const sgRenameBtn = document.getElementById('sg-rename-project-btn');
@@ -5683,6 +5897,7 @@ const RO_CONTAINER_BAR = {
   'comp-container': 'protect-bar',
   'sg-project-components': 'sg-protect-bar',
   'vd-container': 'vd-protect-bar',
+  'via-container': 'via-protect-bar',
 };
 
 function applyReadonlyLock() {
@@ -5747,8 +5962,8 @@ function roToast(msg) {
 }
 
 async function toggleProtection() {
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn')].filter(Boolean);
+  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
+  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
 
   // Find whichever password input has a value
   const typedPwd = pwdInputs.find(el => el.value) || pwdInputs[0];
@@ -6555,11 +6770,13 @@ window.APP_VERSION = '__APP_VERSION__';
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-  const tabMap = { specgen: 0, complist: 1, validation: 2, calc: 3, feedback: 4 };
+  const tabMap = { specgen: 0, complist: 1, validation: 2, calc: 3, via: 4, feedback: 5 };
   const tabIndex = tabMap[tab] ?? 0;
   document.querySelectorAll('.tab-btn')[tabIndex].classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
   if (tab === 'feedback') fbOnTabActivate();
+  // Thermal Via：EE/RF/PWR 頁或 TH/ME 頁可能剛改過 TH Via 內徑／Qty／主散熱路徑 → 切進來時重算一次
+  if (tab === 'via' && typeof viaRender === 'function') viaRender();
   // 切換分頁時，工具列鎖頭圖示要反映該頁的鎖定範圍，並收起浮動密碼框
   if (typeof railHideLockPopover === 'function') railHideLockPopover();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
@@ -6780,6 +6997,7 @@ async function onProjectChange() {
       </div>`;
     saveBtn.style.display = 'none';
     document.getElementById('export-toolbar').style.display = 'none';
+    if (typeof viaRender === 'function') viaRender();
     return;
   }
 
@@ -6863,6 +7081,8 @@ function renderAllCategories() {
   exportToolbar.style.display = 'flex';
   applyReadonlyLock();   // 未解鎖 → 立即鎖住本頁所有輸入
   window.scrollTo(0, scrollY);
+  // Thermal Via 頁與本頁共用專案與 thermalSpecs（主散熱路徑、E-PAD 改了 → 納入清單與計算跟著變）
+  if (typeof viaRenderSoon === 'function') viaRenderSoon();
 }
 
 /* ---- 渲染單一分類表格 ---- */
@@ -8136,6 +8356,7 @@ function sgOnTvChange(sel) {
     const field = sel.dataset.field;
     const fieldKey = SG_CAT_MAP[cat].field;
     if (sgProjectData?.[fieldKey]?.[idx]) sgProjectData[fieldKey][idx][field] = 'N/A';
+    if (typeof viaUpdateBadge === 'function') viaUpdateBadge();
   } else {
     numInput.classList.remove('hidden');
     numInput.focus();
@@ -8198,6 +8419,8 @@ function sgOnCompEdit(el) {
   }
 
   sgProjectData[fieldKey][idx][field] = val;
+  // TH Via 內徑／Qty 決定元件會不會列進 Thermal Via 頁 → 分頁徽章的數字跟著更新（不重繪任何表格）
+  if ((field === 'TV_ID_mil' || field === 'TV_Qty' || field === 'Component') && typeof viaUpdateBadge === 'function') viaUpdateBadge();
   // 限溫對象的自動判定看類型與名稱、疑似範例值看限溫 → 這三欄改了就地更新限溫欄（不整表重繪）
   if (field === 'Limit(C)' || field === 'Type' || field === 'Component') sgRefreshLimitCell(cat, idx, el);
 }
@@ -10153,8 +10376,9 @@ function sgRenameSpecRefs(cat, oldName, newName) {
   if (from !== to) {
     if (sgPendingSpec2[sgProjectId]) sgMoveKey(sgPendingSpec2[sgProjectId], from, to);   // 快選帶入、還沒存的尺寸也跟著走
     if (currentProjectId === sgProjectId && currentProjectData) {
-      const r = sgMoveKey(thermalSpecs, from, to);
+      const r = sgMoveKey(thermalSpecs, from, to);   // 整筆搬：含 Thermal Via 頁的 via 設計
       sgMoveKey(hiddenComponents, from, to);
+      if (typeof viaSel !== 'undefined' && viaSel === from && r !== 'clash') viaSel = to;   // Thermal Via 頁選取中的元件跟著改名
       if (r === 'clash') roToast('TH/ME 頁已經有「' + newName + '」的資料，舊名稱的規格沒有搬過去，請到 TH/ME 頁確認');
     }
   }
@@ -12563,20 +12787,22 @@ async function saveAllTabs() {
   const saveBtn = document.getElementById('save-btn');
   const sgBtn   = document.getElementById('sg-comp-save-btn');
   const vdBtn   = document.getElementById('vd-save-btn');
+  const viaBtn  = document.getElementById('via-save-btn');
   const sgStatus = document.getElementById('sg-comp-save-status');
   const vdStatus = document.getElementById('vd-save-status');
+  const viaStatus = document.getElementById('via-save-status');
   const setStatus = (msg, type, clearMs) => {
     showSaveStatus(msg, type);
-    [sgStatus, vdStatus].forEach(el => {
+    [sgStatus, vdStatus, viaStatus].forEach(el => {
       if (!el) return;
       el.textContent = msg;
       el.className = 'save-status ' + type;
       if (clearMs) setTimeout(() => { el.textContent = ''; el.className = 'save-status'; }, clearMs);
     });
   };
-  [saveBtn, sgBtn, vdBtn].forEach(b => { if (b) b.disabled = true; });
+  [saveBtn, sgBtn, vdBtn, viaBtn].forEach(b => { if (b) b.disabled = true; });
   const spinner = '<span class="loading-spinner"></span>儲存中...';
-  [sgBtn, vdBtn].forEach(b => { if (b) b.innerHTML = spinner; });
+  [sgBtn, vdBtn, viaBtn].forEach(b => { if (b) b.innerHTML = spinner; });
   setStatus('正在儲存全部…', 'saving');
 
   try {
@@ -12837,6 +13063,7 @@ async function saveAllTabs() {
   if (saveBtn) { saveBtn.disabled = isProtected; saveBtn.textContent = '儲存熱設計資料'; }
   if (sgBtn)   { sgBtn.disabled   = isProtected; sgBtn.textContent   = '儲存元件變更'; }
   if (vdBtn)   { vdBtn.disabled   = isProtected; vdBtn.textContent   = '儲存驗證資料'; }
+  if (viaBtn)  { viaBtn.disabled  = isProtected || !currentProjectId; viaBtn.textContent = '儲存 Via 設計'; }
 }
 
 /* 各頁儲存按鈕與工具列儲存鈕統一走 saveAllTabs（一次存三頁） */
@@ -14033,6 +14260,848 @@ async function vdExportPdf() {
 }
 
 /* ============================
+   Thermal Via 計算（原獨立工具 thermal-via-calculator 移植）
+   ============================
+   計算核心在 viaCalc.js（純函式，與測試共用）；這裡是畫面與資料連動。
+
+   資料：thermal_specs[sgSpecKey(元件名)].via（本工具專用；5G-RRU 不讀、原樣保留）
+     shape    'circle'（沒有 key＝矩形）
+     padD     圓形焊盤直徑 mm。矩形的 L×W 就是 TH/ME 頁的 epadSize（同一欄，不另存一份）
+     pattern  'staggered'（沒有 key＝矩陣）
+     qty      Via 數量   ┐ 有 key＝本頁的試算值（✂ 解鎖後）；沒有 key＝取 EE 清單的 TV_Qty／TV_ID_mil
+     diaMil   Via 內徑 mil┘ （EE 清單沒填時直接在本頁填，也存在這裡；「⇪ 寫回 EE 清單」寫回後刪 key）
+     pitchMil 中心間距 mil
+     pcbT     PCB 厚度 mm（有 key＝本頁指定；沒有＝取 5G-RRU 專案參數 global_params.t_PCB）
+     plating  鍍銅厚度 mm（沒有 key＝預設 1 mil）
+     fill     塞孔材料（ViaCalc.FILLS 的 key）；fillK＝自訂 K
+   計算結果不存（每次由上面的值算，單一事實來源）。
+   專案選單與 TH/ME 頁共用：編輯的是記憶體裡同一份 thermalSpecs → 存檔、未存變更偵測、
+   元件改名搬資料（sgApplyRenames 整筆搬 thermal_specs[key]）都沿用 TH/ME 頁既有的機制。 */
+const VIA_UNIT_LS = 'sgThermal.viaUnit';
+const VIA_FILL_COLOR = { air: '#ffffff', epoxy: '#e9dcb0', solder: '#a8a29e', copper: '#dda06b', custom: '#cbd5e1' };
+const VIA_MISS_LABEL = { pad: 'E-PAD 尺寸', n: 'Via 數量', dia: 'Via 內徑', pitch: '中心間距', t: 'PCB 厚度', plating: '鍍銅厚度', fill: '塞孔材料' };
+const VIA_ST = {
+  ok:     { icon: '✅', text: '完成' },
+  warn:   { icon: '⚠', text: '完成（有提醒）' },
+  todo:   { icon: '✎', text: '未完善' },
+  err:    { icon: '❌', text: '配置有問題' },
+  orphan: { icon: '·', text: '不在納入條件內' },
+};
+let viaSel = null;          // 目前選取的元件（specKey）
+let viaMsg = null;          // { key, cls, html }：自動間距等動作的一次性訊息
+let _viaUnitMem = 'mil';    // localStorage 不能用時的備援
+const viaCustomUi = new Set();   // 「自訂鍍銅厚度」暫態：選了自訂但還沒打數字時，輸入框也要出現
+
+function viaUnit() {
+  try { const u = localStorage.getItem(VIA_UNIT_LS); if (u === 'mm' || u === 'mil') return u; } catch (e) {}
+  return _viaUnitMem;
+}
+function viaSetUnit(u) {
+  _viaUnitMem = u === 'mm' ? 'mm' : 'mil';
+  try { localStorage.setItem(VIA_UNIT_LS, _viaUnitMem); } catch (e) {}
+  viaRender();
+}
+function viaFmt(v, dec) {
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  return String(Number(Number(v).toFixed(dec === undefined ? 3 : dec)));
+}
+function viaR6(v) { return Math.round(v * 1e6) / 1e6; }
+// 長度（mil 存）→ 目前單位的文字；secondary＝另一個單位放括號
+function viaLen(mil, withOther) {
+  if (mil === null || mil === undefined) return '—';
+  const mm = mil * ViaCalc.MIL;
+  const a = viaUnit() === 'mm' ? viaFmt(mm, 4) + ' mm' : viaFmt(mil, 2) + ' mil';
+  if (!withOther) return a;
+  return a + '<small>（' + (viaUnit() === 'mm' ? viaFmt(mil, 2) + ' mil' : viaFmt(mm, 4) + ' mm') + '）</small>';
+}
+function viaLenInput(mil) { return (mil === null || mil === undefined) ? '' : (viaUnit() === 'mm' ? viaFmt(mil * ViaCalc.MIL, 4) : viaFmt(mil, 3)); }
+
+/* ── 專案與元件來源 ─────────────────────────────────────────── */
+function viaProjectReady() {
+  const sel = document.getElementById('project-select');
+  return !!(currentProjectId && currentProjectData && sel && sel.value === currentProjectId);
+}
+// 元件清單：EE/RF/PWR 頁正好載入同一個專案時用它記憶體裡的最新值（含還沒存的 TH Via 內徑／Qty）
+function viaCompSource() {
+  return (sgProjectId && sgProjectId === currentProjectId && sgProjectData) ? sgProjectData : currentProjectData;
+}
+function viaSameAsTab1() { return !!(sgProjectId && sgProjectId === currentProjectId && sgProjectData); }
+// TH Via 內徑／Qty：'N/A'、空白、0 都算「沒填」
+function viaTvNum(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (!s || s.toUpperCase() === 'N/A') return null;
+  const n = parseFloat(s);
+  return (isFinite(n) && n > 0) ? n : null;
+}
+// 主散熱路徑：TH/ME 頁的優先；沒選（或舊值）才看元件上的導熱方式（可能是 5G-RRU 設的）—— 與 sgHeatPathOf 同一套
+function viaPathOf(comp, spec) {
+  const hd = spec && spec.heatDirection;
+  if (hd && HEAT_PATH_MAP[hd]) return { path: hd, src: 'tab2' };
+  const bt = comp && comp.Board_Type;
+  if (bt && HEAT_PATH_MAP[bt]) return { path: bt, src: 'rru' };
+  return { path: null, src: null };
+}
+// 納入原因（三個欄位任一個有值就納入；主散熱路徑沒選時看 5G-RRU 的導熱方式）
+function viaReasons(comp, spec) {
+  const out = [];
+  const d = viaTvNum(comp.TV_ID_mil), q = viaTvNum(comp.TV_Qty);
+  if (d !== null) out.push({ k: 'tvd', text: 'TH Via 內徑 ' + viaFmt(d, 2) + ' mil' });
+  if (q !== null) out.push({ k: 'tvq', text: 'TH Via Qty ' + viaFmt(q, 0) });
+  const p = viaPathOf(comp, spec);
+  if (p.path === 'Thermal Via') out.push({ k: 'path', text: p.src === 'tab2' ? '主散熱路徑 Thermal Via' : '導熱方式 Thermal Via（5G-RRU）' });
+  return out;
+}
+function viaHasData(spec) { return !!(spec && spec.via && Object.keys(spec.via).length); }
+function viaRowsAll() {
+  const src = viaCompSource(), out = [];
+  if (!src) return out;
+  Object.entries(CATEGORIES).forEach(([cat, info]) => {
+    (Array.isArray(src[info.field]) ? src[info.field] : []).forEach((comp, idx) => {
+      const name = comp && comp.Component;
+      if (!name) return;
+      const key = sgSpecKey(name), spec = thermalSpecs[key] || null;
+      out.push({ cat, css: info.css, idx, comp, name, key, spec, reasons: viaReasons(comp, spec) });
+    });
+  });
+  return out;
+}
+function viaPartition(rows) {
+  const inc = rows.filter(r => r.reasons.length);
+  const incKeys = new Set(inc.map(r => r.key));
+  const orphan = rows.filter(r => !r.reasons.length && viaHasData(r.spec) && !incKeys.has(r.key));
+  return { inc, orphan };
+}
+
+/* ── 一顆元件的有效輸入（含每個值的來源）＋計算＋檢查 ─────────────── */
+function viaResolve(row) {
+  const spec = row.spec || {}, v = spec.via || {}, comp = row.comp || {};
+  const shape = v.shape === 'circle' ? 'circle' : 'rect';
+  let L = null, W = null, padSrc = null;
+  const epadRaw = String(spec.epadSize || '').trim();
+  if (shape === 'rect') {
+    const lw = sgParseLW(epadRaw);
+    if (lw && lw.L > 0 && lw.W > 0) { L = lw.L; W = lw.W; padSrc = 'epad'; }
+    else if (!epadRaw) {
+      // fallback：TH/ME 頁沒填 E-PAD，但 5G-RRU 端的導熱方式是 Thermal Via → 它的 Pad_L/Pad_W 就是 E-Pad 長寬
+      const pl = parseFloat(comp.Pad_L), pw = parseFloat(comp.Pad_W);
+      if ((comp.Board_Type === 'Thermal Via' || comp._pad_from === 'epadSize') && pl > 0 && pw > 0) { L = pl; W = pw; padSrc = 'rru'; }
+    }
+  }
+  const D = shape === 'circle' ? ViaCalc.pos(v.padD) : null;
+  const srcQty = viaTvNum(comp.TV_Qty), srcDia = viaTvNum(comp.TV_ID_mil);
+  const gp = (currentProjectData && currentProjectData.global_params) || {};
+  const srcT = ViaCalc.pos(gp.t_PCB);
+  const qtyLocal = v.qty !== undefined, diaLocal = v.diaMil !== undefined, tLocal = v.pcbT !== undefined;
+  const qty = qtyLocal ? ViaCalc.num(v.qty) : srcQty;
+  const diaMil = diaLocal ? ViaCalc.num(v.diaMil) : srcDia;
+  const t = tLocal ? ViaCalc.num(v.pcbT) : srcT;
+  const platingSet = ViaCalc.num(v.plating);
+  const plating = v.plating !== undefined ? platingSet : ViaCalc.PLATING_DEFAULT;
+  const fillDef = ViaCalc.fillOf(v.fill);
+  const kFill = !fillDef ? null : (fillDef.key === 'custom' ? ViaCalc.num(v.fillK) : fillDef.k);
+  const pitchMil = ViaCalc.num(v.pitchMil);
+  const d = {
+    shape, L, W, D, pattern: v.pattern === 'staggered' ? 'staggered' : 'matrix',
+    n: qty, dia: diaMil !== null ? diaMil * ViaCalc.MIL : null, pitch: pitchMil !== null ? pitchMil * ViaCalc.MIL : null,
+    t, plating, kFill,
+  };
+  return { d, v, spec, epadRaw, padSrc, srcQty, srcDia, srcT, qtyLocal, diaLocal, tLocal, qty, diaMil, t, pitchMil,
+           platingDefault: v.plating === undefined, fill: fillDef ? fillDef.key : null };
+}
+const VIA_CHECK_MAX = 2000;   // 數量太大（打錯）時不排、不畫，避免卡住畫面
+function viaEval(row) {
+  const r = viaResolve(row), d = r.d;
+  const miss = ViaCalc.missing(d);
+  let res = ViaCalc.calc(d);
+  if (!res.ok && res.reason === 'missing') res = null;
+  let chk = null;
+  const canLayout = ViaCalc.padArea(d) > 0 && Number.isInteger(d.n) && d.n >= 1 && d.n <= VIA_CHECK_MAX && d.dia > 0 && d.plating > 0 && (d.n === 1 || d.pitch > 0);
+  if (canLayout) chk = ViaCalc.check(d, ViaCalc.layout(d, d.pitch));
+  const issues = [];
+  const ro = (d.dia > 0 && d.plating > 0) ? ViaCalc.rOut(d) : null;
+  if (Number.isInteger(d.n) && d.n > VIA_CHECK_MAX) issues.push({ lv: 'warn', chip: '數量過多', text: `Via 數量 ${d.n} 顆太多（是不是打錯？），不檢查配置也不畫示意圖` });
+  if (res && !res.ok && res.reason === 'over') {
+    issues.push({ lv: 'err', chip: 'via 面積 > 焊盤', text: `${d.n} 顆 via 的佔用面積（含孔壁）是焊盤的 ${viaFmt(res.footRatio * 100, 0)}%，焊盤根本放不下 → 等效 K 不成立` });
+  }
+  if (chk) {
+    if (chk.nOut) issues.push({ lv: 'err', chip: `${chk.nOut} 顆超出焊盤`, text: `${chk.nOut} 顆 via 的孔壁超出焊盤（示意圖紅色）：縮小中心間距（或按「🪄 自動計算」）；自動計算也排不下時，減少數量或縮小孔徑` });
+    if (chk.nOverlap) issues.push({ lv: 'err', chip: `${chk.nOverlap} 顆孔壁重疊`, text: `${chk.nOverlap} 顆 via 孔壁互相重疊：中心距 ${viaFmt(chk.minDist, 3)} mm 小於孔外徑 ${viaFmt(2 * ro, 3)} mm` });
+    if (chk.nEdge) issues.push({ lv: 'warn', chip: `${chk.nEdge} 顆離邊緣太近`, text: `${chk.nEdge} 顆 via 孔壁離焊盤邊緣不到 ${ViaCalc.EDGE} mm（示意圖黃框）` });
+    if (chk.dfmTight && !chk.nOverlap) issues.push({ lv: 'warn', chip: '間距 < 2 倍孔徑', text: `中心距 ${viaFmt(chk.minDist, 3)} mm 小於 2 倍內徑（${viaFmt(2 * d.dia, 3)} mm）：常見的加工下限，實際請與 PCB 廠確認` });
+  }
+  if (r.qtyLocal && r.srcQty !== null && r.qty !== r.srcQty) issues.push({ lv: 'warn', chip: '數量≠EE 清單', text: `Via 數量用本頁試算值 ${viaFmt(r.qty, 0)}，EE 清單是 ${viaFmt(r.srcQty, 0)}` });
+  if (r.diaLocal && r.srcDia !== null && r.diaMil !== r.srcDia) issues.push({ lv: 'warn', chip: '內徑≠EE 清單', text: `Via 內徑用本頁試算值 ${viaLen(r.diaMil)}，EE 清單是 ${viaLen(r.srcDia)}` });
+  if (r.qtyLocal && r.srcQty === null && r.qty !== null) issues.push({ lv: 'info', text: 'EE 清單沒有填 TH Via Qty，Via 數量只存在本頁（可按「⇪ 寫回 EE 清單」同步）' });
+  if (r.diaLocal && r.srcDia === null && r.diaMil !== null) issues.push({ lv: 'info', text: 'EE 清單沒有填 TH Via 內徑，Via 內徑只存在本頁（可按「⇪ 寫回 EE 清單」同步）' });
+  if (r.tLocal && r.srcT !== null && r.t !== r.srcT) issues.push({ lv: 'info', text: `PCB 厚度用本頁指定的 ${viaFmt(r.t, 3)} mm，5G-RRU 專案參數 t_PCB 是 ${viaFmt(r.srcT, 3)} mm` });
+  const hasErr = issues.some(i => i.lv === 'err'), hasWarn = issues.some(i => i.lv === 'warn');
+  const status = hasErr ? 'err' : (miss.length ? 'todo' : (hasWarn ? 'warn' : 'ok'));
+  return { r, miss, res, chk, issues, status };
+}
+function viaMissLabel(k, r) { return (k === 'pad' && r && r.d.shape === 'circle') ? '焊盤直徑' : (VIA_MISS_LABEL[k] || k); }
+
+/* ── 渲染 ─────────────────────────────────────────────────────── */
+function viaShowStatus(msg, type) {
+  const el = document.getElementById('via-status');
+  if (!el) return;
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  el.className = 'comp-status' + (type ? ' ' + type : '');
+  if (type === 'success') { clearTimeout(viaShowStatus._t); viaShowStatus._t = setTimeout(() => { el.style.display = 'none'; }, 4000); }
+}
+// 專案選單鏡像 TH/ME 頁的選單（同一個專案）
+function viaSyncProjectSelect() {
+  const src = document.getElementById('project-select'), dst = document.getElementById('via-project-select');
+  if (!src || !dst) return;
+  if (dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;
+  if (dst.value !== src.value) dst.value = src.value;
+}
+async function viaLoadProjects() {
+  if (!dbAdapter.isReady()) {
+    viaShowStatus(dbAdapter.isSharePointMode() ? '資料庫尚未連線，請先登入 SharePoint。' : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
+    return;
+  }
+  const btn = document.getElementById('via-load-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
+  try {
+    await loadProjects();   // 與 TH/ME 頁同一個載入（重讀磁碟、還原原本選的專案）
+    const n = document.getElementById('project-select').options.length - 1;
+    viaShowStatus(n > 0 ? `成功載入 ${n} 個專案。` : '資料庫中尚無專案。', n > 0 ? 'success' : '');
+  } catch (e) {
+    viaShowStatus('載入專案失敗：' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '載入專案';
+  viaRender();
+}
+async function viaOnProjectChange() {
+  const v = document.getElementById('via-project-select').value;
+  const src = document.getElementById('project-select');
+  src.value = v;
+  viaSel = null; viaMsg = null;
+  await onProjectChange();   // TH/ME 頁載入同一個專案；它重繪時會呼叫 viaRender
+  viaRender();
+}
+function viaUpdateBadge(inc) {
+  const b = document.getElementById('via-tab-badge');
+  if (!b) return;
+  let n = 0;
+  if (viaProjectReady()) {
+    (inc || viaPartition(viaRowsAll()).inc).forEach(r => {
+      const st = (r.ev || viaEval(r)).status;
+      if (st === 'todo' || st === 'err') n++;
+    });
+  }
+  b.textContent = n ? String(n) : '';
+  b.style.display = n ? '' : 'none';
+}
+function viaCurRow(rows) {
+  return (rows || viaRowsAll()).find(r => r.key === viaSel) || null;
+}
+
+/* 整頁重繪。opts.keepForm＝打字中：只換表單以外的部分（清單、摘要、結果、示意圖），游標不跳（UX 慣例 1）。
+   一般重繪會還原焦點（data-fid）與捲動位置。 */
+function viaRender(opts) {
+  opts = opts || {};
+  const c = document.getElementById('via-container');
+  if (!c) return;
+  viaSyncProjectSelect();
+  const ready = viaProjectReady();
+  const ex = document.getElementById('via-export-excel-btn');
+  if (ex) ex.disabled = !ready;
+  const sb = document.getElementById('via-save-btn');
+  if (sb && !sb.querySelector('.loading-spinner')) sb.disabled = isProtected || !ready;
+  if (!ready) {
+    c.innerHTML = `<div class="empty-state"><div class="icon">&#9881;&#65039;</div>
+      <p>請先載入專案列表並選擇專案。</p>
+      <p style="margin-top:8px; font-size:0.85rem; color:#aaa;">EE/RF/PWR 清單填了「TH Via 內徑／Qty」、或 TH/ME 頁主散熱路徑選了 Thermal Via 的元件，會自動列在這裡</p></div>`;
+    viaUpdateBadge([]);
+    return;
+  }
+  const rows = viaRowsAll();
+  const { inc, orphan } = viaPartition(rows);
+  inc.concat(orphan).forEach(r => { r.ev = viaEval(r); });
+  const all = inc.concat(orphan);
+  if (!viaSel || !all.some(r => r.key === viaSel)) {
+    const first = inc.find(r => r.ev.status === 'err' || r.ev.status === 'todo') || inc[0] || orphan[0];
+    viaSel = first ? first.key : null;
+  }
+  const sel = all.find(r => r.key === viaSel) || null;
+  const isOrphan = !!sel && !inc.includes(sel);
+
+  const ae = document.activeElement;
+  const inForm = ae && ae.closest && ae.closest('#via-form');
+  const formEl = document.getElementById('via-form');
+  if (opts.keepForm && inForm && sel && formEl && formEl.dataset.key === sel.key) {
+    const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    set('via-summary', viaSummaryHtml(inc, orphan));
+    set('via-list', viaListHtml(inc, orphan));
+    set('via-ed-head', viaHeadHtml(sel, isOrphan));
+    set('via-out', viaOutHtml(sel));
+    viaUpdateBadge(inc);
+    return;
+  }
+  // 一般重繪：記住焦點、捲動、展開狀態
+  const fid = (ae && ae.closest && ae.closest('#via-container') && ae.dataset) ? ae.dataset.fid : null;
+  let selRange = null;
+  try { if (fid && typeof ae.selectionStart === 'number') selRange = [ae.selectionStart, ae.selectionEnd]; } catch (e) {}
+  const scrollY = window.scrollY;
+  const listEl = document.getElementById('via-list');
+  const listScroll = listEl ? listEl.scrollTop : 0;
+  const rulesOpen = !!c.querySelector('details.via-rules[open]');
+
+  c.innerHTML =
+    `<div id="via-summary">${viaSummaryHtml(inc, orphan)}</div>` +
+    (all.length
+      ? `<div class="via-layout">
+           <div class="via-list" id="via-list">${viaListHtml(inc, orphan)}</div>
+           <div class="via-ed">
+             <div class="via-ed-head" id="via-ed-head">${sel ? viaHeadHtml(sel, isOrphan) : ''}</div>
+             ${sel ? `<div class="via-ed-body"><div id="via-form" data-key="${escapeAttr(sel.key)}">${viaFormHtml(sel)}</div><div id="via-out">${viaOutHtml(sel)}</div></div>` : ''}
+           </div>
+         </div>`
+      : '') +
+    viaRulesHtml(rulesOpen);
+
+  const l2 = document.getElementById('via-list');
+  if (l2) l2.scrollTop = listScroll;
+  applyReadonlyLock();
+  if (fid) {
+    const el = c.querySelector(`[data-fid="${CSS.escape(fid)}"]`);
+    if (el && !el.disabled) {
+      el.focus({ preventScroll: true });
+      if (selRange) { try { el.setSelectionRange(selRange[0], selRange[1]); } catch (e) {} }
+    }
+  }
+  window.scrollTo(0, scrollY);
+  viaUpdateBadge(inc);
+}
+/* TH/ME 頁重繪時跟著重繪（下一個 tick、多次合併成一次）。
+   ⚠ 不可同步：EE 頁改名時是「先搬 TH/ME 資料並重繪、再把新名稱寫進元件」，同步重繪會拿舊名稱對不上新 key，
+   選取就跳到別顆。使用者正在本頁表單裡打字 → 只換表單以外的部分（游標不跳）。 */
+function viaRenderSoon() {
+  clearTimeout(viaRenderSoon._t);
+  viaRenderSoon._t = setTimeout(() => {
+    const ae = document.activeElement;
+    viaRender({ keepForm: !!(ae && ae.closest && ae.closest('#via-form')) });
+  }, 0);
+}
+// 欄位提交（change）：等焦點移到下一格之後再重繪，重繪完把焦點放回那一格
+function viaCommit() {
+  clearTimeout(viaCommit._t);
+  viaCommit._t = setTimeout(() => viaRender(), 0);
+}
+
+function viaSummaryHtml(inc, orphan) {
+  const cnt = { ok: 0, warn: 0, todo: 0, err: 0 };
+  inc.forEach(r => { cnt[r.ev.status]++; });
+  const pill = (k, label) => `<span class="via-count ${k}${cnt[k] ? '' : ' zero'}">${label} ${cnt[k]}</span>`;
+  let h = `<div class="via-summary">
+      <span class="via-count">納入 <b>${inc.length}</b> 顆</span>
+      ${pill('todo', '✎ 未完善')}${pill('err', '❌ 配置有問題')}${pill('warn', '⚠ 有提醒')}${pill('ok', '✅ 完成')}
+      <span class="via-rule-line">納入條件：EE/RF/PWR 清單填了「TH Via 內徑」或「TH Via Qty」，或 TH/ME 頁的主散熱路徑是 Thermal Via（沒選時看 5G-RRU 的導熱方式）。</span>
+    </div>`;
+  const todo = inc.filter(r => r.ev.status === 'todo' || r.ev.status === 'err');
+  if (todo.length) {
+    h += `<div class="via-todo"><div class="via-todo-h">⚠ 還沒完善 Via 資訊、或配置有問題的元件（${todo.length}）— 點一下直接跳到該元件</div><div class="via-todo-list">` +
+      todo.map(r => {
+        const chips = r.ev.miss.map(k => `<span class="via-chip">缺 ${escapeHtml(viaMissLabel(k, r.ev.r))}</span>`)
+          .concat(r.ev.issues.filter(i => i.lv === 'err').map(i => `<span class="via-chip red">${escapeHtml(i.chip)}</span>`)).join('');
+        return `<button type="button" class="via-todo-row sg-spec-ro" data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)">
+          <span class="via-st st-${r.ev.status}">${VIA_ST[r.ev.status].icon}</span>
+          <span class="via-cat-tag ${r.css}">${r.cat}</span><b>${escapeHtml(r.name)}</b>${chips}</button>`;
+      }).join('') + `</div></div>`;
+  } else if (inc.length) {
+    h += `<div class="via-alldone">✅ 納入的 ${inc.length} 顆元件 Via 資訊都已完善、配置沒有干涉。</div>`;
+  } else {
+    h += `<div class="via-none">這個專案目前沒有元件符合納入條件。<br>
+      到「EE/RF/PWR-專案元件清單」填寫元件的 <b>TH Via 內徑(mil)</b> 或 <b>TH Via Qty</b>，
+      或到「TH/ME-專案元件清單」把 <b>主散熱路徑</b> 選成 <b>Thermal Via</b>，元件就會出現在這裡。</div>`;
+  }
+  return h;
+}
+function viaItemMeta(r) {
+  const ev = r.ev;
+  if (ev.status === 'todo') return '缺 ' + ev.miss.length + ' 項';
+  if (ev.res && ev.res.ok) return 'K ' + viaFmt(ev.res.keff, 1);
+  return ev.status === 'err' ? '干涉' : '';
+}
+function viaListHtml(inc, orphan) {
+  const item = (r, orph) => `<button type="button" class="via-item sg-spec-ro${r.key === viaSel ? ' sel' : ''}${orph ? ' orphan' : ''}"
+      data-key="${escapeAttr(r.key)}" onclick="viaSelect(this.dataset.key)" title="${escapeAttr(r.name + '｜' + VIA_ST[orph ? 'orphan' : r.ev.status].text)}">
+      <span class="via-st st-${r.ev.status}">${VIA_ST[r.ev.status].icon}</span>
+      <span class="vi-name">${escapeHtml(r.name)}</span><span class="vi-meta">${escapeHtml(viaItemMeta(r))}</span></button>`;
+  let h = '';
+  Object.entries(CATEGORIES).forEach(([cat, info]) => {
+    const rs = inc.filter(r => r.cat === cat);
+    if (!rs.length) return;
+    h += `<div class="via-list-cat"><span class="via-cat-tag ${info.css}">${cat}</span>${rs.length} 顆</div>` + rs.map(r => item(r, false)).join('');
+  });
+  if (orphan.length) {
+    h += `<div class="via-list-cat orphan" title="這些元件有 via 設計資料，但 TH Via 內徑／Qty 已改成 N/A、主散熱路徑也不是 Thermal Via。資料保留不刪，條件恢復就會回到上面">不在納入條件內（資料保留）</div>` +
+      orphan.map(r => item(r, true)).join('');
+  }
+  return h || '<div class="via-hint" style="padding:8px;">（沒有元件）</div>';
+}
+function viaHeadHtml(row, isOrphan) {
+  const ev = row.ev, st = isOrphan ? 'orphan' : ev.status;
+  const P = parseFloat(row.comp['Power(W)']);
+  const reasons = row.reasons.length
+    ? '納入原因：' + row.reasons.map(x => `<span class="via-chip reason">${escapeHtml(x.text)}</span>`).join('')
+    : '這顆元件目前不符合納入條件（TH Via 內徑／Qty 都是 N/A、主散熱路徑也不是 Thermal Via），via 設計資料保留不刪';
+  return `<span class="via-cat-tag ${row.css}">${row.cat}</span>
+    <span class="via-ed-name">${escapeHtml(row.name)}</span>
+    <span class="via-pill st-${st}">${VIA_ST[st].icon} ${VIA_ST[st].text}</span>
+    <span class="via-ed-meta">發熱 ${isFinite(P) ? viaFmt(P, 3) + ' W' : '—'}・數量 ${escapeHtml(row.comp.Qty ?? '—')}</span>
+    <div class="via-ed-reasons">${reasons}</div>`;
+}
+
+/* 有來源的欄位（Via 數量／內徑 → EE 清單；PCB 厚度 → 5G-RRU 參數）：
+   沒有本頁值＝鎖定顯示來源值（白底黑字＋✂）；✂ 後是本頁試算值，可「↺ 取回來源值」或「⇪ 寫回 EE 清單」。 */
+function viaSrcHtml(o) {
+  const hasSrc = o.srcVal !== null && o.srcVal !== undefined;
+  if (!o.local && hasSrc) {
+    return `<div class="via-ctl lock-cell"><span class="via-locked">${o.disp(o.srcVal, true)}</span>
+        <span class="via-src">${o.srcName}</span>
+        <button type="button" class="via-unlock" data-fid="${o.k}-unlock" onclick="viaUnlock('${o.k}')" title="解鎖：改用本頁自己的值（試算用，不會改到${o.srcName}）">✂</button></div>`;
+  }
+  const val = o.localVal;
+  const bad = val !== null && val !== undefined && !(val > 0 && (!o.integer || Number.isInteger(val)));
+  let h = `<div class="via-ctl"><input class="via-in${bad ? ' invalid' : ''}" type="number" step="any" min="0" data-k="${o.k}" data-fid="${o.k}"
+      value="${escapeAttr(val === null || val === undefined ? '' : o.toInput(val))}" placeholder="${o.ph || ''}" oninput="viaOnNum(this)" onchange="viaCommit()">
+      <span class="via-unit">${o.unit}</span>`;
+  if (hasSrc) h += `<button type="button" class="via-mini-btn" data-fid="${o.k}-relock" onclick="viaRelock('${o.k}')" title="改回取${o.srcName}的值">↺ 取${o.srcShort}（${o.disp(o.srcVal)}）</button>`;
+  if (o.writeback && val > 0 && (!o.integer || Number.isInteger(val)) && val !== o.srcVal) {
+    const can = viaSameAsTab1();
+    h += `<button type="button" class="via-mini-btn wb" data-fid="${o.k}-wb" onclick="viaWriteBack('${o.k}')" ${can ? '' : 'disabled'}
+      title="${can ? '把這個值寫回 EE/RF/PWR 清單的「' + o.srcField + '」（存檔時一起存）' : '要寫回 EE 清單，請先在「EE/RF/PWR-專案元件清單」載入同一個專案'}">⇪ 寫回 EE 清單</button>`;
+  }
+  h += `</div>`;
+  if (bad) h += `<div class="via-hint red">${o.integer ? '須為正整數' : '須大於 0'}</div>`;
+  else if (!hasSrc) h += `<div class="via-hint${val === null || val === undefined ? ' amb' : ''}">${o.noSrcHint}</div>`;
+  else if (val !== o.srcVal) h += `<div class="via-hint amb">試算值，與${o.srcName}不同（${o.disp(o.srcVal)}）</div>`;
+  return h;
+}
+
+function viaFormHtml(row) {
+  const ev = row.ev, r = ev.r, d = r.d, v = r.v, u = viaUnit();
+  const seg = (k, opts, cur, cls) => `<div class="via-seg">` + opts.map(([val, label]) =>
+    `<button type="button" class="${cls || ''}${cur === val ? ' on' : ''}" data-fid="${k}-${val}" onclick="viaSet('${k}','${val}')">${label}</button>`).join('') + `</div>`;
+  const area = ViaCalc.padArea(d);
+  let h = '';
+
+  // ── 焊盤（E-PAD）──
+  h += `<div class="via-sec"><div class="via-sec-h"><span class="bar"></span>焊盤 <span class="en">E-PAD</span>
+      ${seg('shape', [['rect', '方形'], ['circle', '圓形']], d.shape)}</div>`;
+  if (d.shape === 'rect') {
+    h += `<div class="via-row"><label>E-PAD L×W</label>`;
+    if (r.padSrc === 'rru') {
+      h += `<div class="via-ctl lock-cell"><span class="via-locked">${viaFmt(d.L, 3)} × ${viaFmt(d.W, 3)} mm</span>
+          <span class="via-src">5G-RRU E-Pad 長寬</span>
+          <button type="button" class="via-unlock" data-fid="epad-unlock" onclick="viaUnlock('epad')" title="解鎖：改在 TH/ME 頁的 E-PAD 欄自己填（先帶入目前的值）">✂</button></div>
+        <div class="via-hint">TH/ME 頁的 E-PAD 還沒填，暫用 5G-RRU 元件清單的 E-Pad 長寬</div>`;
+    } else {
+      const lw = sgParseLW(r.epadRaw);
+      h += `<div class="via-ctl"><input class="via-in wide${r.epadRaw && !lw ? ' invalid' : ''}" type="text" data-fid="epad" value="${escapeAttr(r.epadRaw)}"
+            placeholder="例 4.6×4.6" oninput="viaOnEpad(this)" onchange="viaOnEpadCommit()"><span class="via-unit">mm</span></div>`;
+      if (r.epadRaw && !lw) h += `<div class="via-hint red">看不懂「${escapeHtml(r.epadRaw)}」，請用 L×W（例 4.6×4.6）</div>`;
+      else if (!r.epadRaw) h += `<div class="via-hint amb">必填。與 TH/ME 頁的「E-PAD」是同一欄（填哪邊都一樣）</div>`;
+      else h += `<div class="via-hint">＝ ${viaFmt(d.L, 3)} × ${viaFmt(d.W, 3)} mm・與 TH/ME 頁的「E-PAD」同一欄</div>`;
+    }
+    h += `</div>`;
+  } else {
+    const bad = v.padD !== undefined && !(ViaCalc.num(v.padD) > 0);
+    h += `<div class="via-row"><label>直徑 D</label><div class="via-ctl"><input class="via-in${bad ? ' invalid' : ''}" type="number" step="any" min="0" data-k="padD" data-fid="padD"
+          value="${escapeAttr(v.padD ?? '')}" oninput="viaOnNum(this)" onchange="viaCommit()"><span class="via-unit">mm</span></div>
+        ${v.padD === undefined ? '<div class="via-hint amb">必填</div>' : (bad ? '<div class="via-hint red">須大於 0</div>' : '')}</div>`;
+  }
+  h += `<div class="via-row"><label>面積</label><div class="via-ctl"><span class="via-locked">${area > 0 ? viaFmt(area, 3) + ' mm²' : '—'}</span></div></div></div>`;
+
+  // ── Via 配置 ──
+  h += `<div class="via-sec"><div class="via-sec-h"><span class="bar g"></span>Via 配置 <span class="en">Layout</span>
+      ${seg('unit', [['mil', 'mil'], ['mm', 'mm']], u, 'sg-spec-ro')}</div>`;
+  h += `<div class="via-row"><label>排列</label>${seg('pattern', [['matrix', '矩陣'], ['staggered', '交錯']], d.pattern)}</div>`;
+  h += `<div class="via-row"><label>數量</label>` + viaSrcHtml({
+    k: 'qty', local: r.qtyLocal, localVal: r.qtyLocal ? ViaCalc.num(v.qty) : null, srcVal: r.srcQty, integer: true,
+    disp: (x) => viaFmt(x, 0) + ' 顆', toInput: (x) => viaFmt(x, 0), unit: '顆', ph: '例 9',
+    srcName: 'EE 清單', srcShort: 'EE 清單值', srcField: 'TH Via Qty', writeback: true,
+    noSrcHint: 'EE 清單的「TH Via Qty」沒填（N/A）；這個值只存在本頁',
+  }) + `</div>`;
+  h += `<div class="via-row"><label>內徑</label>` + viaSrcHtml({
+    k: 'diaMil', local: r.diaLocal, localVal: r.diaLocal ? ViaCalc.num(v.diaMil) : null, srcVal: r.srcDia,
+    disp: (x, full) => viaLen(x, full), toInput: viaLenInput, unit: u, ph: u === 'mm' ? '例 0.2' : '例 8',
+    srcName: 'EE 清單', srcShort: 'EE 清單值', srcField: 'TH Via 內徑(mil)', writeback: true,
+    noSrcHint: 'EE 清單的「TH Via 內徑」沒填（N/A）；這個值只存在本頁。內徑＝成品孔徑（Layout 上標的孔徑）',
+  }) + `</div>`;
+  // 中心間距
+  const pBad = v.pitchMil !== undefined && !(ViaCalc.num(v.pitchMil) > 0);
+  h += `<div class="via-row"><label>中心間距</label><div class="via-ctl">
+      <input class="via-in${pBad ? ' invalid' : ''}" type="number" step="any" min="0" data-k="pitchMil" data-fid="pitchMil" value="${escapeAttr(viaLenInput(ViaCalc.num(v.pitchMil)))}"
+        placeholder="${u === 'mm' ? '例 0.4' : '例 16'}" oninput="viaOnNum(this)" onchange="viaCommit()"><span class="via-unit">${u}</span>
+      <button type="button" class="via-auto-btn" data-fid="auto" onclick="viaAutoPitch()" title="同一個排列下，所有孔壁離焊盤邊緣 ≥ ${ViaCalc.EDGE} mm 的最大間距（往下取整）">🪄 自動計算</button></div>`;
+  if (d.n === 1) h += `<div class="via-hint">單顆 via 放在焊盤中心，不需要間距</div>`;
+  else if (pBad) h += `<div class="via-hint red">須大於 0</div>`;
+  else if (Number.isInteger(d.n) && d.n > 1 && d.n <= VIA_CHECK_MAX && ViaCalc.padArea(d) > 0 && d.dia > 0) {
+    const g = d.shape === 'rect' ? ViaCalc.grid(d) : null;
+    h += `<div class="via-hint">${g ? `排成 ${g.cols} 欄 × ${g.rows} 列（${d.pattern === 'staggered' ? '交錯' : '矩陣'}）・` : ''}間距只影響排不排得下，不影響等效 K</div>`;
+  } else h += `<div class="via-hint">間距只影響排不排得下，不影響等效 K</div>`;
+  if (viaMsg && viaMsg.key === row.key) h += `<div class="via-msg ${viaMsg.cls}">${viaMsg.html}</div>`;
+  h += `</div>`;
+  h += `<div class="via-conv">換算 <input type="number" step="any" class="sg-spec-ro" data-fid="conv-mil" placeholder="mil" oninput="viaConv(this,'mil')"> mil ⇄
+      <input type="number" step="any" class="sg-spec-ro" data-fid="conv-mm" placeholder="mm" oninput="viaConv(this,'mm')"> mm</div></div>`;
+
+  // ── 板材與塞孔 ──
+  h += `<div class="via-sec"><div class="via-sec-h"><span class="bar o"></span>板材與塞孔 <span class="en">Material</span></div>`;
+  h += `<div class="via-row"><label>PCB 厚度</label>` + viaSrcHtml({
+    k: 'pcbT', local: r.tLocal, localVal: r.tLocal ? ViaCalc.num(v.pcbT) : null, srcVal: r.srcT,
+    disp: (x) => viaFmt(x, 3) + ' mm', toInput: (x) => viaFmt(x, 4), unit: 'mm', ph: '例 1.6',
+    srcName: '5G-RRU 參數 t_PCB', srcShort: ' t_PCB', writeback: false,
+    noSrcHint: '5G-RRU 專案參數沒有 PCB 板厚度（t_PCB），請在這裡填',
+  }) + `</div>`;
+  const plIsPreset = ViaCalc.PLATINGS.some(p => Math.abs(p.mm - r.d.plating) < 1e-9);
+  const plCustom = viaCustomUi.has(row.key) || (!r.platingDefault && !plIsPreset);
+  h += `<div class="via-row"><label>鍍銅厚度</label><div class="via-ctl">
+      <select class="via-sel" data-fid="plating" onchange="viaOnPlating(this)">
+        ${ViaCalc.PLATINGS.map(p => `<option value="${p.mm}"${!plCustom && Math.abs(p.mm - r.d.plating) < 1e-9 ? ' selected' : ''}>${p.label}${p.mm === ViaCalc.PLATING_DEFAULT ? '（預設）' : ''}</option>`).join('')}
+        <option value="custom"${plCustom ? ' selected' : ''}>自訂…</option>
+      </select>
+      ${plCustom ? `<input class="via-in${v.plating !== undefined && !(ViaCalc.num(v.plating) > 0) ? ' invalid' : ''}" type="number" step="any" min="0" data-k="plating" data-fid="plating-c" value="${escapeAttr(v.plating ?? '')}" oninput="viaOnNum(this)" onchange="viaCommit()"><span class="via-unit">mm</span>` : ''}
+    </div></div>`;
+  h += `<div class="via-row"><label>塞孔材料</label><div class="via-ctl">
+      <select class="via-sel" data-fid="fill" onchange="viaSet('fill', this.value)">
+        <option value=""${!r.fill ? ' selected' : ''}>— 請選擇 —</option>
+        ${ViaCalc.FILLS.map(f => `<option value="${f.key}"${r.fill === f.key ? ' selected' : ''}>${f.label}${f.k !== undefined ? '（K = ' + f.k + '）' : ''}</option>`).join('')}
+      </select>
+      ${r.fill === 'custom' ? `<input class="via-in${v.fillK !== undefined && !(ViaCalc.num(v.fillK) > 0) ? ' invalid' : ''}" type="number" step="any" min="0" data-k="fillK" data-fid="fillK" value="${escapeAttr(v.fillK ?? '')}" placeholder="K" oninput="viaOnNum(this)" onchange="viaCommit()"><span class="via-unit">W/m·K</span>` : ''}
+    </div>${!r.fill ? '<div class="via-hint amb">必填：空氣與填銅的等效 K 可差到一倍以上</div>' : ''}</div>`;
+  h += `</div>`;
+  return h;
+}
+
+function viaOutHtml(row) {
+  const ev = row.ev, r = ev.r, d = r.d, res = ev.res;
+  const ok = !!(res && res.ok);
+  const tile = (cls, l, v, u, s) => `<div class="via-tile ${cls}"><div class="l">${l}</div><div class="v">${v}<span class="u">${u}</span></div><div class="s">${s || '&nbsp;'}</div></div>`;
+  let h = `<div class="via-tiles">` +
+    tile('hero', '等效 K　K<sub>eff</sub>', ok ? viaFmt(res.keff, 2) : '—', 'W/m·K', ok ? `FR4 的 ${viaFmt(res.keff / ViaCalc.K_FR4, 1)} 倍` : '') +
+    tile('', '穿板熱阻　R<sub>th</sub>', ok ? viaFmt(res.rth, 3) : '—', '°C/W', (res && res.rthFr4) ? `沒有 via：${viaFmt(res.rthFr4, 2)} °C/W` : '') +
+    tile('', '銅面積比', ok ? viaFmt(res.cuRatio * 100, 2) : '—', '%', res ? `via 佔焊盤 ${viaFmt(res.footRatio * 100, 1)}%` : '') +
+    tile('', '單顆 via 熱阻', ok ? viaFmt(res.singleR, 1) : '—', '°C/W', ok ? `${d.n} 顆並聯 ${viaFmt(res.singleR / d.n, 2)} °C/W` : '') +
+    `</div><div class="via-lines">`;
+  if (ev.miss.length) h += `<div class="via-note todo">✎ 還缺：${ev.miss.map(k => escapeHtml(viaMissLabel(k, r))).join('、')}${ok ? '（等效 K 已可計算；補齊後檢查配置）' : ''}</div>`;
+  ev.issues.forEach(i => { h += `<div class="via-note ${i.lv}">${i.lv === 'err' ? '❌' : i.lv === 'warn' ? '⚠' : 'ℹ'} ${escapeHtml(i.text)}</div>`; });
+  if (ok) {
+    const P = parseFloat(row.comp['Power(W)']);
+    if (P > 0) h += `<div class="via-note info">🌡 穿板溫降 ≈ P × R<sub>th</sub> = ${viaFmt(P, 3)} W × ${viaFmt(res.rth, 3)} °C/W ≈ <b>${viaFmt(P * res.rth, 2)} °C</b>（P＝EE 清單發熱瓦數；假設熱全部經 E-PAD 下方的 via 區穿板）</div>`;
+    const gp = (currentProjectData && currentProjectData.global_params) || {};
+    const kv = ViaCalc.pos(gp.K_Via);
+    if (kv && viaPathOf(row.comp, row.spec).path === 'Thermal Via') {
+      const ve = ViaCalc.pos(gp.Via_Eff);
+      const lower = res.keff < kv;
+      h += `<div class="via-note ${lower ? 'warn' : 'info'}">${lower ? '⚠' : 'ℹ'} 5G-RRU 目前所有 Thermal Via 元件共用專案參數 K_Via = ${viaFmt(kv, 2)} W/m·K${ve ? '（Via_Eff = ' + viaFmt(ve, 2) + '）' : ''}；
+        這顆算出來是它的 ${viaFmt(res.keff / kv, 2)} 倍${lower ? ' → 5G-RRU 端這顆的基板熱阻可能被低估（偏樂觀）' : ''}</div>`;
+    }
+  }
+  h += `</div>`;
+  h += `<div class="via-viz">${viaSvg(d, ev.chk, r.fill)}</div>`;
+  return h;
+}
+
+/* 示意圖（SVG：俯視＋剖面）。剖面的厚度方向另外縮放（小焊盤時原本的畫布會畫出界）並註明「未按比例」 */
+function viaSvg(d, chk, fillKey) {
+  const isC = d.shape === 'circle';
+  const Lmm = isC ? d.D : d.L, Wmm = isC ? d.D : d.W;
+  if (!(Lmm > 0 && Wmm > 0)) return `<div class="via-hint" style="padding:30px 0; text-align:center;">填入焊盤尺寸後顯示示意圖</div>`;
+  const VW = 560, side = 44, top = 30;
+  const ri = d.dia > 0 ? d.dia / 2 : 0, ro = (d.dia > 0 && d.plating > 0) ? ViaCalc.rOut(d) : 0;
+  const pts = chk ? chk.pts : [];
+  // 圖框涵蓋焊盤與「所有」via（超出焊盤的 via 也要畫得出來，不可被裁掉）
+  let ex = Lmm / 2, ey = Wmm / 2;
+  pts.forEach(q => { ex = Math.max(ex, Math.abs(q.x) + ro); ey = Math.max(ey, Math.abs(q.y) + ro); });
+  const s = Math.min((VW - 2 * side) / (2 * ex), 260 / (2 * ey));
+  const pw = Lmm * s, ph = Wmm * s, cx = VW / 2, cy = top + 16 + ey * s;
+  const ox = cx - pw / 2, oy = cy - ph / 2;
+  const fillC = VIA_FILL_COLOR[fillKey] || '#eef2f7';
+  const e = ViaCalc.EDGE;
+  const t = (x, y, str, anchor, extra) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="11" fill="#6b6760" text-anchor="${anchor || 'start'}" ${extra || ''}>${str}</text>`;
+  let g = t(4, 14, '俯視 TOP VIEW', 'start', 'font-weight="700"');
+  // 焊盤＋邊距線
+  if (isC) {
+    g += `<circle cx="${cx}" cy="${cy}" r="${(pw / 2).toFixed(2)}" fill="#f6dfc4" stroke="#b8733a" stroke-width="1.5"/>`;
+    if (Lmm / 2 - e > 0) g += `<circle cx="${cx}" cy="${cy}" r="${((Lmm / 2 - e) * s).toFixed(2)}" fill="none" stroke="#b8733a" stroke-opacity="0.55" stroke-dasharray="5 3"/>`;
+  } else {
+    g += `<rect x="${ox.toFixed(2)}" y="${oy.toFixed(2)}" width="${pw.toFixed(2)}" height="${ph.toFixed(2)}" rx="2" fill="#f6dfc4" stroke="#b8733a" stroke-width="1.5"/>`;
+    if (Lmm - 2 * e > 0 && Wmm - 2 * e > 0) g += `<rect x="${(ox + e * s).toFixed(2)}" y="${(oy + e * s).toFixed(2)}" width="${((Lmm - 2 * e) * s).toFixed(2)}" height="${((Wmm - 2 * e) * s).toFixed(2)}" fill="none" stroke="#b8733a" stroke-opacity="0.55" stroke-dasharray="5 3"/>`;
+  }
+  // 尺寸標註
+  // 尺寸標註放在「焊盤＋所有 via」的外側，不會壓到超出焊盤的 via
+  const dy = cy - ey * s - 9, dx = cx - ex * s - 8;
+  g += `<line x1="${ox}" y1="${dy}" x2="${ox + pw}" y2="${dy}" stroke="#9a948a" stroke-width="1"/>` +
+       `<line x1="${ox}" y1="${dy - 4}" x2="${ox}" y2="${dy + 4}" stroke="#9a948a"/><line x1="${ox + pw}" y1="${dy - 4}" x2="${ox + pw}" y2="${dy + 4}" stroke="#9a948a"/>` +
+       t(cx, dy - 4, (isC ? 'D ' : 'L ') + viaFmt(Lmm, 3) + ' mm', 'middle');
+  if (!isC) g += t(dx, cy, 'W ' + viaFmt(Wmm, 3), 'middle', `transform="rotate(-90 ${dx.toFixed(1)} ${cy.toFixed(1)})"`);
+  // via
+  pts.forEach(q => {
+    const x = cx + q.x * s, y = cy + q.y * s;
+    const bad = q.out || q.overlap;
+    g += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${Math.max(ro * s, 1.2).toFixed(2)}" fill="${bad ? '#dc2626' : '#b4683a'}"` +
+         (q.edge && !bad ? ` stroke="#f59e0b" stroke-width="2"` : (bad ? ` stroke="#7f1d1d" stroke-width="1"` : '')) + `/>`;
+    if (ri * s >= 0.8) g += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(ri * s).toFixed(2)}" fill="${bad ? '#fecaca' : fillC}"${fillKey === 'air' || !fillKey ? ' stroke="#d6d3d1" stroke-width="0.6"' : ''}/>`;
+  });
+  let y0 = cy + ey * s + 30;
+  // 剖面：取最靠近中心的那一列
+  if (d.t > 0) {
+    const bw = Math.min(2 * ex * s + 48, VW - 8), bx = cx - bw / 2;
+    let sy = s, scaled = false;
+    if (d.t * sy > 96) { sy = 96 / d.t; scaled = true; }
+    if (d.t * sy < 30) { sy = 30 / d.t; scaled = true; }
+    const th = d.t * sy, cu = Math.max((d.plating || 0) * sy, 2);
+    g += t(4, y0, '剖面 A-A（最靠近中心的一列）', 'start', 'font-weight="700"') +
+         t(VW - 4, y0, 'PCB t = ' + viaFmt(d.t, 3) + ' mm' + (scaled ? '（厚度方向未按比例）' : ''), 'end');
+    const by = y0 + 14 + cu;
+    g += `<rect x="${bx.toFixed(2)}" y="${by.toFixed(2)}" width="${bw.toFixed(2)}" height="${th.toFixed(2)}" fill="#c9d6a3"/>` +
+         `<rect x="${ox.toFixed(2)}" y="${(by - cu).toFixed(2)}" width="${pw.toFixed(2)}" height="${cu.toFixed(2)}" fill="#b4683a"/>` +
+         `<rect x="${ox.toFixed(2)}" y="${(by + th).toFixed(2)}" width="${pw.toFixed(2)}" height="${cu.toFixed(2)}" fill="#b4683a"/>`;
+    if (pts.length && ro > 0) {
+      const near = Math.min.apply(null, pts.map(q => Math.abs(q.y)));
+      pts.filter(q => Math.abs(Math.abs(q.y) - near) < 1e-6).forEach(q => {
+        const x = cx + q.x * s, bad = q.out || q.overlap;
+        g += `<rect x="${(x - ro * s).toFixed(2)}" y="${(by - cu).toFixed(2)}" width="${Math.max(2 * ro * s, 1).toFixed(2)}" height="${(th + 2 * cu).toFixed(2)}" fill="${bad ? '#dc2626' : '#9a5530'}"/>`;
+        if (ri * s >= 0.5) g += `<rect x="${(x - ri * s).toFixed(2)}" y="${(by - cu).toFixed(2)}" width="${(2 * ri * s).toFixed(2)}" height="${(th + 2 * cu).toFixed(2)}" fill="${bad ? '#fecaca' : fillC}"/>`;
+      });
+    }
+    y0 = by + th + cu + 12;
+  }
+  const H = Math.ceil(y0 + 4);
+  const fillName = (ViaCalc.fillOf(fillKey) || {}).label || '未選';
+  const legend = `<div class="via-legend">
+      <span><i style="background:#f6dfc4"></i>E-PAD 銅面</span><span><i style="background:#b4683a"></i>孔壁鍍銅</span>
+      <span><i style="background:${fillC}"></i>塞孔：${escapeHtml(fillName)}</span><span><i style="background:#c9d6a3"></i>FR4</span>
+      <span><i style="background:#fff; border:1px dashed #b8733a"></i>邊距 ${e} mm 線</span>
+      <span><i style="background:#fff; border:2px solid #f59e0b"></i>離邊緣太近</span><span><i style="background:#dc2626"></i>超出焊盤／重疊</span>
+      ${d.n > 1 && d.pitch > 0 ? `<span>中心距 ${viaLen(d.pitch / ViaCalc.MIL, true)}</span>` : ''}</div>`;
+  return `<svg viewBox="0 0 ${VW} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Thermal via 配置示意圖">${g}</svg>${legend}`;
+}
+
+function viaRulesHtml(open) {
+  const fills = ViaCalc.FILLS.filter(f => f.k !== undefined).map(f => f.label.replace(/（.*）/, '') + ' ' + f.k).join('、');
+  return `<details class="via-rules"${open ? ' open' : ''}><summary>📐 公式、常數與檢查規則（數字怎麼來的）</summary><div class="via-rules-body">
+    <div><b>模型</b>：E-PAD 範圍內、穿板方向的一維熱傳；via（孔壁鍍銅＋塞孔）與 FR4 面積加權並聯。
+      <code>K_eff = (N·A_cu·K_Cu + N·A_fill·K_fill + A_FR4·K_FR4) ÷ A_pad</code>、<code>R_th = t ÷ (K_eff × A_pad)</code>（°C/W）。</div>
+    <div><code>r_in = 內徑 ÷ 2</code>（成品孔徑，就是 Layout 上標的孔徑）、<code>r_out = r_in + 鍍銅厚度</code>；
+      <code>A_cu = π(r_out² − r_in²)</code>、<code>A_fill = π·r_in²</code>、<code>A_FR4 = A_pad − N·π·r_out²</code>。</div>
+    <div><b>常數</b>：K_Cu = ${ViaCalc.K_CU}、K_FR4 = ${ViaCalc.K_FR4}（穿板方向）W/m·K；塞孔 ${fills} W/m·K；鍍銅預設 1 mil；1 mil = ${ViaCalc.MIL} mm。</div>
+    <div><b>中心間距不影響等效 K</b>（公式裡沒有它）：只用來檢查排不排得下、會不會干涉，以及畫示意圖。</div>
+    <div><b>檢查</b>：❌ 孔壁超出焊盤、孔壁互相重疊、via 總佔用面積大於焊盤（此時等效 K 不成立、不顯示）；
+      ⚠ 孔壁離焊盤邊緣 &lt; ${ViaCalc.EDGE} mm、中心距 &lt; 2 倍內徑（常見加工下限，實際依 PCB 廠能力）。</div>
+    <div><b>自動計算間距</b>：依焊盤長寬比挑排列（矩形：可達到最大間距的欄 × 列；圓形：最靠近中心的晶格點），
+      求所有孔壁離邊緣 ≥ ${ViaCalc.EDGE} mm 的最大間距，往下取整（mil 取 0.1、mm 取 0.001）。放不下時列出這個焊盤最多可放幾顆。</div>
+    <div><b>不含</b>：銅層的橫向擴散、焊錫層與空洞、鍍銅不均。R<sub>th</sub> 只是 E-PAD 正下方穿板的那一段，不是整條散熱路徑；
+      「穿板溫降」假設熱全部經這一段，是偏保守的上限估計。</div>
+    <div><b>納入條件</b>：EE/RF/PWR 清單的「TH Via 內徑」或「TH Via Qty」有填（不是 N/A），或 TH/ME 頁主散熱路徑是 Thermal Via
+      （TH/ME 頁沒選時看 5G-RRU 的導熱方式）。條件不再成立的元件，via 設計資料保留不刪，列在清單最下面。</div>
+    <div><b>資料存放</b>：跟著專案與元件存（TH/ME 頁那份元件設定裡），按任一個儲存鍵＝全部分頁一起存；元件改名時資料跟著搬。
+      Via 數量／內徑預設取 EE 清單（✂ 改成本頁的試算值，可「⇪ 寫回 EE 清單」）；E-PAD 與 TH/ME 頁同一欄；
+      PCB 厚度預設取 5G-RRU 專案參數 t_PCB。計算結果不存，每次依輸入重算。</div>
+  </div></details>`;
+}
+
+/* ── 編輯 ─────────────────────────────────────────────────────── */
+function viaVia(key, create) {
+  let spec = thermalSpecs[key];
+  if (!spec) { if (!create) return null; spec = thermalSpecs[key] = {}; }
+  if (!spec.via) { if (!create) return null; spec.via = {}; }
+  return spec.via;
+}
+// 空的 via／spec 物件不留（否則「看一眼」也會被當成未存變更）
+function viaCleanup(key) {
+  const spec = thermalSpecs[key];
+  if (!spec) return;
+  if (spec.via && !Object.keys(spec.via).length) delete spec.via;
+  if (!Object.keys(spec).length) delete thermalSpecs[key];
+}
+function viaSelect(key) {
+  if (key !== viaSel) viaMsg = null;
+  viaSel = key;
+  viaRender();
+}
+function viaSet(k, val) {
+  if (k === 'unit') return viaSetUnit(val);
+  if (isProtected || !viaSel) return;
+  const v = viaVia(viaSel, true);
+  const dflt = { shape: 'rect', pattern: 'matrix', fill: '' };
+  if (val === '' || val === dflt[k]) delete v[k]; else v[k] = val;
+  if (k === 'fill' && val !== 'custom') delete v.fillK;
+  viaCleanup(viaSel);
+  viaMsg = null;
+  viaRender();
+}
+function viaOnPlating(sel) {
+  if (isProtected || !viaSel) return;
+  const v = viaVia(viaSel, true);
+  if (sel.value === 'custom') { viaCustomUi.add(viaSel); }
+  else {
+    viaCustomUi.delete(viaSel);
+    const mm = parseFloat(sel.value);
+    if (Math.abs(mm - ViaCalc.PLATING_DEFAULT) < 1e-9) delete v.plating; else v.plating = mm;
+  }
+  viaCleanup(viaSel);
+  viaRender();
+}
+// 數字欄（打字中）：寫進資料、只更新表單以外的部分
+function viaOnNum(el) {
+  if (isProtected || !viaSel) return;
+  const k = el.dataset.k, raw = String(el.value).trim();
+  const v = viaVia(viaSel, true);
+  if (raw === '') {
+    delete v[k];
+  } else {
+    let n = parseFloat(raw);
+    if (!isFinite(n)) return;
+    if ((k === 'diaMil' || k === 'pitchMil') && viaUnit() === 'mm') n = viaR6(n / ViaCalc.MIL);
+    v[k] = n;
+  }
+  const n2 = ViaCalc.num(v[k]);
+  el.classList.toggle('invalid', raw !== '' && !(n2 > 0 && (k !== 'qty' || Number.isInteger(n2))));
+  viaCleanup(viaSel);
+  viaMsg = null;
+  viaRender({ keepForm: true });
+}
+function viaOnEpad(el) {
+  if (isProtected || !viaSel) return;
+  const raw = String(el.value).trim();
+  if (raw) { if (!thermalSpecs[viaSel]) thermalSpecs[viaSel] = {}; thermalSpecs[viaSel].epadSize = raw; }
+  else if (thermalSpecs[viaSel]) { delete thermalSpecs[viaSel].epadSize; viaCleanup(viaSel); }
+  el.classList.toggle('invalid', !!raw && !sgParseLW(raw));
+  viaMsg = null;
+  viaRender({ keepForm: true });
+}
+// E-PAD 是 TH/ME 頁同一欄：提交時 TH/ME 頁也重繪（它重繪完會呼叫 viaRender）
+function viaOnEpadCommit() {
+  clearTimeout(viaCommit._t);
+  viaCommit._t = setTimeout(() => { if (currentProjectData) renderAllCategories(); viaRender(); }, 0);
+}
+function viaFocus(fid) {
+  const el = document.querySelector(`#via-container [data-fid="${CSS.escape(fid)}"]`);
+  if (el && !el.disabled) { el.focus(); try { el.select(); } catch (e) {} }
+}
+function viaUnlock(k) {
+  if (isProtected || !viaSel) return;
+  const row = viaCurRow(); if (!row) return;
+  const r = viaResolve(row);
+  if (k === 'epad') {
+    if (!thermalSpecs[viaSel]) thermalSpecs[viaSel] = {};
+    thermalSpecs[viaSel].epadSize = viaFmt(r.d.L, 4) + '×' + viaFmt(r.d.W, 4);
+    if (currentProjectData) renderAllCategories();
+    viaRender();
+    viaFocus('epad');
+    return;
+  }
+  const v = viaVia(viaSel, true);
+  v[k] = k === 'qty' ? r.srcQty : (k === 'diaMil' ? r.srcDia : r.srcT);
+  viaRender();
+  viaFocus(k);
+}
+function viaRelock(k) {
+  if (isProtected || !viaSel) return;
+  const v = viaVia(viaSel, false);
+  if (v) { delete v[k]; viaCleanup(viaSel); }
+  viaMsg = null;
+  viaRender();
+}
+// 本頁的 Via 數量／內徑寫回 EE 清單（只在 EE/RF/PWR 頁載入同一個專案時；跟著那一頁的存檔寫入）
+function viaWriteBack(k) {
+  if (isProtected || !viaSel) return;
+  if (!viaSameAsTab1()) { roToast('要寫回 EE 清單，請先在「EE/RF/PWR-專案元件清單」載入同一個專案'); return; }
+  const row = viaCurRow(); if (!row) return;
+  const v = viaVia(viaSel, false); if (!v) return;
+  const val = ViaCalc.num(v[k]);
+  if (!(val > 0) || (k === 'qty' && !Number.isInteger(val))) return;
+  row.comp[k === 'qty' ? 'TV_Qty' : 'TV_ID_mil'] = k === 'qty' ? val : Math.round(val * 1000) / 1000;
+  delete v[k];
+  viaCleanup(viaSel);
+  if (typeof sgRenderProjectComponents === 'function') sgRenderProjectComponents();
+  viaRender();
+  roToast('已寫回 EE/RF/PWR 清單的「' + (k === 'qty' ? 'TH Via Qty' : 'TH Via 內徑(mil)') + '」（按儲存才會寫進資料庫）');
+}
+function viaAutoPitch() {
+  if (isProtected || !viaSel) return;
+  const row = viaCurRow(); if (!row) return;
+  const r = viaResolve(row), d = r.d;
+  const need = [];
+  if (!(ViaCalc.padArea(d) > 0)) need.push(viaMissLabel('pad', r));
+  if (!(Number.isInteger(d.n) && d.n >= 1)) need.push('Via 數量');
+  if (!(d.dia > 0)) need.push('Via 內徑');
+  if (!(d.plating > 0)) need.push('鍍銅厚度');
+  if (need.length) { viaMsg = { key: viaSel, cls: 'amb', html: '先填 ' + need.map(escapeHtml).join('、') + '，才能自動計算間距' }; viaRender(); return; }
+  if (d.n === 1) { viaMsg = { key: viaSel, cls: 'ok', html: '單顆 via 放在焊盤中心，不需要間距' }; viaRender(); return; }
+  if (d.n > VIA_CHECK_MAX) { viaMsg = { key: viaSel, cls: 'red', html: `Via 數量 ${d.n} 顆太多，不自動排列` }; viaRender(); return; }
+  const a = ViaCalc.autoPitch(d);
+  if (!a.ok) {
+    const mx = ViaCalc.maxCount(d);
+    viaMsg = { key: viaSel, cls: 'red', html: `排不下：孔壁離邊緣 ≥ ${ViaCalc.EDGE} mm 的條件下，${d.n} 顆連孔壁相切都放不進。` +
+      `這個焊盤在中心距 ≥ 2 倍內徑時最多約可放 <b>${mx}</b> 顆。` };
+    viaRender(); return;
+  }
+  const v = viaVia(viaSel, true);
+  v.pitchMil = viaUnit() === 'mm' ? viaR6(ViaCalc.floorTo(a.pitch, 0.001) / ViaCalc.MIL)
+                                  : viaR6(ViaCalc.floorTo(ViaCalc.mmToMil(a.pitch), 0.1));
+  const g = d.shape === 'rect' ? ViaCalc.grid(d) : null;
+  viaMsg = { key: viaSel, cls: a.dfmTight ? 'amb' : 'ok',
+    html: `已自動計算：中心距 ${viaLen(v.pitchMil, true)}${g ? `，排成 ${g.cols} 欄 × ${g.rows} 列` : ''}（孔壁離邊緣 ≥ ${ViaCalc.EDGE} mm）` +
+      (a.dfmTight ? '。⚠ 小於 2 倍內徑，請與 PCB 廠確認可否加工' : '') };
+  viaRender();
+}
+function viaConv(el, from) {
+  const n = parseFloat(el.value);
+  const other = document.querySelector(`#via-container [data-fid="${from === 'mil' ? 'conv-mm' : 'conv-mil'}"]`);
+  if (!other) return;
+  other.value = isFinite(n) ? (from === 'mil' ? viaFmt(n * ViaCalc.MIL, 4) : viaFmt(n / ViaCalc.MIL, 3)) : '';
+}
+
+/* ── 匯出 Excel（納入的元件＋不在條件內但有資料的元件；公式與常數另一張工作表） ── */
+function viaExportExcel() {
+  if (!viaProjectReady()) return;
+  const { inc, orphan } = viaPartition(viaRowsAll());
+  const n = (x, dec) => (x === null || x === undefined || !isFinite(x)) ? '' : Number(Number(x).toFixed(dec));
+  const head = ['分類', '元件名稱', '納入原因', '狀態', '缺漏／問題', '焊盤形狀', 'E-PAD L (mm)', 'E-PAD W (mm)', '直徑 D (mm)', '焊盤面積 (mm²)',
+    '排列', 'Via 數量', '數量來源', '內徑 (mil)', '內徑 (mm)', '內徑來源', '中心間距 (mil)', '中心間距 (mm)', 'PCB 厚度 (mm)', 'PCB 厚度來源',
+    '鍍銅厚度 (mm)', '塞孔材料', 'K_fill (W/m·K)', 'K_eff (W/m·K)', 'R_th (°C/W)', '銅面積比 (%)', '單顆 via 熱阻 (°C/W)', '發熱瓦數 (W)', '穿板溫降 (°C)'];
+  const rows = inc.concat(orphan).map(row => {
+    const ev = viaEval(row), r = ev.r, d = r.d, res = ev.res && ev.res.ok ? ev.res : null;
+    const P = parseFloat(row.comp['Power(W)']);
+    const probs = ev.miss.map(k => '缺 ' + viaMissLabel(k, r)).concat(ev.issues.filter(i => i.lv !== 'info').map(i => i.text));
+    return [row.cat, row.name, row.reasons.map(x => x.text).join('；') || '（不在納入條件內）',
+      inc.includes(row) ? VIA_ST[ev.status].text : VIA_ST.orphan.text, probs.join('；'),
+      d.shape === 'circle' ? '圓形' : '方形', n(d.L, 4), n(d.W, 4), n(d.D, 4), n(ViaCalc.padArea(d) || null, 4),
+      d.pattern === 'staggered' ? '交錯' : '矩陣', n(d.n, 0), r.qtyLocal ? '本頁試算值' : (r.srcQty !== null ? 'EE 清單' : ''),
+      n(r.diaMil, 3), n(d.dia, 4), r.diaLocal ? '本頁試算值' : (r.srcDia !== null ? 'EE 清單' : ''),
+      n(r.pitchMil, 2), n(d.pitch, 4), n(d.t, 4), r.tLocal ? '本頁指定' : (r.srcT !== null ? '5G-RRU t_PCB' : ''),
+      n(d.plating, 4), (ViaCalc.fillOf(r.fill) || {}).label || '', n(d.kFill, 3),
+      res ? n(res.keff, 3) : '', res ? n(res.rth, 4) : '', res ? n(res.cuRatio * 100, 3) : '', res ? n(res.singleR, 3) : '',
+      isFinite(P) ? P : '', (res && P > 0) ? n(P * res.rth, 3) : ''];
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Thermal Via');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    ['項目', '說明'],
+    ['模型', '穿板方向一維熱傳；E-PAD 範圍內 via（孔壁鍍銅＋塞孔）與 FR4 面積加權並聯'],
+    ['K_eff', '(N·A_cu·K_Cu + N·A_fill·K_fill + A_FR4·K_FR4) ÷ A_pad'],
+    ['R_th', 't ÷ (K_eff × A_pad)，t 與 A 用 mm 時 ×1000 → °C/W'],
+    ['面積', 'r_in = 內徑/2、r_out = r_in + 鍍銅厚度；A_cu = π(r_out² − r_in²)、A_fill = π·r_in²、A_FR4 = A_pad − N·π·r_out²'],
+    ['常數', `K_Cu = ${ViaCalc.K_CU}、K_FR4 = ${ViaCalc.K_FR4} W/m·K；1 mil = ${ViaCalc.MIL} mm；邊距 ${ViaCalc.EDGE} mm`],
+    ['中心間距', '不影響 K_eff；只用來檢查排不排得下、會不會干涉'],
+    ['檢查', `❌ 孔壁超出焊盤／孔壁重疊／via 總面積 > 焊盤；⚠ 孔壁離邊緣 < ${ViaCalc.EDGE} mm、中心距 < 2 倍內徑`],
+    ['穿板溫降', '發熱瓦數 × R_th（假設熱全部經 E-PAD 下方的 via 區穿板，偏保守）'],
+    ['不含', '銅層橫向擴散、焊錫層與空洞、鍍銅不均'],
+  ]), '公式與常數');
+  const name = String(currentProjectData.project_name || currentProjectId || 'project').replace(/[\\/*?:[\]]/g, '');
+  XLSX.writeFile(wb, `${name}_ThermalVia_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/* ============================
    Feedback Tab (使用者建議與改善)
    ============================ */
 
@@ -14867,6 +15936,13 @@ function fbShowShadowReadReport() {
       <line x1="8" y1="15" x2="10" y2="15"/>
       <line x1="13" y1="15" x2="16" y2="15"/>
       <line x1="8" y1="18" x2="10" y2="18"/>
+    </svg>
+  </button>
+  <button type="button" data-tip="切換到 Thermal Via 計算" onclick="switchTab('via')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8" cy="8" r="1.6"/><circle cx="16" cy="8" r="1.6"/>
+      <circle cx="8" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/>
     </svg>
   </button>
   <button type="button" data-tip="切換到 使用者建議" onclick="switchTab('feedback')">
