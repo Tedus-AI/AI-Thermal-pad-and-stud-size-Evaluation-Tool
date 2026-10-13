@@ -9,6 +9,14 @@
  *       放不下回 ok:false 並可算出最多放幾顆；單顆不需要間距（舊版跳「Pad 尺寸過小」）
  *   [E] 檢查：孔壁超出焊盤、孔壁重疊＝錯誤；離邊緣太近、中心距 < 2 倍內徑＝提醒
  *   [F] missing()：缺哪些輸入；數量須為正整數；單顆不需要間距
+ *   [G] keffForComp（兩個工具共用：AI-Thermal 頁面的說明、5G-RRU 的基板熱阻 R_int）：
+ *       完整設計 → ok（8.6×8.6、134 顆 8 mil、1 mil 鍍銅、導熱膠 → K_eff 13.114）；R_int ＝ t ÷ (K_eff × A_pad)；
+ *       沒有 via 設計／缺塞孔材料／暫不納入／via 面積 > 焊盤 → 不 ok（呼叫端用通用值）；
+ *       與板厚、中心間距無關；_renamed_from 查得到；E-PAD 用 Pad_L/Pad_W fallback；N/A 當沒填；試算值優先；
+ *       配置問題（超出、重疊、沒填間距）照樣 ok、列在 issues
+ *   [H] resolve()／parseLW()／specKey()／tvNum() 與 AI-Thermal 頁面原本的 viaResolve／sgParseLW／sgSpecKey／viaTvNum 相同
+ *
+ * ⚠ 本檔與 viaCalc.js 在 AI-Thermal 與 5G-RRU 兩個 repo 內容逐字相同，改一邊就同步另一邊。
  *
  * 執行：node tests/via-calc.unit.test.js
  */
@@ -160,6 +168,109 @@ console.log('\n[F] missing()');
   ok('數量不是整數 → 缺 n', V.missing(base({ n: 9.5 })).includes('n'));
   ok('數量 > 1 沒有間距 → 缺 pitch；單顆不需要', V.missing(base({ pitch: null })).includes('pitch') && !V.missing(base({ n: 1, pitch: null })).includes('pitch'));
   ok('圓形：沒有直徑 → 缺 pad', V.missing(base({ shape: 'circle', D: null })).includes('pad'));
+}
+
+console.log('\n[G] keffForComp');
+{
+  const GP = { t_PCB: 2, K_Via: 30, Via_Eff: 0.9 };
+  const U850 = () => ({ Component: 'U850-Si5518', TV_Qty: 134, TV_ID_mil: 8, Board_Type: 'Thermal Via', Pad_L: 8.6, Pad_W: 8.6 });
+  const SPECS = () => ({ 'U850-Si5518': { epadSize: '8.6×8.6', via: { fill: 'epoxy', pitchMil: 28 } } });
+  const r = V.keffForComp(U850(), SPECS(), GP);
+  ok('完整設計 → ok、K_eff 13.114 W/m·K（prompt 驗算用例）', r.ok && r.keff.toFixed(3) === '13.114' && !r.reason, r);
+  ok('A_pad = 8.6 × 8.6 = 73.96 mm²', near(r.aPad, 73.96, 1e-9), r.aPad);
+  ok('R_int = t ÷ (K_eff × A_pad)（2 mm → 2.062 °C/W）＝ calc 的 R_th', near(V.rint(r, 2), 2 / (r.keff * 73.96) * 1000, 1e-12) && V.rint(r, 2).toFixed(3) === '2.062'
+    && near(V.rint(r, 2), V.calc(base({ L: 8.6, W: 8.6, n: 134, kFill: 2, t: 2 })).rth, 1e-9), V.rint(r, 2));
+  ok('rint：不 ok → NaN（不偷偷當 0）', isNaN(V.rint({ ok: false }, 2)) && isNaN(V.rint(null, 2)));
+  ok('與板厚無關（t_PCB 1.6 或沒有 t_PCB 都一樣）', near(V.keffForComp(U850(), SPECS(), { t_PCB: 1.6 }).keff, r.keff) && V.keffForComp(U850(), SPECS(), {}).ok
+    && near(V.keffForComp(U850(), SPECS(), {}).keff, r.keff), null);
+  const sp2 = SPECS(); sp2['U850-Si5518'].via.pitchMil = 12;
+  ok('與中心間距無關（間距只影響配置檢查）', near(V.keffForComp(U850(), sp2, GP).keff, r.keff));
+  ok('來源標示：E-PAD／數量／內徑取 EE 清單／鍍銅預設', r.src.pad === 'epad' && r.src.qty === 'ee' && r.src.dia === 'ee' && r.src.plating === 'default', r.src);
+  ok('配置正常（28 mil）→ 沒有 issues', r.issues.length === 0, r.issues);
+
+  const nd = V.keffForComp(U850(), {}, GP);
+  ok('沒有 thermal_specs → reason nodata', !nd.ok && nd.reason === 'nodata' && /沒有這顆的 via 設計/.test(V.reasonText(nd)), nd);
+  ok('有 spec 但沒有 via（或 via 是空物件）→ nodata', V.keffForComp(U850(), { 'U850-Si5518': { epadSize: '8.6×8.6' } }, GP).reason === 'nodata'
+    && V.keffForComp(U850(), { 'U850-Si5518': { epadSize: '8.6×8.6', via: {} } }, GP).reason === 'nodata');
+  const sp3 = SPECS(); delete sp3['U850-Si5518'].via.fill;
+  const mf = V.keffForComp(U850(), sp3, GP);
+  ok('缺塞孔材料 → reason missing、missing=[fill]、文字寫「缺：塞孔材料」', !mf.ok && mf.reason === 'missing' && JSON.stringify(mf.missing) === '["fill"]'
+    && V.reasonText(mf) === 'via 設計還缺：塞孔材料', { mf, t: V.reasonText(mf) });
+  const sp4 = SPECS(); sp4['U850-Si5518'].via.fill = 'custom';
+  ok('塞孔自訂 K 但沒填 K → 缺塞孔材料', V.keffForComp(U850(), sp4, GP).reason === 'missing');
+  sp4['U850-Si5518'].via.fillK = 3;
+  ok('自訂 K = 3 → ok', V.keffForComp(U850(), sp4, GP).ok && V.keffForComp(U850(), sp4, GP).kFill === 3);
+  const sp5 = SPECS(); sp5['U850-Si5518'].via.skip = true; sp5['U850-Si5518'].via.skipNote = '規格溫度很高';
+  const sk = V.keffForComp(U850(), sp5, GP);
+  ok('勾了暫不納入熱流評估 → reason skip（資料完整也不用）', !sk.ok && sk.reason === 'skip' && /暫不納入熱流評估/.test(V.reasonText(sk)) && /規格溫度很高/.test(V.reasonText(sk)), sk);
+  const ov = V.keffForComp(Object.assign(U850(), { TV_Qty: 200 }), { 'U850-Si5518': { epadSize: '1.6×1.6', via: { fill: 'air' } } }, GP);
+  ok('via 面積 > 焊盤 → reason over、文字寫出百分比', !ov.ok && ov.reason === 'over' && /超過焊盤/.test(V.reasonText(ov)) && /\d+%/.test(V.reasonText(ov)), { ov, t: V.reasonText(ov) });
+
+  // _renamed_from：5G-RRU 改了名、AI-Thermal 還沒把 thermal_specs 搬到新名稱
+  const ren = Object.assign(U850(), { Component: 'U850-Si5518-NEW', _renamed_from: 'U850-Si5518' });
+  const rr = V.keffForComp(ren, SPECS(), GP);
+  ok('_renamed_from 查得到舊名稱的 spec → ok、標 renamed', rr.ok && rr.renamed && rr.key === 'U850-Si5518' && near(rr.keff, r.keff), rr);
+  const both = SPECS(); both['U850-Si5518-NEW'] = { epadSize: '8.6×8.6', via: { fill: 'copper', pitchMil: 28 } };
+  ok('新名稱已有 spec → 用新名稱的（不看舊名稱）', V.keffForComp(ren, both, GP).key === 'U850-Si5518-NEW' && !V.keffForComp(ren, both, GP).renamed);
+  ok('名稱有空白／斜線 → 照 sgSpecKey 規則找', V.keffForComp(Object.assign(U850(), { Component: 'Q1 A/B' }), { 'Q1_A-B': SPECS()['U850-Si5518'] }, GP).ok);
+
+  // E-PAD fallback：TH/ME 頁沒填 → 5G-RRU 的 Pad_L/Pad_W（Board_Type = Thermal Via 或 _pad_from = epadSize）
+  const fb = V.keffForComp(U850(), { 'U850-Si5518': { via: { fill: 'epoxy', pitchMil: 28 } } }, GP);
+  ok('epadSize 空白、Board_Type Thermal Via → 用 Pad_L × Pad_W', fb.ok && fb.src.pad === 'rru' && near(fb.aPad, 73.96, 1e-9), fb);
+  const fb2 = V.keffForComp(Object.assign(U850(), { Board_Type: 'Copper Coin', _pad_from: 'epadSize' }), { 'U850-Si5518': { via: { fill: 'epoxy' } } }, GP);
+  ok('_pad_from = epadSize 也可以', fb2.ok && fb2.src.pad === 'rru', fb2);
+  const fb3 = V.keffForComp(Object.assign(U850(), { Board_Type: 'IC top' }), { 'U850-Si5518': { via: { fill: 'epoxy' } } }, GP);
+  ok('導熱方式不是 Thermal Via、也沒有 _pad_from → 不用 Pad_L/W（缺 E-PAD 尺寸）', !fb3.ok && fb3.reason === 'missing' && fb3.missing.includes('pad') && /E-PAD 尺寸/.test(V.reasonText(fb3)), fb3);
+  const fb4 = V.keffForComp(U850(), { 'U850-Si5518': { epadSize: 'abc', via: { fill: 'epoxy' } } }, GP);
+  ok('epadSize 填了但看不懂 → 不 fallback（缺 E-PAD 尺寸）', fb4.reason === 'missing' && fb4.missing.includes('pad'), fb4);
+
+  // N/A／空白／0 當沒填
+  const na = V.keffForComp(Object.assign(U850(), { TV_Qty: 'N/A', TV_ID_mil: ' n/a ' }), SPECS(), GP);
+  ok('TV_Qty／TV_ID_mil 是 N/A → 缺 Via 數量、Via 內徑', na.reason === 'missing' && JSON.stringify(na.missing) === '["n","dia"]' && V.reasonText(na) === 'via 設計還缺：Via 數量、Via 內徑', na);
+  ok('空白／0 也當沒填', V.keffForComp(Object.assign(U850(), { TV_Qty: '', TV_ID_mil: 0 }), SPECS(), GP).reason === 'missing');
+  ok('tvNum：N/A、空白、0、負數 → null；"8" → 8', V.tvNum('N/A') === null && V.tvNum('') === null && V.tvNum(0) === null && V.tvNum(-1) === null && V.tvNum('8') === 8 && V.tvNum(undefined) === null);
+
+  // 試算值：via.qty／via.diaMil 有 key 就用它（與 AI-Thermal 頁面上看到的 K_eff 一致）
+  const tr = SPECS(); tr['U850-Si5518'].via.qty = 100; tr['U850-Si5518'].via.diaMil = 10;
+  const trr = V.keffForComp(U850(), tr, GP);
+  const exp = V.calc(base({ L: 8.6, W: 8.6, n: 100, dia: 10 * MIL, kFill: 2, t: 2 }));
+  ok('試算值優先（100 顆 10 mil），並記下 EE 清單的值', trr.ok && near(trr.keff, exp.keff, 1e-12) && trr.src.qty === 'via' && trr.src.dia === 'via' && trr.srcQty === 134 && trr.srcDia === 8, trr);
+  const tr2 = SPECS(); tr2['U850-Si5518'].via.qty = 134; tr2['U850-Si5518'].via.plating = 0.035;
+  ok('鍍銅厚度有 key → 用它（35 µm）', V.keffForComp(U850(), tr2, GP).plating === 0.035 && V.keffForComp(U850(), tr2, GP).src.plating === 'via');
+
+  // 配置問題：K_eff 照算（ok），列在 issues
+  const np = SPECS(); delete np['U850-Si5518'].via.pitchMil;
+  const npr = V.keffForComp(U850(), np, GP);
+  ok('沒填中心間距 → 仍 ok，issues 寫「沒填中心間距」', npr.ok && npr.issues.length === 1 && npr.issues[0].code === 'nopitch', npr.issues);
+  const big = SPECS(); big['U850-Si5518'].via.pitchMil = 60;
+  const bigr = V.keffForComp(U850(), big, GP);
+  ok('間距太大 → 孔壁超出焊盤：仍 ok，issues 有 err/out', bigr.ok && bigr.issues.some(i => i.lv === 'err' && i.code === 'out'), bigr.issues);
+  const ovl = SPECS(); ovl['U850-Si5518'].via.pitchMil = 8;
+  ok('間距 < 孔外徑 → 孔壁重疊：仍 ok，issues 有 err/overlap', V.keffForComp(U850(), ovl, GP).issues.some(i => i.code === 'overlap'));
+  ok('單顆不需要間距 → 沒有 nopitch', V.keffForComp(Object.assign(U850(), { TV_Qty: 1 }), np, GP).issues.length === 0);
+  const many = SPECS(); many['U850-Si5518'].epadSize = '200×200'; many['U850-Si5518'].via.qty = 5000;
+  ok('數量 > 2000 → 不排列、issues 寫「太多」', V.keffForComp(U850(), many, GP).issues.some(i => i.code === 'many'));
+
+  // 圓形焊盤
+  const ci = V.keffForComp(U850(), { 'U850-Si5518': { via: { shape: 'circle', padD: 9, fill: 'solder', pitchMil: 28 } } }, GP);
+  ok('圓形焊盤：A_pad = π·(D/2)²、src.pad = circle', ci.ok && near(ci.aPad, Math.PI * 4.5 * 4.5, 1e-9) && ci.src.pad === 'circle', ci);
+  ok('圓形焊盤沒填直徑 → 文字寫「焊盤直徑」', V.reasonText(V.keffForComp(U850(), { 'U850-Si5518': { via: { shape: 'circle', fill: 'air' } } }, GP)) === 'via 設計還缺：焊盤直徑');
+
+  ok('沒有元件／沒有 specs 也不丟例外', V.keffForComp(null, null, null).reason === 'nodata' && V.keffForComp({}, undefined).reason === 'nodata');
+  ok('reasonText(ok) → 空字串', V.reasonText(r) === '');
+}
+
+console.log('\n[H] resolve／parseLW／specKey 與 AI-Thermal 頁面原本的寫法相同');
+{
+  ok('parseLW：8.6*8.6、9.8x4.8、3 X 2.5、單一數字＝正方形、看不懂 → null',
+    JSON.stringify(V.parseLW('8.6*8.6')) === '{"L":8.6,"W":8.6}' && JSON.stringify(V.parseLW('9.8x4.8')) === '{"L":9.8,"W":4.8}'
+    && JSON.stringify(V.parseLW('3 X 2.5')) === '{"L":3,"W":2.5}' && JSON.stringify(V.parseLW('5')) === '{"L":5,"W":5}'
+    && V.parseLW('abc') === null && V.parseLW('') === null && V.parseLW(null) === null);
+  ok('specKey：空白 → _、/ → -', V.specKey('Q1 A/B C') === 'Q1_A-B_C' && V.specKey(null) === '');
+  const r = V.resolve({ TV_Qty: 9, TV_ID_mil: 8 }, { epadSize: '1.6*1.6', via: { pcbT: 1.2, pitchMil: 20, pattern: 'staggered' } }, { t_PCB: 1.6 });
+  ok('resolve：板厚頁面指定優先、間距換成 mm、交錯排列、塞孔沒選 → kFill null', r.t === 1.2 && r.tLocal && r.srcT === 1.6 && near(r.d.pitch, 20 * MIL, 1e-12)
+    && r.d.pattern === 'staggered' && r.d.kFill === null && r.fill === null && r.platingDefault && r.d.plating === V.PLATING_DEFAULT, r);
+  ok('resolve：沒有 spec／沒有元件也不丟例外', V.resolve(null, null, null).d.n === null);
 }
 
 console.log(`\n結果：${pass} 通過、${fail} 失敗`);

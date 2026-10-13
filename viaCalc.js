@@ -1,5 +1,9 @@
 /* viaCalc.js — Thermal Via 等效 K 值計算（純函式，畫面、匯出與測試共用）
  *
+ * ⚠ 本檔與 tests/via-calc.unit.test.js 在 AI-Thermal 與 5G-RRU 兩個 repo 內容逐字相同（同 compMerge.js），
+ *   改一邊就同步另一邊：AI-Thermal 的 Thermal Via 計算頁與 5G-RRU 的基板熱阻 R_int 用同一份算法，
+ *   各自從資料庫的原始輸入（thermal_specs[元件].via＋元件欄位）當場算，不存結果（見 keffForComp）。
+ *
  * 原本是獨立的 thermal-via-calculator 工具（本機 localStorage／Firebase 各自存），移植成本工具的
  * 「Thermal Via 計算」頁之後，資料改存進專案（thermal_specs[元件].via），計算核心放在這裡。
  *
@@ -260,6 +264,142 @@
   /* 自動間距寫回時往下取整（mil 取 0.1、mm 取 0.001），保證仍然排得下 */
   function floorTo(v, step) { return Math.floor(v / step + 1e-9) * step; }
 
+  /* ── 從資料庫的原始輸入解析一顆元件的 via 設計（兩個工具共用）──────────────────
+     資料在同一個專案 document：thermal_specs[specKey(元件名)]（AI-Thermal TH/ME 頁＋Thermal Via 計算頁寫）
+     ＋元件物件（rf_data／digital_data／pwr_data：TV_Qty、TV_ID_mil、Board_Type、Pad_L/W、_pad_from、_renamed_from）
+     ＋global_params.t_PCB（5G-RRU 參數控制台寫）。這裡只讀，不寫任何東西。 */
+
+  // thermal_specs 的 key（＝AI-Thermal 的 sgSpecKey）：空白 → _、/ → -
+  function specKey(name) { return String(name || '').replace(/ /g, '_').replace(/\//g, '-'); }
+  // 解析 "L×W"（也吃 x / X / *）；只填一個數字視為正方形；解析不出來回 null（＝AI-Thermal 的 sgParseLW）
+  function parseLW(s) {
+    var t = String(s == null ? '' : s).trim();
+    if (!t) return null;
+    var m = t.match(/(\d+\.?\d*)\s*[×xX*]\s*(\d+\.?\d*)/);
+    if (m) return { L: parseFloat(m[1]), W: parseFloat(m[2]) };
+    var one = t.match(/^(\d+\.?\d*)$/);
+    if (one) { var v = parseFloat(one[1]); return { L: v, W: v }; }
+    return null;
+  }
+  // EE 清單的 TH Via 內徑／Qty：'N/A'、空白、0 都算「沒填」
+  function tvNum(v) {
+    if (v === null || v === undefined) return null;
+    var s = String(v).trim();
+    if (!s || s.toUpperCase() === 'N/A') return null;
+    var n = parseFloat(s);
+    return (isFinite(n) && n > 0) ? n : null;
+  }
+  // 找這顆元件的 spec：先用名稱；查不到、且元件有 _renamed_from（5G-RRU 改了名、AI-Thermal 還沒把資料搬過去）→ 用舊名稱
+  function specFor(comp, specs) {
+    var S = (specs && typeof specs === 'object') ? specs : {};
+    var c = comp || {};
+    var k = specKey(c.Component);
+    if (S[k]) return { key: k, spec: S[k], renamed: false };
+    if (c._renamed_from) {
+      var k2 = specKey(c._renamed_from);
+      if (S[k2]) return { key: k2, spec: S[k2], renamed: true };
+    }
+    return { key: k, spec: null, renamed: false };
+  }
+
+  /* 一顆元件的有效輸入（含每個值的來源）。AI-Thermal 的 Thermal Via 計算頁（viaResolve）與 keffForComp 共用。
+     - E-PAD：矩形取 spec.epadSize；沒填（空白）且元件的導熱方式是 Thermal Via 或 _pad_from = epadSize
+       → 暫用元件的 Pad_L/Pad_W（5G-RRU 端的 E-Pad 長寬）。圓形取 via.padD。
+     - 數量／內徑：via.qty／via.diaMil 有 key＝AI-Thermal 頁面的試算值，沒有 key 才取 EE 清單的 TV_Qty／TV_ID_mil。
+     - 板厚：via.pcbT 有 key＝頁面指定，沒有取 global_params.t_PCB。
+     - 鍍銅厚度：via.plating 沒有 key＝預設 1 mil。塞孔材料必填、沒有預設。 */
+  function resolve(comp, spec, globalParams) {
+    spec = spec || {};
+    var v = spec.via || {}, c = comp || {}, gp = globalParams || {};
+    var shape = v.shape === 'circle' ? 'circle' : 'rect';
+    var L = null, W = null, padSrc = null;
+    var epadRaw = String(spec.epadSize || '').trim();
+    if (shape === 'rect') {
+      var lw = parseLW(epadRaw);
+      if (lw && lw.L > 0 && lw.W > 0) { L = lw.L; W = lw.W; padSrc = 'epad'; }
+      else if (!epadRaw) {
+        var pl = parseFloat(c.Pad_L), pw = parseFloat(c.Pad_W);
+        if ((c.Board_Type === 'Thermal Via' || c._pad_from === 'epadSize') && pl > 0 && pw > 0) { L = pl; W = pw; padSrc = 'rru'; }
+      }
+    }
+    var D = shape === 'circle' ? pos(v.padD) : null;
+    var srcQty = tvNum(c.TV_Qty), srcDia = tvNum(c.TV_ID_mil);
+    var srcT = pos(gp.t_PCB);
+    var qtyLocal = v.qty !== undefined, diaLocal = v.diaMil !== undefined, tLocal = v.pcbT !== undefined;
+    var qty = qtyLocal ? num(v.qty) : srcQty;
+    var diaMil = diaLocal ? num(v.diaMil) : srcDia;
+    var t = tLocal ? num(v.pcbT) : srcT;
+    var platingSet = num(v.plating);
+    var plating = v.plating !== undefined ? platingSet : PLATING_DEFAULT;
+    var fillDef = fillOf(v.fill);
+    var kFill = !fillDef ? null : (fillDef.key === 'custom' ? num(v.fillK) : fillDef.k);
+    var pitchMil = num(v.pitchMil);
+    var d = {
+      shape: shape, L: L, W: W, D: D, pattern: v.pattern === 'staggered' ? 'staggered' : 'matrix',
+      n: qty, dia: diaMil !== null ? diaMil * MIL : null, pitch: pitchMil !== null ? pitchMil * MIL : null,
+      t: t, plating: plating, kFill: kFill,
+    };
+    return { d: d, v: v, spec: spec, epadRaw: epadRaw, padSrc: padSrc, srcQty: srcQty, srcDia: srcDia, srcT: srcT,
+             qtyLocal: qtyLocal, diaLocal: diaLocal, tLocal: tLocal, qty: qty, diaMil: diaMil, t: t, pitchMil: pitchMil,
+             platingDefault: v.plating === undefined, fill: fillDef ? fillDef.key : null };
+  }
+
+  var MISS_LABEL = { pad: 'E-PAD 尺寸', n: 'Via 數量', dia: 'Via 內徑', pitch: '中心間距', t: 'PCB 厚度', plating: '鍍銅厚度', fill: '塞孔材料' };
+  function missLabel(k, shape) { return (k === 'pad' && shape === 'circle') ? '焊盤直徑' : (MISS_LABEL[k] || k); }
+  // K_eff 只需要這幾項（與 PCB 厚度、中心間距無關）
+  var KEFF_NEED = ['pad', 'n', 'dia', 'plating', 'fill'];
+  var CHECK_MAX = 2000;   // 數量太大（多半是打錯）時不排列、不檢查（與 AI-Thermal 頁面同一個上限）
+
+  /* 元件 → 逐顆等效 K（5G-RRU 的基板熱阻 R_int 與 AI-Thermal 頁面的說明共用）。
+     回傳 { ok, keff, aPad(mm²), reason, missing[], issues[], src{…}, … }：
+       ok:true  → keff 可用；issues 是配置問題（孔壁超出焊盤／重疊、沒填中心間距沒辦法檢查…）—— 不影響 K_eff 公式，照用、由呼叫端標 ⚠
+       reason   → 'nodata'（沒有 via 設計）／'skip'（暫不納入熱流評估）／'missing'（缺 K_eff 需要的輸入）／
+                  'over'（via 佔用面積超過焊盤，K_eff 不成立）→ 呼叫端改用通用值
+     試算值（via.qty／via.diaMil）照用：與 AI-Thermal 頁面上看到的 K_eff 一致。 */
+  function keffForComp(comp, thermalSpecs, globalParams) {
+    var sf = specFor(comp, thermalSpecs);
+    var out = { ok: false, keff: null, aPad: null, reason: null, missing: [], issues: [], key: sf.key, renamed: sf.renamed, src: null };
+    var v = sf.spec && sf.spec.via;
+    if (!v || typeof v !== 'object' || !Object.keys(v).length) { out.reason = 'nodata'; return out; }
+    if (v.skip === true) { out.reason = 'skip'; out.skipNote = String(v.skipNote || ''); return out; }
+    var r = resolve(comp, sf.spec, globalParams), d = r.d;
+    out.shape = d.shape; out.L = d.L; out.W = d.W; out.D = d.D;
+    out.n = d.n; out.diaMil = r.diaMil; out.plating = d.plating; out.fill = r.fill; out.kFill = d.kFill; out.t = d.t;
+    out.srcQty = r.srcQty; out.srcDia = r.srcDia;
+    out.src = { pad: d.shape === 'circle' ? 'circle' : r.padSrc, qty: r.qtyLocal ? 'via' : 'ee', dia: r.diaLocal ? 'via' : 'ee',
+                plating: r.platingDefault ? 'default' : 'via' };
+    out.missing = missing(d).filter(function (k) { return KEFF_NEED.indexOf(k) >= 0; });
+    if (out.missing.length) { out.reason = 'missing'; return out; }
+    // K_eff 與板厚無關：t 只是讓 calc 走得下去（R_th 另外用呼叫端的板厚算，見 rint）
+    var res = calc(Object.assign({}, d, { t: 1 }));
+    out.aPad = res.aPad; out.footRatio = res.footRatio;
+    if (!res.ok) { out.reason = res.reason; return out; }
+    out.ok = true; out.keff = res.keff;
+    out.rth = d.t > 0 ? rint(out, d.t) : null;
+    if (d.n > CHECK_MAX) out.issues.push({ lv: 'warn', code: 'many', text: 'Via 數量 ' + d.n + ' 顆太多（是不是打錯？），沒有檢查配置' });
+    else if (d.n > 1 && !(d.pitch > 0)) out.issues.push({ lv: 'warn', code: 'nopitch', text: '沒填中心間距，沒辦法檢查配置（孔壁會不會超出焊盤、互相重疊）' });
+    else {
+      var chk = check(d, layout(d, d.pitch));
+      if (chk.nOut) out.issues.push({ lv: 'err', code: 'out', text: chk.nOut + ' 顆 via 的孔壁超出焊盤' });
+      if (chk.nOverlap) out.issues.push({ lv: 'err', code: 'overlap', text: chk.nOverlap + ' 顆 via 的孔壁互相重疊' });
+    }
+    return out;
+  }
+  // 穿板熱阻 R = t ÷ (K_eff × A_pad)（°C/W；t mm、A_pad mm²）＝ AI-Thermal 頁面的 R_th。不 ok → NaN（不偷偷當 0）
+  function rint(r, tMm) {
+    var t = typeof tMm === 'number' ? tMm : parseFloat(tMm);
+    return (r && r.ok && r.keff > 0 && r.aPad > 0) ? t / (r.keff * r.aPad) * 1000 : NaN;
+  }
+  // 不 ok 的原因（給使用者看的一句話；兩個工具同一套文字）
+  function reasonText(r) {
+    if (!r || r.ok) return '';
+    if (r.reason === 'nodata') return 'AI-Thermal「Thermal Via 計算」還沒有這顆的 via 設計';
+    if (r.reason === 'skip') return 'AI-Thermal 標為「暫不納入熱流評估」' + (r.skipNote ? '（' + r.skipNote + '）' : '');
+    if (r.reason === 'missing') return 'via 設計還缺：' + r.missing.map(function (k) { return missLabel(k, r.shape); }).join('、');
+    if (r.reason === 'over') return 'via 佔用面積是焊盤的 ' + Math.round((r.footRatio || 0) * 100) + '%（超過焊盤），K_eff 不成立';
+    return '';
+  }
+
   var api = {
     K_CU: K_CU, K_FR4: K_FR4, EDGE: EDGE, MIL: MIL, HEX: HEX,
     FILLS: FILLS, PLATINGS: PLATINGS, PLATING_DEFAULT: PLATING_DEFAULT,
@@ -267,6 +407,9 @@
     padArea: padArea, rOut: rOut, missing: missing, calc: calc,
     grid: grid, layout: layout, check: check, autoPitch: autoPitch, maxCount: maxCount,
     milToMm: milToMm, mmToMil: mmToMil, floorTo: floorTo,
+    MISS_LABEL: MISS_LABEL, KEFF_NEED: KEFF_NEED, CHECK_MAX: CHECK_MAX,
+    specKey: specKey, parseLW: parseLW, tvNum: tvNum, specFor: specFor, resolve: resolve, missLabel: missLabel,
+    keffForComp: keffForComp, rint: rint, reasonText: reasonText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ViaCalc = api;

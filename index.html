@@ -14352,14 +14352,8 @@ function viaCompSource() {
   return (sgProjectId && sgProjectId === currentProjectId && sgProjectData) ? sgProjectData : currentProjectData;
 }
 function viaSameAsTab1() { return !!(sgProjectId && sgProjectId === currentProjectId && sgProjectData); }
-// TH Via 內徑／Qty：'N/A'、空白、0 都算「沒填」
-function viaTvNum(v) {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  if (!s || s.toUpperCase() === 'N/A') return null;
-  const n = parseFloat(s);
-  return (isFinite(n) && n > 0) ? n : null;
-}
+// TH Via 內徑／Qty：'N/A'、空白、0 都算「沒填」（規則在 viaCalc.js，5G-RRU 讀同一份）
+function viaTvNum(v) { return ViaCalc.tvNum(v); }
 // 主散熱路徑：TH/ME 頁的優先；沒選（或舊值）才看元件上的導熱方式（可能是 5G-RRU 設的）—— 與 sgHeatPathOf 同一套
 function viaPathOf(comp, spec) {
   const hd = spec && spec.heatDirection;
@@ -14404,41 +14398,13 @@ function viaPartition(rows) {
   return { inc, skip, orphan };
 }
 
-/* ── 一顆元件的有效輸入（含每個值的來源）＋計算＋檢查 ─────────────── */
+/* ── 一顆元件的有效輸入（含每個值的來源）＋計算＋檢查 ───────────────
+   輸入解析在 viaCalc.js（ViaCalc.resolve）：5G-RRU 算基板熱阻時用同一份（ViaCalc.keffForComp），
+   兩邊的 K_eff 才會一致。E-PAD fallback：TH/ME 頁沒填 E-PAD，但 5G-RRU 端的導熱方式是 Thermal Via
+   → 它的 Pad_L/Pad_W 就是 E-Pad 長寬。 */
 function viaResolve(row) {
-  const spec = row.spec || {}, v = spec.via || {}, comp = row.comp || {};
-  const shape = v.shape === 'circle' ? 'circle' : 'rect';
-  let L = null, W = null, padSrc = null;
-  const epadRaw = String(spec.epadSize || '').trim();
-  if (shape === 'rect') {
-    const lw = sgParseLW(epadRaw);
-    if (lw && lw.L > 0 && lw.W > 0) { L = lw.L; W = lw.W; padSrc = 'epad'; }
-    else if (!epadRaw) {
-      // fallback：TH/ME 頁沒填 E-PAD，但 5G-RRU 端的導熱方式是 Thermal Via → 它的 Pad_L/Pad_W 就是 E-Pad 長寬
-      const pl = parseFloat(comp.Pad_L), pw = parseFloat(comp.Pad_W);
-      if ((comp.Board_Type === 'Thermal Via' || comp._pad_from === 'epadSize') && pl > 0 && pw > 0) { L = pl; W = pw; padSrc = 'rru'; }
-    }
-  }
-  const D = shape === 'circle' ? ViaCalc.pos(v.padD) : null;
-  const srcQty = viaTvNum(comp.TV_Qty), srcDia = viaTvNum(comp.TV_ID_mil);
   const gp = (currentProjectData && currentProjectData.global_params) || {};
-  const srcT = ViaCalc.pos(gp.t_PCB);
-  const qtyLocal = v.qty !== undefined, diaLocal = v.diaMil !== undefined, tLocal = v.pcbT !== undefined;
-  const qty = qtyLocal ? ViaCalc.num(v.qty) : srcQty;
-  const diaMil = diaLocal ? ViaCalc.num(v.diaMil) : srcDia;
-  const t = tLocal ? ViaCalc.num(v.pcbT) : srcT;
-  const platingSet = ViaCalc.num(v.plating);
-  const plating = v.plating !== undefined ? platingSet : ViaCalc.PLATING_DEFAULT;
-  const fillDef = ViaCalc.fillOf(v.fill);
-  const kFill = !fillDef ? null : (fillDef.key === 'custom' ? ViaCalc.num(v.fillK) : fillDef.k);
-  const pitchMil = ViaCalc.num(v.pitchMil);
-  const d = {
-    shape, L, W, D, pattern: v.pattern === 'staggered' ? 'staggered' : 'matrix',
-    n: qty, dia: diaMil !== null ? diaMil * ViaCalc.MIL : null, pitch: pitchMil !== null ? pitchMil * ViaCalc.MIL : null,
-    t, plating, kFill,
-  };
-  return { d, v, spec, epadRaw, padSrc, srcQty, srcDia, srcT, qtyLocal, diaLocal, tLocal, qty, diaMil, t, pitchMil,
-           platingDefault: v.plating === undefined, fill: fillDef ? fillDef.key : null };
+  return ViaCalc.resolve(row.comp || {}, row.spec || {}, gp);
 }
 const VIA_CHECK_MAX = 2000;   // 數量太大（打錯）時不排、不畫，避免卡住畫面
 function viaEval(row) {
@@ -14859,18 +14825,38 @@ function viaOutHtml(row) {
   if (ok) {
     const P = parseFloat(row.comp['Power(W)']);
     if (P > 0) h += `<div class="via-note info">🌡 穿板溫降 ≈ P × R<sub>th</sub> = ${viaFmt(P, 3)} W × ${viaFmt(res.rth, 3)} °C/W ≈ <b>${viaFmt(P * res.rth, 2)} °C</b>（P＝EE 清單發熱瓦數；假設熱全部經 E-PAD 下方的 via 區穿板）</div>`;
-    const gp = (currentProjectData && currentProjectData.global_params) || {};
-    const kv = ViaCalc.pos(gp.K_Via);
-    if (kv && viaPathOf(row.comp, row.spec).path === 'Thermal Via') {
-      const ve = ViaCalc.pos(gp.Via_Eff);
-      const lower = res.keff < kv;
-      h += `<div class="via-note ${lower ? 'warn' : 'info'}">${lower ? '⚠' : 'ℹ'} 5G-RRU 目前所有 Thermal Via 元件共用專案參數 K_Via = ${viaFmt(kv, 2)} W/m·K${ve ? '（Via_Eff = ' + viaFmt(ve, 2) + '）' : ''}；
-        這顆算出來是它的 ${viaFmt(res.keff / kv, 2)} 倍${lower ? ' → 5G-RRU 端這顆的基板熱阻可能被低估（偏樂觀）' : ''}</div>`;
-    }
   }
+  h += viaRruNoteHtml(row);
   h += `</div>`;
   h += `<div class="via-viz">${viaSvg(d, ev.chk, r.fill)}</div>`;
   return h;
+}
+
+/* 5G-RRU 實際怎麼用這顆的 via 設計 —— 文案必須與它的程式一致（UX 慣例 11）：兩邊都走 ViaCalc.keffForComp。
+   5G-RRU：導熱方式＝Thermal Via 的元件，keffForComp ok → R_int = 它的 PCB 板厚度 ÷ (K_eff × 焊盤面積)
+   （＝本頁的 R_th，不加擴散面積、不除 Via_Eff）；不 ok → 通用值 K_Via（擴散面積＋÷ Via_Eff，原本的算法）。
+   讀的是存進資料庫的 thermal_specs → 本頁還沒存的修改，存檔後 5G-RRU 才看得到。 */
+function viaRruNoteHtml(row) {
+  const gp = (currentProjectData && currentProjectData.global_params) || {};
+  const kv = ViaCalc.pos(gp.K_Via), ve = ViaCalc.pos(gp.Via_Eff);
+  const generic = '通用值 K_Via = ' + (kv ? viaFmt(kv, 2) + ' W/m·K' + (ve ? '（÷ Via_Eff ' + viaFmt(ve, 2) + '）' : '') : '（5G-RRU 參數控制台，預設 30 W/m·K）');
+  const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp);
+  const path = viaPathOf(row.comp, row.spec).path;
+  if (path !== 'Thermal Via') {
+    if (!kr.ok) return '';
+    return `<div class="via-note info">ℹ 5G-RRU 只對導熱方式＝Thermal Via 的元件使用逐顆 K<sub>eff</sub>；這顆目前${path ? '是「' + escapeHtml(path) + '」' : '沒有選主散熱路徑'} → 5G-RRU 不會用到這個值</div>`;
+  }
+  if (!kr.ok) return `<div class="via-note info">ℹ 5G-RRU 這顆的基板熱阻會用${escapeHtml(generic)}：${escapeHtml(ViaCalc.reasonText(kr))}</div>`;
+  const tP = ViaCalc.pos(gp.t_PCB);
+  const ri = tP ? ViaCalc.rint(kr, tP) : null;
+  let s = `ℹ 5G-RRU 會用這個 K<sub>eff</sub> = ${viaFmt(kr.keff, 2)} W/m·K 算這顆的基板熱阻，取代${escapeHtml(generic)}：` +
+    `R<sub>int</sub> = PCB 板厚度 ÷ (K<sub>eff</sub> × 焊盤面積)` +
+    (ri ? ` = ${viaFmt(tP, 3)} mm ÷ (${viaFmt(kr.keff, 2)} × ${viaFmt(kr.aPad, 2)} mm²) ≈ <b>${viaFmt(ri, 3)} °C/W</b>` : '') +
+    `（不加擴散面積、不除 Via_Eff）`;
+  const r = row.ev && row.ev.r;
+  if (r && r.tLocal && r.t !== tP) s += `；板厚用 5G-RRU 參數控制台的 PCB 板厚度${tP ? ' ' + viaFmt(tP, 3) + ' mm' : ''}，不是本頁指定的 ${viaFmt(r.t, 3)} mm`;
+  if (kr.issues.length) s += `；配置有問題（${escapeHtml(kr.issues.map(i => i.text).join('；'))}）→ K<sub>eff</sub> 照用，5G-RRU 元件清單會標 ⚠`;
+  return `<div class="via-note ${kr.issues.length ? 'warn' : 'info'}">${s}。存檔後 5G-RRU 重新載入（或切回分頁）就會套用。</div>`;
 }
 
 /* 示意圖（SVG：俯視＋剖面）。剖面的厚度方向另外縮放（小焊盤時原本的畫布會畫出界）並註明「未按比例」 */
@@ -15151,7 +15137,16 @@ function viaExportExcel() {
   const n = (x, dec) => (x === null || x === undefined || !isFinite(x)) ? '' : Number(Number(x).toFixed(dec));
   const head = ['分類', '元件名稱', '納入原因', '狀態', '缺漏／問題', '焊盤形狀', 'E-PAD L (mm)', 'E-PAD W (mm)', '直徑 D (mm)', '焊盤面積 (mm²)',
     '排列', 'Via 數量', '數量來源', '內徑 (mil)', '內徑 (mm)', '內徑來源', '中心間距 (mil)', '中心間距 (mm)', 'PCB 厚度 (mm)', 'PCB 厚度來源',
-    '鍍銅厚度 (mm)', '塞孔材料', 'K_fill (W/m·K)', 'K_eff (W/m·K)', 'R_th (°C/W)', '銅面積比 (%)', '單顆 via 熱阻 (°C/W)', '發熱瓦數 (W)', '穿板溫降 (°C)'];
+    '鍍銅厚度 (mm)', '塞孔材料', 'K_fill (W/m·K)', 'K_eff (W/m·K)', 'R_th (°C/W)', '銅面積比 (%)', '單顆 via 熱阻 (°C/W)', '發熱瓦數 (W)', '穿板溫降 (°C)',
+    '5G-RRU 基板熱阻採用'];
+  const gp = currentProjectData.global_params || {};
+  // 5G-RRU 怎麼用這顆（與頁面上的說明同一套判斷：ViaCalc.keffForComp；只對導熱方式＝Thermal Via 的元件）
+  const rruUse = (row) => {
+    if (viaPathOf(row.comp, row.spec).path !== 'Thermal Via') return '不適用（導熱方式不是 Thermal Via）';
+    const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp);
+    return kr.ok ? '逐顆 K_eff' + (kr.issues.length ? '（配置有問題：' + kr.issues.map(i => i.text).join('；') + '）' : '')
+                 : '通用值 K_Via：' + ViaCalc.reasonText(kr);
+  };
   const rows = inc.concat(skip, orphan).map(row => {
     const ev = viaEval(row), r = ev.r, d = r.d, res = ev.res && ev.res.ok ? ev.res : null;
     const P = parseFloat(row.comp['Power(W)']);
@@ -15165,7 +15160,7 @@ function viaExportExcel() {
       n(r.pitchMil, 2), n(d.pitch, 4), n(d.t, 4), r.tLocal ? '本頁指定' : (r.srcT !== null ? '5G-RRU t_PCB' : ''),
       n(d.plating, 4), (ViaCalc.fillOf(r.fill) || {}).label || '', n(d.kFill, 3),
       res ? n(res.keff, 3) : '', res ? n(res.rth, 4) : '', res ? n(res.cuRatio * 100, 3) : '', res ? n(res.singleR, 3) : '',
-      isFinite(P) ? P : '', (res && P > 0) ? n(P * res.rth, 3) : ''];
+      isFinite(P) ? P : '', (res && P > 0) ? n(P * res.rth, 3) : '', rruUse(row)];
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...rows]), 'Thermal Via');
@@ -15181,6 +15176,8 @@ function viaExportExcel() {
     ['中心間距', '不影響 K_eff；只用來檢查排不排得下、會不會干涉'],
     ['檢查', `❌ 孔壁超出焊盤／孔壁重疊／via 總面積 > 焊盤；⚠ 孔壁離邊緣 < ${ViaCalc.EDGE} mm、中心距 < 2 倍內徑`],
     ['穿板溫降', '發熱瓦數 × R_th（假設熱全部經 E-PAD 下方的 via 區穿板，偏保守）'],
+    ['5G-RRU', '導熱方式＝Thermal Via 的元件：via 設計完整 → 基板熱阻 R_int = 5G-RRU 的 PCB 板厚度 ÷ (K_eff × A_pad)（不加擴散面積、不除 Via_Eff）；' +
+      '沒有 via 設計／缺 K_eff 需要的輸入／暫不納入熱流評估／via 面積超過焊盤 → 通用值 K_Via（擴散面積、÷ Via_Eff）'],
     ['不含', '銅層橫向擴散、焊錫層與空洞、鍍銅不均'],
   ]), '公式與常數');
   const name = String(currentProjectData.project_name || currentProjectId || 'project').replace(/[\\/*?:[\]]/g, '');

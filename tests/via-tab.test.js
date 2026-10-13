@@ -227,7 +227,14 @@ const PROJ = () => ({
   });
   ok('K_eff／R_th 與 viaCalc 一致（13.11 W/m·K、1.665 °C/W）', calc.tiles[0].startsWith(String(Number(calc.exp.keff.toFixed(2)))) && calc.tiles[1].startsWith(String(Number(calc.exp.rth.toFixed(3)))), calc.tiles);
   ok('穿板溫降 = 3.2 W × R_th', calc.out.includes('3.2 W × ' + Number(calc.exp.rth.toFixed(3)) + ' °C/W ≈ ' + Number((3.2 * calc.exp.rth).toFixed(2)) + ' °C'), calc.out);
-  ok('與 5G-RRU K_Via = 30 比較：較低 → 提醒 5G-RRU 端可能偏樂觀', /K_Via = 30/.test(calc.out) && /偏樂觀/.test(calc.out));
+  // 5G-RRU 實際行為（兩邊都走 ViaCalc.keffForComp）：完整設計 → 用 K_eff 取代通用值 K_Via，R_int = t_PCB ÷ (K_eff × A_pad)
+  const rri = 1.6 / (calc.exp.keff * 73.96) * 1000;
+  ok('5G-RRU 說明照實際行為：會用這個 K_eff、取代通用值 K_Via = 30、R_int 算式與數字（t_PCB 1.6）',
+    /5G-RRU 會用這個 Keff = 13\.11 W\/m·K/.test(calc.out) && /取代通用值 K_Via = 30 W\/m·K（÷ Via_Eff 0\.9）/.test(calc.out)
+    && calc.out.includes('≈ ' + Number(rri.toFixed(3)) + ' °C/W') && /不加擴散面積、不除 Via_Eff/.test(calc.out) && !/偏樂觀/.test(calc.out), calc.out);
+  await sel('Driver-RRU');
+  ok('沒有 via 設計 → 說明 5G-RRU 會用通用值＋原因', /5G-RRU 這顆的基板熱阻會用通用值 K_Via = 30 W\/m·K/.test((await st()).out) && /還沒有這顆的 via 設計/.test((await st()).out), (await st()).out);
+  await sel('U850-Si5518');
   ok('示意圖畫出 134 顆 via', await page.evaluate(() => document.querySelectorAll('#via-out svg circle').length >= 134 * 1));
 
   console.log('\n[G] 自動間距與干涉');
@@ -357,6 +364,7 @@ const PROJ = () => ({
   await page.click('#via-ed-head .via-skip-cb input');
   S = await st();
   ok('已完成的元件也能在編輯區上方勾「暫不納入」', S.items.some(i => i.name === 'U850-Si5518' && i.skip) && await page.evaluate(() => thermalSpecs['U850-Si5518'].via.skip === true));
+  ok('暫不納入 → 說明 5G-RRU 會改用通用值 K_Via（原因：暫不納入熱流評估）', /5G-RRU 這顆的基板熱阻會用通用值 K_Via/.test(S.out) && /暫不納入熱流評估/.test(S.out), S.out);
   await page.evaluate(() => relock());
   ok('未解鎖：「暫不納入」勾選停用，元件名稱仍可點', await page.evaluate(() =>
     [...document.querySelectorAll('.via-skip-cb input')].every(e => e.disabled) && [...document.querySelectorAll('.via-todo-go')].every(e => !e.disabled)));
@@ -389,6 +397,9 @@ const PROJ = () => ({
   ok('匯出 Excel：每顆納入元件＋不在條件內但有資料的元件各一列、有公式工作表', sh && sh.aoa.length === 1 + 6 && xl.wb.sheets[1].n === '公式與常數' && /ThermalVia/.test(xl.fn), sh && sh.aoa.map(r => r[1]));
   const u850 = sh.aoa.find(r => r[1] === 'U850-Si5518');
   ok('U850 那一列：K_eff 13.114（導熱膠 K=2）、R_th、穿板溫降', u850 && u850[23] === 13.114 && u850[24] > 0 && u850[28] > 0, u850);
+  ok('最後一欄「5G-RRU 基板熱阻採用」：U850 逐顆 K_eff、Driver-RRU 通用值＋原因、LDO-1 不適用',
+    sh.aoa[0][29] === '5G-RRU 基板熱阻採用' && /^逐顆 K_eff/.test(u850[29]) && /^通用值 K_Via：/.test(sh.aoa.find(r => r[1] === 'Driver-RRU')[29])
+    && /^不適用/.test(sh.aoa.find(r => r[1] === 'LDO-1')[29]), sh.aoa.map(r => [r[1], r[29]]));
   const q65 = sh.aoa.find(r => r[1] === 'Q6505');
   ok('暫不納入的元件也匯出，狀態「暫不納入熱流評估」', q65 && q65[3] === '暫不納入熱流評估', q65);
 
