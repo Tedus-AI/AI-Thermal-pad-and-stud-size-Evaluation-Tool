@@ -317,7 +317,7 @@ const PROJ = () => ({
     unit: !document.querySelector('#via-form [data-fid="unit-mm"]').disabled,
     conv: !document.querySelector('#via-form [data-fid="conv-mil"]').disabled,
     save: document.getElementById('via-save-btn').disabled, export: !document.getElementById('via-export-excel-btn').disabled,
-    bar: !document.getElementById('via-protect-bar').classList.contains('unlocked'),
+    bar: document.getElementById('lock-pill').classList.contains('locked'),
   }));
   ok('輸入／按鈕全部停用；元件清單、單位切換、換算、匯出仍可用；儲存停用', ro.inputs && ro.list && ro.unit && ro.conv && ro.save && ro.export && ro.bar, ro);
   await page.click('#via-list .via-item:has-text("U850")');

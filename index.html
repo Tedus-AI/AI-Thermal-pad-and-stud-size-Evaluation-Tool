@@ -4689,24 +4689,86 @@
   @keyframes ub-glow  { 0%,100% { box-shadow: 0 4px 18px rgba(255,45,0,.5); } 50% { box-shadow: 0 6px 34px rgba(255,45,0,.95); } }
   @keyframes ub-spin  { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
-  /* ── 分頁列 + 版本徽章同排：徽章靠最右側 ─────────────────── */
-  .tabnav-row { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
-  .tabnav-row > .tab-nav { margin-bottom: 0 !important; }
-  .tabnav-row > #version-badge { margin-left: auto; }
+  /* ── 版本徽章：放在最上方標題列（小字，不搶版面）─────────────── */
   #version-badge {
-    display: inline-flex; align-items: center; gap: 7px;
-    font-size: .72rem; color: #5a6b85;
-    background: #eef2f8; border: 1px solid #d6deea; border-radius: 999px;
-    padding: 4px 11px; line-height: 1.2; user-select: none;
+    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+    font-size: .62rem; color: #8a877f;
+    background: #f3f1ea; border: 1px solid #e6e2d4; border-radius: 999px;
+    padding: 1px 7px; line-height: 1.3; user-select: none;
     white-space: nowrap; flex-shrink: 0;
   }
   #version-badge .vb-ver { font-weight: 700; letter-spacing: .2px; }
   #version-badge .vb-latest {
     display: none; align-items: center; gap: 3px; white-space: nowrap;
     color: #fff; background: #2e9e5b; border-radius: 999px;
-    padding: 2px 8px; font-weight: 700;
+    padding: 0 5px; font-size: .6rem; font-weight: 700;
   }
   #version-badge.is-latest .vb-latest { display: inline-flex; }
+  /* 標題列塞了版本徽章 → 1400px 以下收掉中文副標，標題列維持一行 */
+  @media (max-width: 1400px) { .header p { display: none !important; } }
+
+  /* ── 分頁列 + 編輯鎖同排：鎖靠最右側 ───────────────────────── */
+  .tabnav-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 24px; }
+  .tabnav-row > .tab-nav { margin-bottom: 0 !important; }
+  .tabnav-row > #lock-pill { margin-left: auto; }
+  /* 右側浮動工具列在預設位置時會蓋住分頁列最右邊 → 讓出空間（與 TH/ME 頁 #tab-complist 同一條規則） */
+  @media (min-width: 1101px) {
+    body:has(#tc-rail-wrapper:not(.gm-moved)) .tabnav-row {
+      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
+    }
+  }
+
+  /* ── 編輯鎖（原本每頁一條「密碼保護」橫幅，收成分頁列右邊這一顆）──
+     鎖定＝琥珀（提醒，不是錯誤；UX 慣例 7）、已解鎖＝綠。按「解鎖編輯」才展開密碼框。 */
+  .lk {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px;
+    padding: 0 6px 0 12px; border-radius: 999px;
+    font-size: .8rem; font-weight: 600; white-space: nowrap; position: relative; flex-shrink: 0;
+  }
+  .lk.locked   { background: linear-gradient(180deg, #fef2e9, #fce4d4); border: 1px solid #f5cba8; color: #9a3412; }
+  .lk.unlocked { background: linear-gradient(180deg, #ecfdf5, #d1fae5); border: 1px solid #86efac; color: #15803d; }
+  .lk .lk-ico { font-size: .85rem; line-height: 1; }
+  .lk .lk-btn {
+    height: 26px; padding: 0 12px; border-radius: 999px; border: none;
+    font-weight: 700; font-size: .76rem; cursor: pointer; white-space: nowrap;
+  }
+  .lk.locked .lk-btn   { background: linear-gradient(180deg, #d97757, #c15f3c); color: #fff; }
+  .lk.locked .lk-btn:hover { filter: brightness(1.06); }
+  .lk.unlocked .lk-btn { background: #fff; color: #4a4842; border: 1px solid #e6e2d4; }
+  .lk.unlocked .lk-btn:hover { background: #f8f7f3; }
+  .lk .lk-btn:disabled { opacity: .6; cursor: progress; }
+  .lk input {
+    width: 110px; height: 26px; border: 1px solid #f5cba8; border-radius: 999px;
+    padding: 0 10px; font-size: .78rem; outline: none; background: #fff; color: #1f2937;
+  }
+  .lk input:focus { border-color: #d97757; box-shadow: 0 0 0 2px rgba(217, 119, 87, .18); }
+  .lk .lk-x {
+    border: none; background: transparent; color: #b45309; cursor: pointer;
+    font-size: .9rem; padding: 0 4px; line-height: 1;
+  }
+  .lk .lk-i {
+    display: inline-flex; width: 16px; height: 16px; border-radius: 50%;
+    border: 1px solid currentColor; font-size: .62rem; font-weight: 700;
+    align-items: center; justify-content: center; opacity: .7; cursor: help;
+  }
+  .lk-tip {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+    font-size: .72rem; font-weight: 500; padding: 5px 10px; border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08); z-index: 30; white-space: nowrap;
+  }
+  .lk .lk-open-only { display: none; }
+  .lk.open .lk-open-only { display: inline-flex; }
+  .lk.open input.lk-open-only { display: inline-block; }
+  .lk.open .lk-tip.lk-open-only { display: block; }
+  .lk.open .lk-i { display: none; }            /* 展開時提示文字已直接顯示在下方 */
+  .lk.ro-flash { animation: roBarPulse 0.7s ease-in-out 3; }
+  /* 1366 這類窄螢幕：展開密碼框時分頁列放不下（會擠到第二行、內容跳動）→ 收掉狀態字（🔒＋placeholder 已說明）、密碼框縮窄 */
+  @media (max-width: 1420px) {
+    .lk.open .lk-txt { display: none; }
+    .lk.open input { width: 88px; }
+    .lk .lk-long { display: none; }              /* 「編輯中（可儲存）」→「編輯中」（完整說明在 tooltip） */
+  }
 
   /* ==================== Thermal Via 計算（原 thermal-via-calculator 移植） ====================
      色彩：紅色只用在「干涉／不成立」（UX 慣例 7）；未完善＝橘、注意＝琥珀、完成＝綠。 */
@@ -5151,6 +5213,10 @@
   <div class="header">
     <h1>Thermal & Component Spec Management Tool</h1>
     <p>散熱與元件規格管理工具</p>
+    <span id="version-badge" title="軟體版本">
+      <span class="vb-ver" id="vb-ver">—</span>
+      <span class="vb-latest">&#10003; 最新</span>
+    </span>
     <div class="header-db-bar">
       <span id="db-status-text">未選擇資料庫</span>
       <button id="btn-pick-db" onclick="handlePickDb()">&#128194; 資料庫目錄</button>
@@ -5192,22 +5258,22 @@
       <button class="tab-btn" onclick="switchTab('via')" title="Thermal Via 等效 K 值計算（原獨立工具 thermal-via-calculator）。數字徽章＝目前專案還沒完善 via 資訊、或配置有干涉的元件數">Thermal Via 計算<span id="via-tab-badge" class="via-tab-badge" style="display:none"></span></button>
       <button class="tab-btn" onclick="switchTab('feedback')">&#128172; 使用者建議與改善</button>
     </div>
-    <span id="version-badge" title="軟體版本">
-      <span class="vb-ver" id="vb-ver">—</span>
-      <span class="vb-latest">&#10003; 最新</span>
+    <!-- 編輯鎖（原本每頁一條「密碼保護」橫幅，收成這一顆）：依目前分頁決定範圍 ——
+         「使用者建議與改善」走開發者密碼（fbToggleProtection），其他分頁走資料庫密碼（toggleProtection） -->
+    <span id="lock-pill" class="lk locked">
+      <span class="lk-ico" id="lock-pill-ico">&#128274;</span>
+      <span class="lk-txt" id="lock-pill-text">唯讀</span>
+      <span class="lk-i" id="lock-pill-info" title="">i</span>
+      <input type="password" id="lock-pill-pwd" class="lk-open-only" placeholder="輸入密碼" autocomplete="off"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();lockPillSubmit();}else if(event.key==='Escape'){lockPillCollapse();}">
+      <button type="button" class="lk-btn" id="lock-pill-btn" onclick="lockPillAction()">解鎖編輯</button>
+      <button type="button" class="lk-x lk-open-only" id="lock-pill-x" onclick="lockPillCollapse()" title="取消" aria-label="取消">&#10005;</button>
+      <span class="lk-tip lk-open-only" id="lock-pill-tip"></span>
     </span>
   </div>
 
   <!-- ==================== Tab 3: 模擬與實測驗證 ==================== -->
   <div id="tab-validation" class="tab-content">
-
-    <!-- Password Protection Bar (Tab 3) -->
-    <div id="vd-protect-bar" class="protect-bar">
-      <span class="protect-status" id="vd-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
-      <input type="password" id="vd-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
-      <button class="protect-unlock-btn" id="vd-protect-btn" onclick="toggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
-    </div>
 
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-header blue">&#128202; 模擬與實測驗證</div>
@@ -5301,13 +5367,6 @@
        兩頁編輯的是記憶體裡同一份 thermalSpecs，存檔走 saveAllTabs（TH/ME 頁那一筆寫入）。 -->
   <div id="tab-via" class="tab-content">
 
-    <div id="via-protect-bar" class="protect-bar">
-      <span class="protect-status" id="via-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
-      <input type="password" id="via-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
-      <button class="protect-unlock-btn" id="via-protect-btn" onclick="toggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
-    </div>
-
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-header blue">&#9881;&#65039; Thermal Via 計算 <span class="via-hd-sub">等效 K 值・穿板熱阻・Via 配置檢查</span></div>
       <div class="card-body">
@@ -5339,14 +5398,6 @@
 
   <!-- ==================== Tab 2: Component List ==================== -->
   <div id="tab-complist" class="tab-content">
-
-    <!-- Password Protection Bar -->
-    <div id="protect-bar" class="protect-bar">
-      <span class="protect-status" id="protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
-      <input type="password" id="protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
-      <button class="protect-unlock-btn" id="protect-btn" onclick="toggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
-    </div>
 
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-header blue">&#128203; 專案元件熱設計清單</div>
@@ -5391,14 +5442,6 @@
 
   <!-- ==================== Tab 3: Spec Generator ==================== -->
   <div id="tab-specgen" class="tab-content active">
-
-    <!-- Password Protection Bar (Tab 1) -->
-    <div id="sg-protect-bar" class="protect-bar">
-      <span class="protect-status" id="sg-protect-status">&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）</span>
-      <input type="password" id="sg-protect-pwd" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')toggleProtection()">
-      <button class="protect-unlock-btn" id="sg-protect-btn" onclick="toggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業</div>
-    </div>
 
     <!-- Panel 1: Select Project -->
     <div class="sg-panel">
@@ -5475,14 +5518,6 @@
 
   <!-- ==================== Tab 5: 使用者建議與改善 ==================== -->
   <div id="tab-feedback" class="tab-content">
-
-    <!-- Password Protection Bar (Feedback Tab) -->
-    <div id="fb-protect-bar" class="protect-bar">
-      <span class="protect-status" id="fb-protect-status">&#128274; 密碼保護：啟用中（管理功能需解鎖）</span>
-      <input type="password" id="fb-protect-pwd" placeholder="輸入開發者密碼" onkeydown="if(event.key==='Enter')fbToggleProtection()">
-      <button class="protect-unlock-btn" id="fb-protect-btn" onclick="fbToggleProtection()">解鎖</button>
-      <div class="protect-hint">&#9888; 開發者專用：解鎖後可修改回饋狀態與處理備註</div>
-    </div>
 
     <!-- Page Header -->
     <div class="fb-page-header">
@@ -5842,18 +5877,110 @@ let isProtected = true;          // 預設啟用保護（前幾頁專案資料�
 const FB_PROTECT_PASSWORD = '0420';
 let fbIsProtected = true;        // 預設啟用保護（Tab5 開發者管理）
 
+/* ---- 編輯鎖膠囊（分頁列右邊 #lock-pill；取代原本每頁一條的「密碼保護」橫幅）----
+   範圍跟著目前分頁（railIsFeedbackActive）：「使用者建議與改善」→ 開發者密碼（fbToggleProtection），
+   其他分頁 → 資料庫密碼（toggleProtection）。與右側浮動工具列的🔒走同一套解鎖流程（含 SharePoint 取鎖）。
+   鎖定時只顯示狀態＋「解鎖編輯」，按下才展開密碼框（Enter 送出；Esc／✕／點外面收起）。 */
+let _lockPillOpen = false;     // 密碼框展開中
+let _lockPillOpenFb = false;   // 展開時的範圍（換分頁＝換範圍 → 收起，避免把資料庫密碼送到開發者鎖）
+let _lockPillBusy = false;     // SharePoint 取鎖中：按鈕停用、不可重複送出
+const LOCK_TIP_DB = '若僅載入資料閱讀，請勿解鎖資料庫，避免佔用需要編輯資料人員的作業';
+const LOCK_TIP_FB = '開發者專用：解鎖後可修改回饋狀態與處理備註';
+
+function lockPillSync() {
+  const pill = document.getElementById('lock-pill');
+  if (!pill) return;
+  const onFb = railIsFeedbackActive();
+  const locked = onFb ? fbIsProtected : isProtected;
+  if (_lockPillOpen && (!locked || _lockPillOpenFb !== onFb)) {
+    _lockPillOpen = false;
+    const p = document.getElementById('lock-pill-pwd');
+    if (p) p.value = '';
+    document.removeEventListener('mousedown', lockPillOutside, true);
+  }
+  const open = locked && _lockPillOpen;
+  const tip = onFb ? LOCK_TIP_FB : LOCK_TIP_DB;
+  pill.classList.toggle('locked', locked);
+  pill.classList.toggle('unlocked', !locked);
+  pill.classList.toggle('open', open);
+  pill.classList.toggle('busy', _lockPillBusy);
+  pill.dataset.scope = onFb ? 'feedback' : 'db';
+  const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+  set('lock-pill-ico', el => { el.textContent = locked ? '\u{1F512}' : '\u{1F513}'; });
+  set('lock-pill-text', el => {
+    if (!_lockPillBusy && !locked && !onFb) { el.innerHTML = '編輯中<span class="lk-long">（可儲存）</span>'; return; }
+    el.textContent = _lockPillBusy ? '取得鎖定中…'
+      : locked ? (onFb ? '回饋管理唯讀' : '唯讀') : '開發者模式';
+  });
+  set('lock-pill-info', el => { el.title = tip; });
+  set('lock-pill-tip', el => { el.textContent = '⚠ ' + tip; });
+  set('lock-pill-pwd', el => { el.placeholder = onFb ? '開發者密碼' : '輸入密碼'; el.disabled = _lockPillBusy; });
+  set('lock-pill-btn', el => {
+    el.textContent = locked ? (open ? '解鎖' : '解鎖編輯') : '鎖定';
+    el.disabled = _lockPillBusy;
+  });
+  pill.title = locked
+    ? (onFb ? '「使用者建議與改善」的管理功能（改狀態、處理備註）僅開發者使用，需開發者密碼'
+            : '目前為唯讀：可閱讀與匯出。要編輯、新增或儲存，請按「解鎖編輯」並輸入密碼')
+    : (onFb ? '開發者模式：可修改回饋狀態與處理備註。用完請按「鎖定」'
+            : '已解鎖：可編輯並儲存。用完請按「鎖定」（SharePoint 模式下解鎖期間由你持有編輯鎖，其他人無法編輯）');
+}
+
+async function lockPillAction() {
+  if (_lockPillBusy) return;
+  const onFb = railIsFeedbackActive();
+  const locked = onFb ? fbIsProtected : isProtected;
+  if (!locked) {
+    // 已解鎖 → 鎖定（不需密碼；有未儲存變更時 toggleProtection 會先問 儲存／放棄／取消）
+    if (onFb) await fbToggleProtection(); else await toggleProtection();
+    railSyncLockIcon();
+    return;
+  }
+  if (!_lockPillOpen) { lockPillOpen(); return; }
+  await lockPillSubmit();
+}
+
+function lockPillOpen() {
+  if (typeof railHideLockPopover === 'function') railHideLockPopover();   // 兩個密碼框不同時開
+  _lockPillOpen = true;
+  _lockPillOpenFb = railIsFeedbackActive();
+  lockPillSync();
+  const pwd = document.getElementById('lock-pill-pwd');
+  if (pwd) { pwd.value = ''; setTimeout(() => pwd.focus(), 0); }
+  // capture 階段：底下元素 stopPropagation 也攔得到。可以同步掛 —— 開啟是 click，這次的 mousedown 已經過了
+  document.removeEventListener('mousedown', lockPillOutside, true);
+  document.addEventListener('mousedown', lockPillOutside, true);
+}
+
+async function lockPillSubmit() {
+  if (_lockPillBusy) return;
+  const pwd = document.getElementById('lock-pill-pwd');
+  const typed = pwd ? pwd.value : '';
+  if (!typed) { if (pwd) pwd.focus(); return; }   // 空白不送（不跳「密碼錯誤」）
+  if (railIsFeedbackActive()) await fbToggleProtection(typed);
+  else await toggleProtection(typed);
+  railSyncLockIcon();
+}
+
+function lockPillCollapse() {
+  _lockPillOpen = false;
+  const pwd = document.getElementById('lock-pill-pwd');
+  if (pwd) pwd.value = '';
+  document.removeEventListener('mousedown', lockPillOutside, true);
+  lockPillSync();
+}
+
+function lockPillOutside(e) {
+  if (_lockPillBusy) return;
+  const pill = document.getElementById('lock-pill');
+  if (pill && pill.contains(e.target)) return;
+  lockPillCollapse();
+}
+
 /* ---- Helpers: apply unlocked/locked UI state ---- */
 function _applyUnlockedUI() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('via-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('via-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
-
   isProtected = false;
-  bars.forEach(bar => bar.classList.add('unlocked'));
-  statusEls.forEach(el => { el.innerHTML = '&#128275; 密碼保護：已關閉（可儲存）'; });
-  btns.forEach(btn => { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; });
-  pwdInputs.forEach(el => { el.value = ''; el.style.display = 'none'; });
+  lockPillCollapse();      // 收起密碼框、清掉輸入（狀態文字由 railSyncLockIcon → lockPillSync 更新）
   const saveBtn = document.getElementById('save-btn');
   if (saveBtn) saveBtn.disabled = false;
   const sgSaveBtn = document.getElementById('sg-comp-save-btn');
@@ -5874,16 +6001,8 @@ function _applyUnlockedUI() {
 }
 
 function relock() {
-  const bars = [document.getElementById('protect-bar'), document.getElementById('sg-protect-bar'), document.getElementById('vd-protect-bar'), document.getElementById('via-protect-bar')].filter(Boolean);
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
-  const statusEls = [document.getElementById('protect-status'), document.getElementById('sg-protect-status'), document.getElementById('vd-protect-status'), document.getElementById('via-protect-status')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
-
   isProtected = true;
-  bars.forEach(bar => bar.classList.remove('unlocked'));
-  statusEls.forEach(el => { el.innerHTML = '&#128274; 密碼保護：啟用中（僅可讀取，無法儲存）'; });
-  btns.forEach(btn => { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; });
-  pwdInputs.forEach(el => { el.style.display = ''; });
+  lockPillCollapse();
   const saveBtn = document.getElementById('save-btn');
   if (saveBtn) saveBtn.disabled = true;
   const sgSaveBtn = document.getElementById('sg-comp-save-btn');
@@ -5910,16 +6029,16 @@ function relock() {
    模擬與實驗驗證）內所有可輸入/新增的控制項禁用，讓使用者只能閱讀。
    規則：
    - 只鎖三個編輯容器內的 input / select / textarea / button。
-   - 密碼保護條（.protect-bar）永遠保持可用，否則無法解鎖。
+   - 編輯鎖（分頁列右邊的 #lock-pill）不在這些容器內，永遠可用。
    - 匯出按鈕（.btn-export）保持可用，唯讀者也能匯出。
    - 用 __roLocked 標記「本函式鎖的」，解鎖時只還原這些，
      不會誤動各欄位因自身邏輯而 disabled 的狀態（例如非 Pad 時的 TIM Size）。 */
-/* 容器 → 對應的密碼保護條（點唯讀區時導引使用者去這條解鎖） */
+/* 容器 → 點唯讀區時要閃動導引的編輯鎖（原本各頁各一條保護條，現在都是分頁列右邊同一顆） */
 const RO_CONTAINER_BAR = {
-  'comp-container': 'protect-bar',
-  'sg-project-components': 'sg-protect-bar',
-  'vd-container': 'vd-protect-bar',
-  'via-container': 'via-protect-bar',
+  'comp-container': 'lock-pill',
+  'sg-project-components': 'lock-pill',
+  'vd-container': 'lock-pill',
+  'via-container': 'lock-pill',
 };
 
 function applyReadonlyLock() {
@@ -5928,7 +6047,6 @@ function applyReadonlyLock() {
     if (!root) return;
     root.classList.toggle('ro-locked', isProtected);   // 整區禁止游標 + 點擊穿透
     root.querySelectorAll('input, select, textarea, button').forEach(el => {
-      if (el.closest('.protect-bar')) return;           // 密碼保護條本身
       if (el.classList.contains('btn-export')) return;  // 匯出保持可用
       if (el.classList.contains('tcp-view-btn')) return; // 👁 檢視：免解鎖唯讀檢視元件標註
       if (el.classList.contains('sg-spec-ro')) return;   // 規格書 下載／上傳時間：唯讀資訊，免解鎖可用
@@ -5953,7 +6071,7 @@ function bindReadonlyHints() {
     if (!c) return;
     c.addEventListener('click', (e) => {
       if (!isProtected) return;
-      if (e.target.closest('.btn-export, .tcp-view-btn, .sg-spec-ro, summary, a, .protect-bar')) return;  // 這些鎖定時仍可用（唯讀檢視）
+      if (e.target.closest('.btn-export, .tcp-view-btn, .sg-spec-ro, summary, a')) return;  // 這些鎖定時仍可用（唯讀檢視）
       showReadonlyHint(bid);
     }, true);
     _roHintBound = true;   // 至少綁到一個容器才算數
@@ -5961,14 +6079,15 @@ function bindReadonlyHints() {
 }
 
 function showReadonlyHint(barId) {
-  roToast('🔒 目前為唯讀狀態，請先點「解鎖」並輸入密碼，才能編輯或新增元件');
-  const bar = document.getElementById(barId);
-  if (!bar) return;
-  bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  bar.classList.remove('ro-flash');
-  void bar.offsetWidth;            // 強制 reflow，讓動畫可重複觸發
-  bar.classList.add('ro-flash');
-  setTimeout(() => bar.classList.remove('ro-flash'), 2400);
+  roToast('🔒 目前為唯讀狀態，請先按分頁列右邊的「解鎖編輯」並輸入密碼，才能編輯或新增元件');
+  const pill = document.getElementById(barId || 'lock-pill');
+  if (!pill) return;
+  const r = pill.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight) pill.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  pill.classList.remove('ro-flash');
+  void pill.offsetWidth;           // 強制 reflow，讓動畫可重複觸發
+  pill.classList.add('ro-flash');
+  setTimeout(() => pill.classList.remove('ro-flash'), 2400);
 }
 
 function roToast(msg) {
@@ -5983,19 +6102,15 @@ function roToast(msg) {
   }, 2800);
 }
 
-async function toggleProtection() {
-  const pwdInputs = [document.getElementById('protect-pwd'), document.getElementById('sg-protect-pwd'), document.getElementById('vd-protect-pwd'), document.getElementById('via-protect-pwd')].filter(Boolean);
-  const btns = [document.getElementById('protect-btn'), document.getElementById('sg-protect-btn'), document.getElementById('vd-protect-btn'), document.getElementById('via-protect-btn')].filter(Boolean);
-
-  // Find whichever password input has a value
-  const typedPwd = pwdInputs.find(el => el.value) || pwdInputs[0];
+async function toggleProtection(pwdArg) {
+  const pwdEl = document.getElementById('lock-pill-pwd');
+  const typed = (typeof pwdArg === 'string') ? pwdArg : (pwdEl ? pwdEl.value : '');
 
   if (isProtected) {
     // 嘗試解鎖：先驗證密碼
-    if (!typedPwd || typedPwd.value !== PROTECT_PASSWORD) {
+    if (typed !== PROTECT_PASSWORD) {
       alert('密碼錯誤，請重新輸入');
-      pwdInputs.forEach(el => { el.value = ''; });
-      if (typedPwd) typedPwd.focus();
+      if (pwdEl) { pwdEl.value = ''; if (_lockPillOpen) pwdEl.focus(); }
       return;
     }
 
@@ -6003,12 +6118,11 @@ async function toggleProtection() {
     if (dbAdapter.isSharePointMode()) {
       if (!dbAdapter.isSignedIn()) {
         alert('請先登入 SharePoint');
-        pwdInputs.forEach(el => { el.value = ''; });
+        if (pwdEl) pwdEl.value = '';
         return;
       }
       // 顯示鎖定中狀態
-      const originalTexts = btns.map(b => b.textContent);
-      btns.forEach(btn => { btn.disabled = true; btn.textContent = '取得鎖定中...'; });
+      _lockPillBusy = true; lockPillSync();
       try {
         await dbAdapter.acquireLock();
         // 取得 lock 成功後，重新載入資料以顯示最新內容
@@ -6018,8 +6132,8 @@ async function toggleProtection() {
       if (typeof vdLoadProjects === 'function') await vdLoadProjects();
         } catch (e) { console.warn('reload after acquireLock failed:', e); }
       } catch (e) {
-        btns.forEach((btn, i) => { btn.disabled = false; btn.textContent = originalTexts[i] || '解鎖'; });
-        pwdInputs.forEach(el => { el.value = ''; });
+        _lockPillBusy = false; lockPillSync();
+        if (pwdEl) pwdEl.value = '';
         if (e instanceof LockError) {
           showLockWarning(e);
         } else {
@@ -6027,7 +6141,7 @@ async function toggleProtection() {
         }
         return;
       }
-      btns.forEach((btn, i) => { btn.disabled = false; btn.textContent = originalTexts[i] || '解鎖'; });
+      _lockPillBusy = false;
     }
 
     _applyUnlockedUI();
@@ -6059,41 +6173,27 @@ async function toggleProtection() {
 /* ---- Tab5「使用者建議與改善」開發者專用鎖（密碼與前幾頁分開）---- */
 function _fbApplyUnlockedUI() {
   fbIsProtected = false;
-  const bar = document.getElementById('fb-protect-bar');
-  const status = document.getElementById('fb-protect-status');
-  const btn = document.getElementById('fb-protect-btn');
-  const pwd = document.getElementById('fb-protect-pwd');
-  if (bar) bar.classList.add('unlocked');
-  if (status) status.innerHTML = '&#128275; 開發者模式：已解鎖（可修改回饋狀態與處理備註）';
-  if (btn) { btn.textContent = '鎖定'; btn.className = 'protect-lock-btn'; }
-  if (pwd) { pwd.value = ''; pwd.style.display = 'none'; }
+  lockPillCollapse();
   if (typeof fbRenderTable === 'function') fbRenderTable();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
 function _fbRelockUI() {
   fbIsProtected = true;
-  const bar = document.getElementById('fb-protect-bar');
-  const status = document.getElementById('fb-protect-status');
-  const btn = document.getElementById('fb-protect-btn');
-  const pwd = document.getElementById('fb-protect-pwd');
-  if (bar) bar.classList.remove('unlocked');
-  if (status) status.innerHTML = '&#128274; 密碼保護：啟用中（管理功能需解鎖）';
-  if (btn) { btn.textContent = '解鎖'; btn.className = 'protect-unlock-btn'; }
-  if (pwd) { pwd.style.display = ''; }
+  lockPillCollapse();
   if (typeof fbRenderTable === 'function') fbRenderTable();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
-async function fbToggleProtection() {
-  const pwd = document.getElementById('fb-protect-pwd');
-  const btn = document.getElementById('fb-protect-btn');
+async function fbToggleProtection(pwdArg) {
+  const pwd = document.getElementById('lock-pill-pwd');
+  const typed = (typeof pwdArg === 'string') ? pwdArg : (pwd ? pwd.value : '');
 
   if (fbIsProtected) {
     // 嘗試解鎖：驗證開發者密碼（與前幾頁不同）
-    if (!pwd || pwd.value !== FB_PROTECT_PASSWORD) {
+    if (typed !== FB_PROTECT_PASSWORD) {
       alert('密碼錯誤，請重新輸入');
-      if (pwd) { pwd.value = ''; pwd.focus(); }
+      if (pwd) { pwd.value = ''; if (_lockPillOpen) pwd.focus(); }
       return;
     }
 
@@ -6105,20 +6205,19 @@ async function fbToggleProtection() {
         return;
       }
       if (!dbAdapter.hasLock()) {
-        const orig = btn ? btn.textContent : '解鎖';
-        if (btn) { btn.disabled = true; btn.textContent = '取得鎖定中...'; }
+        _lockPillBusy = true; lockPillSync();
         try {
           await dbAdapter.acquireLock();
           // 取得 lock 後重新載入回饋以顯示最新內容
           if (typeof fbLoadItems === 'function') { fbLoaded = false; await fbLoadItems(); }
         } catch (e) {
-          if (btn) { btn.disabled = false; btn.textContent = orig || '解鎖'; }
+          _lockPillBusy = false; lockPillSync();
           if (pwd) pwd.value = '';
           if (e instanceof LockError) showLockWarning(e);
           else alert('無法取得編輯鎖定：' + (e.message || e));
           return;
         }
-        if (btn) { btn.disabled = false; btn.textContent = orig || '解鎖'; }
+        _lockPillBusy = false;
       }
     }
 
@@ -6144,6 +6243,7 @@ function railCurrentLocked() {
   return railIsFeedbackActive() ? fbIsProtected : isProtected;
 }
 function railSyncLockIcon() {
+  lockPillSync();      // 分頁列右邊的編輯鎖與工具列🔒同一個狀態來源
   const btn = document.getElementById('rail-lock-btn');
   if (!btn) return;
   const locked = railCurrentLocked();
@@ -6299,6 +6399,7 @@ async function railToggleLock() {
   const btn = document.getElementById('rail-lock-btn');
   if (!pop || !btn) return;
   if (pop.style.display === 'flex') { railHideLockPopover(); return; }
+  lockPillCollapse();   // 兩個密碼框不同時開
   const hint = document.getElementById('rail-lock-hint');
   if (hint) hint.textContent = railIsFeedbackActive() ? '開發者密碼（Tab5 管理）' : '資料庫密碼';
   const r = btn.getBoundingClientRect();
@@ -6315,16 +6416,9 @@ async function railConfirmUnlock() {
   const pwd = inp.value;
   inp.disabled = true;
   try {
-    // 把密碼填入對應範圍的隱藏欄位，沿用既有解鎖流程(含 SharePoint 取鎖)
-    if (railIsFeedbackActive()) {
-      const fld = document.getElementById('fb-protect-pwd');
-      if (fld) fld.value = pwd;
-      await fbToggleProtection();
-    } else {
-      const fld = document.getElementById('protect-pwd');
-      if (fld) fld.value = pwd;
-      await toggleProtection();
-    }
+    // 密碼直接傳給對應範圍的解鎖流程(含 SharePoint 取鎖)，與分頁列的編輯鎖同一套
+    if (railIsFeedbackActive()) await fbToggleProtection(pwd);
+    else await toggleProtection(pwd);
   } finally {
     inp.disabled = false;
   }
@@ -6723,7 +6817,9 @@ window.APP_VERSION = '__APP_VERSION__';
   // 頂端版本徽章：永遠顯示目前載入的版本號（開發版例外）
   const badge = document.getElementById('version-badge');
   const verEl = document.getElementById('vb-ver');
-  if (verEl) verEl.textContent = isDev ? '開發版' : ('v' + BUILT);
+  // 徽章只顯示日期時間（字小、不搶版面）；完整版本號（含 commit）放 tooltip
+  if (verEl) verEl.textContent = isDev ? '開發版' : ('v' + BUILT.replace(/-[0-9a-f]{7,}$/, ''));
+  if (badge) badge.title = isDev ? '開發版（未戳版本）' : ('軟體版本 v' + BUILT);
 
   if (isDev) return;   // 未戳版本（本機/開發）不啟用偵測，也不打「最新」
 
