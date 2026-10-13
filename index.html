@@ -423,11 +423,20 @@
     border-color: #5b9bd5;
     box-shadow: 0 0 0 3px rgba(91,155,213,0.18);
   }
-  .field input.disabled-input {
-    background: #f5f5f5;
-    color: #aaa;
-    border-color: #ddd;
+  /* 速算頁：凸台高度 t 在 ≤ 5W 時停用（反灰、不可輸入）。!important＋較高的 specificity 才蓋得過後面主題的 .field input */
+  .field input:disabled {
+    background: #f1f1ee !important;
+    color: #aaa !important;
+    border-color: #ddd !important;
+    cursor: not-allowed;
   }
+  .field input:disabled::placeholder { color: #b5b5b0; }
+  .calc-t-hint { color: #aaa; font-weight: 400; }
+  .calc-t-hint.req { color: #b91c1c; font-weight: 600; }
+  /* 必填／不合法：紅框＋下方說明（紅色＝錯誤，UX 慣例 7） */
+  .field.invalid input { border-color: #dc2626 !important; box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important; }
+  .field .field-err { margin-top: 4px; font-size: 0.76rem; font-weight: 600; color: #b91c1c; min-height: 0; }
+  .field .field-err:empty { display: none; }
 
   .result-section { margin-bottom: 16px; }
   .result-label {
@@ -475,8 +484,10 @@
     font-weight: 700;
     margin-bottom: 12px;
   }
-  .power-badge.high { background: #fce8e8; color: #c00000; }
+  /* 高功率不是錯誤 → 琥珀（紅色保留給 Fail/錯誤，UX 慣例 7） */
+  .power-badge.high { background: #fef3c7; color: #92400e; }
   .power-badge.low  { background: #e8f5e9; color: #217346; }
+  .power-badge.none { background: #f1f1ee; color: #777; }
 
   .rules-card {
     background: #fff;
@@ -807,34 +818,6 @@
   .empty-state p { font-size: 0.95rem; }
 
 
-  .toolbar-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-  }
-  .legend {
-    display: flex;
-    gap: 16px;
-    font-size: 0.82rem;
-    color: #666;
-    flex-wrap: wrap;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .legend-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-  }
-  .legend-dot.readonly { background: #e8f0f8; border: 1px solid #c5d9ee; }
-  .legend-dot.editable { background: #fff3e0; border: 1px solid #ffcc80; }
-
   .save-status {
     font-size: 0.85rem;
     padding: 6px 12px;
@@ -970,12 +953,13 @@
     min-width: 32px;
   }
   /* 右側浮動工具列（預設位置：position:fixed、right:18px、寬 58px）在視窗 1648px 以下會蓋住
-     本頁最右邊的欄位（備註 📝 —— 滑過預覽就摸不到）與 EE 匯入鈕。工具列還在預設位置時，
-     本頁右側讓出它的寬度：1536 以下固定讓 56px（48px 重疊＋8px 間距），1536～1648 之間
+     TH/ME 頁最右邊的欄位（備註 📝 —— 滑過預覽就摸不到）與 EE 匯入鈕，速算頁則蓋住結果卡右緣。
+     工具列還在預設位置時，這兩頁右側讓出它的寬度：1536 以下固定讓 56px（48px 重疊＋8px 間距），1536～1648 之間
      內容區置中、重疊逐漸變小。使用者拖走工具列（.gm-moved）就不讓 —— 不知道它被放在哪；
      ≤1100px 工具列本來就隱藏。 */
   @media (min-width: 1101px) {
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist {
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist,
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc {
       padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
     }
   }
@@ -3157,7 +3141,7 @@
     border-radius: 999px !important;
     padding: 4px 12px !important;
   }
-  .power-badge.high { background: #fee2e2 !important; color: #b91c1c !important; }
+  .power-badge.high { background: #fef3c7 !important; color: #92400e !important; }
   .power-badge.low  { background: #d1fae5 !important; color: var(--gm-success) !important; }
   .result-value { color: var(--gm-danger) !important; }
   .result-value.blue-val { color: var(--gm-primary) !important; }
@@ -4042,7 +4026,8 @@
     padding: 4px 12px !important;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
   }
-  .power-badge.high { background: linear-gradient(180deg,#fee2e2,#fecaca) !important; color: #991b1b !important; }
+  .power-badge.high { background: linear-gradient(180deg,#fef3c7,#fde68a) !important; color: #92400e !important; }
+  .power-badge.none { background: #f1f1ee !important; color: #777 !important; }
   .power-badge.low  { background: linear-gradient(180deg,#d1fae5,#a7f3d0) !important; color: var(--gm-success) !important; }
   .result-value { color: var(--gm-primary) !important; }
   .result-value.blue-val { color: var(--gm-text) !important; }
@@ -5071,21 +5056,21 @@
         <div class="card-body">
           <div class="field">
             <label>IC 長度 L (mm)</label>
-            <input type="number" id="L" value="10" step="0.1" oninput="calc()">
+            <input type="number" id="L" value="10" step="0.1" min="0" oninput="calc()">
           </div>
           <div class="field">
             <label>IC 寬度 W (mm)</label>
-            <input type="number" id="W" value="10" step="0.1" oninput="calc()">
+            <input type="number" id="W" value="10" step="0.1" min="0" oninput="calc()">
           </div>
           <div class="field">
             <label>功率 P (W)</label>
-            <input type="number" id="P" value="5" step="0.1" oninput="calc()">
+            <input type="number" id="P" value="5" step="0.1" min="0" oninput="calc()">
           </div>
           <div class="field">
             <label>凸台高度 t (mm)
-              <span id="t-hint" style="color:#aaa; font-weight:400">（僅適用於 &gt; 5W）</span>
+              <span id="t-hint" class="calc-t-hint">（僅 &gt; 5W 需要）</span>
             </label>
-            <input type="number" id="t" value="5" step="0.1" oninput="calc()" class="disabled-input">
+            <input type="number" id="t" value="" step="0.1" min="0" oninput="calc()" disabled placeholder="≤ 5W 不需要">
           </div>
         </div>
       </div>
@@ -5111,8 +5096,8 @@
     <div class="rules-card">
       <div class="rules-header">設計規範概覽</div>
       <div class="rules-body">
-        <div class="rule-row">• <strong>高功率 (&gt; 5W)</strong>：採用 45 度擴散法則，凸台尺寸為 (L + 2t) × (W + 2t)。</div>
-        <div class="rule-row">• <strong>低功率 (≤ 5W)</strong>：最小加工尺寸為 6 × 6 mm。</div>
+        <div class="rule-row">• <strong>高功率 (&gt; 5W)</strong>：採用 45 度擴散法則，凸台尺寸為 (L + 2t) × (W + 2t)；凸台高度 t 為必填（≤ 5W 不納入計算、欄位停用）。</div>
+        <div class="rule-row">• <strong>低功率 (≤ 5W)</strong>：最小加工尺寸為 6 × 6 mm（每一邊都不小於 6mm，細長 IC 的短邊補到 6mm）。</div>
         <div class="rule-row">• <strong>Thermal Pad 分級</strong>：Level A ≤ 6mm ／ Level B ≤ 10mm ／ Level C ≤ 14mm ／ 超出為特殊規格。</div>
         <div class="rule-row">• <strong>低功率 Pad 厚度</strong>：標準 2.5mm，壓縮後 1.7mm（壓縮率 32%）。</div>
         <div class="rule-row">• <strong>長寬差 &gt; 1.5mm</strong> 時，依 IC 外型保持矩形，不做正方形化。</div>
@@ -5147,14 +5132,6 @@
           <span id="save-status" class="save-status"></span>
         </div>
         <div id="comp-status" class="comp-status" style="display:none;"></div>
-      </div>
-    </div>
-
-    <!-- Legend & Summary -->
-    <div id="comp-legend" class="toolbar-row" style="display:none;">
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot readonly"></div> 資料庫既有（唯讀）</div>
-        <div class="legend-item"><div class="legend-dot editable"></div> 本工具新增（可編輯）</div>
       </div>
     </div>
 
@@ -6595,77 +6572,120 @@ function fmt(n) {
   return Number.isInteger(n) ? n.toString() : parseFloat(n.toFixed(1)).toString();
 }
 
-/* ── Tab4 公式提取（純函式，只處理 P ≤ 5W）── */
-function calcBossResult(L, W) {
+/* ── Tab4 低功率（P ≤ 5W）凸台／Thermal Pad 公式（純函式）──
+   單一事實來源：Tab4 畫面（calc）與 TH/ME 頁的 Pad 自動帶入（applyPadAutoCalcData → calcBossResult）都走這裡。
+   - 長寬差 > 1.5mm → 依 IC 外型保持矩形；否則取長邊做正方形
+   - 最小加工尺寸 6 × 6 mm：「每一邊」都不可小於 6mm。⚠ 原本只看長邊（長邊 < 6 才給 6×6），
+     8×3 這種細長 IC 會算出 8×3 —— 短邊 3mm 低於最小加工尺寸。現在短邊補到 6（8×3 → 8×6）。
+   - Thermal Pad 依長邊分級：A ≤ 6／B ≤ 10／C ≤ 14／超出為特殊規格 */
+const BOSS_MIN_MM = 6;
+const PAD_LEVELS = [{ lv: 'A', max: 6 }, { lv: 'B', max: 10 }, { lv: 'C', max: 14 }];
+function calcBossDims(L, W) {
   const mx = Math.max(L, W);
-  let bossSize, timSize;
-
-  if (mx < 6)                    bossSize = '6×6';
-  else if (Math.abs(L - W) > 1.5) bossSize = `${fmt(L)}×${fmt(W)}`;
-  else                            bossSize = `${fmt(mx)}×${fmt(mx)}`;
-
-  if      (mx <= 6)  timSize = '6×6';
-  else if (mx <= 10) timSize = '10×10';
-  else if (mx <= 14) timSize = '14×14';
-  else               timSize = '';
-
-  return { bossSize, timSize };
+  let a, b, rule;
+  if (mx < BOSS_MIN_MM) { a = b = BOSS_MIN_MM; rule = 'min'; }
+  else if (Math.abs(L - W) > 1.5) {
+    a = Math.max(L, BOSS_MIN_MM); b = Math.max(W, BOSS_MIN_MM);
+    rule = (a !== L || b !== W) ? 'rect-min' : 'rect';
+  }
+  else { a = b = mx; rule = 'square'; }
+  const pad = PAD_LEVELS.find(p => mx <= p.max) || null;   // null ＝ 特殊規格（長邊 > 14mm）
+  return { a, b, rule, pad };
+}
+function calcBossResult(L, W) {
+  const d = calcBossDims(L, W);
+  return { bossSize: `${fmt(d.a)}×${fmt(d.b)}`, timSize: d.pad ? `${d.pad.max}×${d.pad.max}` : '' };
 }
 
-function calc() {
-  const L = parseFloat(document.getElementById('L').value) || 0;
-  const W = parseFloat(document.getElementById('W').value) || 0;
-  const P = parseFloat(document.getElementById('P').value) || 0;
-  const t = parseFloat(document.getElementById('t').value) || 0;
+/* 速算頁的輸入檢查：空白不可當 0 算（原本 L 空白會算出「0 × 10 mm」、> 5W 沒填 t 會算出 45 度法則 = IC 尺寸） */
+function _calcNum(id) {
+  const v = document.getElementById(id).value.trim();
+  return v === '' ? null : parseFloat(v);
+}
+function _calcFieldErr(id, msg) {
+  const input = document.getElementById(id);
+  const field = input.closest('.field');
+  field.classList.toggle('invalid', !!msg);
+  let el = field.querySelector('.field-err');
+  if (!el) { el = document.createElement('div'); el.className = 'field-err'; field.appendChild(el); }
+  el.textContent = msg || '';
+}
 
+const CALC_LABELS = { L: 'IC 長度 L', W: 'IC 寬度 W', P: '功率 P', t: '凸台高度 t' };
+const BOSS_RULE_TEXT = { min: '最小極限', rect: '依 IC 外型', 'rect-min': '依 IC 外型，短邊補到 6mm', square: '正方形' };
+
+function calc() {
+  const L = _calcNum('L'), W = _calcNum('W'), P = _calcNum('P');
   const tInput = document.getElementById('t');
   const badge  = document.getElementById('power-badge');
   const hint   = document.getElementById('t-hint');
-  const highPower = P > 5;
+  const errs = {};
+  if (L === null) errs.L = '必填'; else if (!(L > 0)) errs.L = '須大於 0';
+  if (W === null) errs.W = '必填'; else if (!(W > 0)) errs.W = '須大於 0';
+  if (P === null) errs.P = '必填'; else if (!(P >= 0)) errs.P = '不可為負值';
+  const pOk = !errs.P;
+  const highPower = pOk && P > 5;
 
+  // 凸台高度 t：只有 > 5W 才納入計算 → ≤ 5W 真的停用（不給填）；> 5W 自動打開且必填。
+  // 停用時把已填的值收起來（畫面清空，免得看起來像有被採用），再回到 > 5W 時放回去，不丟使用者的輸入。
   if (highPower) {
+    if (tInput.disabled) {
+      tInput.disabled = false;
+      if (tInput.dataset.stash !== undefined) { tInput.value = tInput.dataset.stash; delete tInput.dataset.stash; }
+    }
+    tInput.placeholder = '請輸入凸台高度';
+    hint.textContent = '（> 5W 必填）';
+    hint.classList.add('req');
+  } else {
+    if (!tInput.disabled) {
+      tInput.dataset.stash = tInput.value;
+      tInput.value = '';
+      tInput.disabled = true;
+    }
+    tInput.placeholder = '≤ 5W 不需要';
+    hint.textContent = '（僅 > 5W 需要）';
+    hint.classList.remove('req');
+  }
+  const t = highPower ? _calcNum('t') : null;
+  if (highPower) { if (t === null) errs.t = '必填'; else if (!(t > 0)) errs.t = '須大於 0'; }
+  ['L', 'W', 'P', 't'].forEach(id => _calcFieldErr(id, errs[id]));
+
+  if (!pOk) {
+    badge.textContent = P === null ? '請輸入功率' : '功率不可為負值';
+    badge.className = 'power-badge none';
+  } else if (highPower) {
     badge.textContent = '高功率模式 (> 5W)';
     badge.className = 'power-badge high';
-    tInput.classList.remove('disabled-input');
-    hint.style.display = 'none';
   } else {
     badge.textContent = '低功率模式 (≤ 5W)';
     badge.className = 'power-badge low';
-    tInput.classList.add('disabled-input');
-    hint.style.display = '';
   }
 
-  let boss;
+  const bossEl = document.getElementById('boss-result');
+  const padEl  = document.getElementById('pad-result');
+  const noteEl = document.getElementById('note-result');
+  const bad = Object.keys(errs);
+  if (bad.length) {
+    bossEl.textContent = '—';
+    padEl.textContent  = '—';
+    noteEl.textContent = '請先補齊／修正左側標紅的欄位：' + bad.map(k => CALC_LABELS[k] + '（' + errs[k] + '）').join('、');
+    return;
+  }
+
+  let boss, pad, note;
   if (highPower) {
-    boss = `${fmt(L + 2*t)} \u00d7 ${fmt(W + 2*t)} mm\uff0845 \u5ea6\u6cd5\u5247\uff09`;
+    boss = `${fmt(L + 2*t)} × ${fmt(W + 2*t)} mm（45 度法則）`;
+    pad  = `需客製（覆蓋 ${fmt(L)} × ${fmt(W)} mm）`;
+    note = `高功率熱擴散區 – 需注意淨空。建議評估擴散熱阻對溫升之影響。\n凸台與熱源設計間距 1mm，電子零件淨空區寬度為 ${fmt(t)} mm。`;
   } else {
-    const mx = Math.max(L, W);
-    if (mx < 6)                   boss = '6 \u00d7 6 mm\uff08\u6700\u5c0f\u6975\u9650\uff09';
-    else if (Math.abs(L-W) > 1.5) boss = `${fmt(L)} \u00d7 ${fmt(W)} mm\uff08\u4f9d IC \u5916\u578b\uff09`;
-    else                          boss = `${fmt(mx)} \u00d7 ${fmt(mx)} mm\uff08\u6b63\u65b9\u5f62\uff09`;
+    const d = calcBossDims(L, W);
+    boss = `${fmt(d.a)} × ${fmt(d.b)} mm（${BOSS_RULE_TEXT[d.rule]}）`;
+    pad  = d.pad ? `Level ${d.pad.lv}：${d.pad.max} × ${d.pad.max} mm` : '特殊規格（長邊 > 14mm）';
+    note = 'Pad 厚度 2.5mm → 壓縮後 1.7mm（壓縮率 32%）';
   }
-
-  let pad;
-  if (highPower) {
-    pad = `\u9700\u5ba2\u88fd\uff08\u8986\u84cb ${fmt(L)} \u00d7 ${fmt(W)} mm\uff09`;
-  } else {
-    const mx = Math.max(L, W);
-    if      (mx <= 6)  pad = 'Level A\uff1a6 \u00d7 6 mm';
-    else if (mx <= 10) pad = 'Level B\uff1a10 \u00d7 10 mm';
-    else if (mx <= 14) pad = 'Level C\uff1a14 \u00d7 14 mm';
-    else               pad = '\u7279\u6b8a\u898f\u683c\uff08\u9577\u908a > 14mm\uff09';
-  }
-
-  let note;
-  if (!highPower) {
-    note = 'Pad \u539a\u5ea6 2.5mm \u2192 \u58d3\u7e2e\u5f8c 1.7mm\uff08\u58d3\u7e2e\u7387 32%\uff09';
-  } else {
-    note = `\u9ad8\u529f\u7387\u71b1\u64f4\u6563\u5340 \u2013 \u9700\u6ce8\u610f\u6de8\u7a7a\u3002\u5efa\u8b70\u8a55\u4f30\u64f4\u6563\u71b1\u963b\u5c0d\u6eab\u5347\u4e4b\u5f71\u97ff\u3002\n\u51f8\u53f0\u8207\u71b1\u6e90\u8a2d\u8a08\u9593\u8ddd 1mm\uff0c\u96fb\u5b50\u96f6\u4ef6\u6de8\u7a7a\u5340\u5bec\u5ea6\u70ba ${fmt(t)} mm\u3002`;
-  }
-
-  document.getElementById('boss-result').textContent = boss;
-  document.getElementById('pad-result').textContent  = pad;
-  document.getElementById('note-result').textContent = note;
+  bossEl.textContent = boss;
+  padEl.textContent  = pad;
+  noteEl.textContent = note;
 }
 
 calc();
@@ -6750,7 +6770,6 @@ async function loadProjects() {
 async function onProjectChange() {
   const projectId = document.getElementById('project-select').value;
   const container = document.getElementById('comp-container');
-  const legendEl  = document.getElementById('comp-legend');
   const saveBtn   = document.getElementById('save-btn');
 
   if (!projectId) {
@@ -6759,7 +6778,6 @@ async function onProjectChange() {
         <div class="icon">&#128230;</div>
         <p>\u8acb\u9078\u64c7\u4e00\u500b\u5c08\u6848\u4ee5\u8f09\u5165\u5143\u4ef6\u6e05\u55ae\u3002</p>
       </div>`;
-    legendEl.style.display = 'none';
     saveBtn.style.display = 'none';
     document.getElementById('export-toolbar').style.display = 'none';
     return;
@@ -6790,7 +6808,6 @@ async function onProjectChange() {
       timLibLoad().then(() => { if (currentProjectData) renderAllCategories(); })
                   .catch(e => console.warn('[timLib] 背景載入失敗', e));
     }
-    legendEl.style.display = 'flex';
     saveBtn.style.display = '';
     saveBtn.disabled = isProtected;
     hideStatus();
