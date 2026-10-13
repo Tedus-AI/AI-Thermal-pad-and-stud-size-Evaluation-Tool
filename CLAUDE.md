@@ -509,6 +509,17 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - 唯讀時點 `.sg-spec-ro`（👁、📝 這類唯讀檢視鈕）不再跳「目前為唯讀狀態」提示（`bindReadonlyHints`）。
 - 契約測試：`tests/complist-layout.test.js`。
 
+#### 凸台&TIM尺寸速算（Tab4）：公式單一事實來源＋輸入檢查
+
+- 低功率（P ≤ 5W）公式只有一份：`calcBossDims(L, W)`（`calcBossResult` 是它的字串包裝）。速算頁 `calc()` 與
+  TH/ME 頁的 Pad 自動帶入（`applyPadAutoCalcData`）**都走它**，不可在 `calc()` 裡再寫一份。
+- 最小加工尺寸 6 × 6 mm 是**每一邊**都 ≥ 6（`BOSS_MIN_MM`）：細長 IC 的短邊補到 6（8×3 → 8×6）。
+  ⚠ 原本只看長邊，8×3 會給 8×3。TH/ME 頁既有的凸台值不會自己變，重新觸發自動帶入（改元件大小、重選 Pad）時才更新。
+- 凸台高度 t 只在 > 5W 納入計算（45 度法則 (L+2t)×(W+2t)）：≤ 5W 欄位 `disabled`（值收進 `dataset.stash`、畫面清空），
+  > 5W 自動打開且**必填**、再切回來會放回原值。L／W／P／t 空白不可當 0 算 → 紅框＋「必填／須大於 0」，結果顯示「—」。
+- 高功率徽章是琥珀色（不是錯誤，紅色保留給 Fail）。
+- 契約測試：`tests/calc-tab.test.js`。
+
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 
 檔名是 `${projectId}_${catKey}_${ts}.jpg`，專案 id 本身可能含底線 → 從右邊拆出分類與時間戳，剩下的才是專案 id，
