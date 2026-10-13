@@ -23,7 +23,8 @@
       //                     param_backoff, param_backoff_rt,
       //                     param_duplex, param_duplex_rt,
       //                     tcPlacement
-      // AI-Thermal Tab3 寫: validation_data, vd_hidden_components
+      // AI-Thermal Tab3 寫: validation_data, vd_hidden_components,
+      //                    vd_ta（比對環溫 °C；只有手動指定才有值，null／沒有 key＝取專案環溫 param_temp）
       // global_params 兩邊都會碰（key set 幾乎重疊但不完全相同，例如 Draft_Angle 只有 RRU 有）
     }
   },
@@ -471,6 +472,23 @@ tcPlacement[rf|digital|pwr].pages[] = {
 - 放入的圖：長邊上限 2000 px、JPEG 0.82（原本 1000 px／0.72，PCB 細字放大後看不清）。
 - 「💾 儲存」＝`saveAllTabs`（存全部分頁，UX 慣例 10）；開著時被上鎖 → `tcpSyncPlacementBtns` 立刻切成唯讀檢視。
 - 契約測試：`tests/tcp-editor.test.js`。
+
+#### 模擬與實驗驗證（Tab3）的誤差判定 —— 與 Report Builder 比對頁同一套規則 ⚠️
+
+`VD_DEV = { goodPct: 10, warnPct: 20, goodC: 2, warnC: 4 }`（`vdJudge`／`vdRowCalc`），與
+Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻要兩個 repo 一起改**。
+
+- **溫度以溫升為基準**：溫升誤差% = (模擬校正 − 實測) ÷ (實測 − Ta) × 100。不可再用 °C 溫度當分母
+  （°C 沒有真正的零點；同樣誤差在 Ta 越高時 % 越小）。實測溫升 ≤ 0 或沒有 Ta → 不算 %，只看溫差。
+  判定取「% 門檻」與「絕對溫差下限」較寬鬆者（下限＝熱電偶量測不確定度）；% 格與溫差格**同一個判定、同色**。
+- **Pd**：Pd 誤差% = (估值 − 實測) ÷ 實測 × 100（正＝估值偏高、保守）。門檻同溫度（功耗誤差會等比例變成溫升誤差）；
+  有實測溫升時另算「對溫度的影響」≈ Pd 誤差% × 實測溫升，影響 ≤ 2／4°C 也算 ✅／⚠（小功率元件不會因為 20% 判紅）。
+  Pd 估值依該列選的來源（高溫／常溫）。
+- **比對環溫 Ta**：預設取專案環溫（Tab1 `param_temp`，`custom` 取 `param_temp_custom`；Tab1 正好載入同專案時用它記憶體裡的值），
+  鎖定顯示＋「✂ 手動指定」（UX 慣例 2）→ 存 `projects[id].vd_ta`；「↺ 取專案環溫」→ 存檔時寫 `null` 清掉（shallow merge 不寫 key 清不掉）。
+- 判定規則（含可展開的「公式與依據」）放在 `#vd-container` 裡：未解鎖時 Ta 按鈕一起鎖、匯出 PDF 時展開一起印；
+  匯出 Excel 帶計算欄與「判定規則」工作表（原本計算欄匯出是空白）。
+- 契約測試：`tests/vd-judge.test.js`。
 
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 
