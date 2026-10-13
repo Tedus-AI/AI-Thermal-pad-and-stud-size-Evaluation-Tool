@@ -19,6 +19,7 @@
       //            layout3d（5G-RRU 3D 頁的調整：元件橫向位置／轉向、I/O、天線座、屏蔽罩設定、FDD 通道配對開關 pair、
       //                      鰭片截斷 cut；元件的調整以元件 _cid 為 key，所以元件改名不影響。本工具不讀不寫、updateDoc 原樣保留）
       // AI-Thermal Tab2 寫: thermal_specs（含 Thermal Via 頁的 thermal_specs[元件].via）, hidden_components,
+      //                     ⚠ 5G-RRU **唯讀** thermal_specs（3D 元件大小、Thermal Via 逐顆 K_eff：via、epadSize），永遠不寫
       //                     param_temp, param_temp_custom,
       //                     param_backoff, param_backoff_rt,
       //                     param_duplex, param_duplex_rt,
@@ -528,7 +529,8 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - **專案選單與 TH/ME 頁是同一個**（`#via-project-select` 鏡像 `#project-select`，換一邊另一邊跟著換）。
   via 設計存在 **`thermal_specs[sgSpecKey(元件名)].via`**，兩頁編輯的是記憶體裡同一份 `thermalSpecs` →
   存檔（TH/ME 頁那一筆寫入）、未存變更偵測（`_clDirtyView`）、元件改名搬資料（`sgApplyRenames`／`sgMoveKey` 整筆搬）
-  全部沿用既有機制，**不要另開一個 `projects[id]` 的 key**。5G-RRU 不讀 `thermal_specs`、原樣保留 → 不是跨工具 schema 變更。
+  全部沿用既有機制，**不要另開一個 `projects[id]` 的 key**。5G-RRU **唯讀** `thermal_specs`（用 via 設計算逐顆 K_eff，見下方
+  「5G-RRU 逐顆 K_eff」）、從不寫它 → 改 `via` 物件的 key 或意義＝跨工具 schema 變更，兩邊 CLAUDE.md 與 `viaCalc.js` 要一起改。
 - `via` 物件（**空值一律不寫 key**；空的 `via`／spec 物件要刪掉，否則「看一眼」就變成未存變更 → `viaCleanup`）：
 
   | key | 意義 |
@@ -570,13 +572,28 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   交錯排列納入 √3/2 列距、邊距以孔壁計（舊版只算中心）、單顆不需要間距、最後一列置中、via 總面積 > 焊盤判為不成立
   （舊版照算 → 高估）、圓形偶數顆不再「中心＋3」、干涉拆成「孔壁重疊＝錯誤／中心距 < 2 倍內徑＝提醒」、熱阻單位 °C/W、
   剖面圖厚度方向另外縮放（小焊盤原本畫出界）。
-- 與 5G-RRU 的關係：5G-RRU 目前所有 Thermal Via 元件共用專案參數 `K_Via`／`Via_Eff`；本頁算出的 K_eff 低於 `K_Via` 時提醒
-  「5G-RRU 端這顆的基板熱阻可能被低估」。**本工具不寫回 5G-RRU 的任何欄位**。要讓 5G-RRU 逐顆採用 K_eff 的做法與理由見
-  `docs/5G-RRU-ThermalVia-K值-prompt.md`（建議：兩邊共用 `viaCalc.js` 的算法、各自從原始輸入當場算，**不要**另存一個元件欄位 ——
-  快選複製會帶出過期值、存檔推導只在兩頁同專案時才跑）。
+- **5G-RRU 逐顆 K_eff（`viaCalc.js` ⚠️ 兩個 repo 共用同一份）**：5G-RRU 算導熱方式＝Thermal Via 的元件時，這顆有完整的 via 設計
+  就用它的 K_eff，抓不到才用 5G-RRU 參數控制台的通用值 `K_Via`。**共用「算法」、不共用「結果」**：兩邊各自從資料庫的原始輸入當場算
+  （**不要**另存一個元件欄位給 5G-RRU 讀 —— 快選複製會帶出過期值、存檔推導只在兩頁同專案時才跑、還得加進兩邊的 carry 白名單）。
+  - **`viaCalc.js` 與 `tests/via-calc.unit.test.js` 在兩個 repo 內容逐字相同**（同 `compMerge.js`），改一邊就同步另一邊（`diff` 無輸出）。
+  - 單一事實來源 `ViaCalc.keffForComp(comp, thermal_specs, global_params)` → `{ ok, keff, aPad, reason, missing, issues, src, … }`；
+    輸入解析 `ViaCalc.resolve`（本頁的 `viaResolve` 就是它的薄包裝，`sgParseLW`／`sgSpecKey`／`viaTvNum` 的同等邏輯也在裡面，
+    viaCalc.js 不依賴 index.html 的任何全域函式）。spec 先用 `specKey(元件名)` 找，找不到且元件有 `_renamed_from` → 用舊名稱。
+  - K_eff 只需要焊盤、數量、內徑、鍍銅、塞孔材料（**與 PCB 厚度、中心間距無關**）。試算值（`via.qty`／`via.diaMil`）**照用**
+    （與本頁看到的 K_eff 一致）。不 ok 的原因（`ViaCalc.reasonText`，兩邊同一套文字）：`nodata`（沒有 via 設計）、`skip`（暫不納入）、
+    `missing`（缺 K_eff 需要的輸入）、`over`（via 面積超過焊盤）→ 5G-RRU 用通用值。配置有問題（孔壁超出／重疊、沒填中心間距）→ K_eff 照用、
+    5G-RRU 標 ⚠（`issues`）。
+  - 5G-RRU 的基板熱阻（使用者決定）：`R_int ＝ 5G-RRU 的 PCB 板厚度 ÷ (K_eff × A_pad)`（`ViaCalc.rint`）＝ 本頁的 R_th（板厚相同時）：
+    via 只在焊盤底下 → **不加擴散面積**；K_eff 已含銅壁／塞孔／FR4 → **不除 Via_Eff**。通用值那條路徑照舊（擴散面積、÷ Via_Eff）。
+  - 本頁的說明（`viaRruNoteHtml`，主散熱路徑＝Thermal Via 時顯示）照 5G-RRU 的實際行為寫（UX 慣例 11）：ok →「5G-RRU 會用這個 K_eff…
+    R_int = t_PCB ÷ (K_eff × 焊盤面積) ≈ X °C/W」；不 ok →「會用通用值 K_Via = 30（原因）」；路徑不是 Thermal Via → 「5G-RRU 不會用到」。
+    匯出 Excel 最後一欄「5G-RRU 基板熱阻採用」同一套判斷。**本工具不寫回 5G-RRU 的任何欄位**。
+  - 5G-RRU 讀的是存進資料庫的 `thermal_specs`：本頁存檔後，5G-RRU 切回分頁（`checkProjectFreshness`）就會換成最新的並重算。
+  - 原始規格與決策過程見 `docs/5G-RRU-ThermalVia-K值-prompt.md`。
 - ⚠ 「使用者建議與改善」的「發生分頁」下拉**還沒有**「Thermal Via 計算」：回饋的讀取來源是 SharePoint List（`PRIMARY_FEEDBACK: 'list'`），
   它的 `Tab` 欄是固定選項的 choice 欄（`docs/lists-migration.md`），要先在 List 加這個選項，再同步加到兩個下拉。
-- 契約測試：`tests/via-calc.unit.test.js`（純 Node，公式與舊版對照、排列、自動間距、檢查）、`tests/via-tab.test.js`（headless）。
+- 契約測試：`tests/via-calc.unit.test.js`（純 Node、兩個 repo 共用：公式與舊版對照、排列、自動間距、檢查、`keffForComp`）、
+  `tests/via-tab.test.js`（headless；含 5G-RRU 說明照實際行為、Excel「5G-RRU 基板熱阻採用」欄）。5G-RRU 端：`tests/via-k.test.js`。
 
 #### 標註圖片清孤兒：專案 id 要「完全相同」（`listTcpImages`）
 

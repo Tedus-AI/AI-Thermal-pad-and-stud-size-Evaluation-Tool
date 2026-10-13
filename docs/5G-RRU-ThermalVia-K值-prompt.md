@@ -1,5 +1,14 @@
 # Prompt：讓 5G-RRU 的 Thermal Via 元件改用 AI-Thermal「Thermal Via 計算」算出的逐顆等效 K 值
 
+> **狀態：已實作（2026-10）**。動手前使用者的三個決定：
+> 1. **R_int 照 AI-Thermal 的 R_th**：`R_int = 5G-RRU 板厚 ÷ (K_eff × A_pad)`，不加擴散面積、不除 `Via_Eff`
+>    （via 只在焊盤底下；K_eff 已含銅壁／塞孔／FR4）。`Via_Eff` 與擴散面積只留給通用值 `K_Via`。
+> 2. **試算值照用**（`via.qty`／`via.diaMil`）：與 AI-Thermal 畫面上的 K_eff 一致。
+> 3. **配置有問題照用 K_eff＋標 ⚠**（孔壁超出／重疊、沒填中心間距）；via 面積超過焊盤則退回通用值。
+>
+> 實作細節見兩個 repo 的 CLAUDE.md（AI-Thermal「Thermal Via 計算頁」→「5G-RRU 逐顆 K_eff」、5G-RRU「Thermal Via 逐顆 K_eff」）。
+> 下面是原始 prompt（保留作為決策紀錄）。
+
 > 用法：開一個同時掛載「AI-Thermal」與「5G-RRU」兩個 repo 的新 session，把本檔
 > 「==== PROMPT 開始 ====」到「==== PROMPT 結束 ====」之間的內容整段貼給它。
 
