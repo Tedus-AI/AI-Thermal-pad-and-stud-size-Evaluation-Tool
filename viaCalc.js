@@ -44,10 +44,13 @@
     { key: 'copper', label: '電鍍填銅（Cu fill）',   k: K_CU },
     { key: 'custom', label: '自訂 K 值' },
   ];
-  // 鍍銅厚度（mm）。沒選＝預設 1 mil（IPC Class 3 孔銅平均 ≥ 25 µm）
+  // 鍍銅厚度（mm）＝孔壁電鍍銅（barrel plating），不是表層銅箔。IPC-6012 通孔孔銅平均下限：
+  // Class 2 20 µm（最薄處 18）、Class 3 25 µm（最薄處 20）。沒選＝預設 1 mil（≈ Class 3）。
+  // ⚠ 舊工具標成「1 oz（35 µm）」：oz 是銅箔重量的說法、容易誤以為要填表層銅厚 → 改標成「加厚孔銅」（值不變，舊資料照讀）
   var PLATINGS = [
-    { mm: 0.0254, label: '1 mil（25.4 µm）' },
-    { mm: 0.035,  label: '1 oz（35 µm）' },
+    { mm: 0.020,  label: '20 µm（IPC Class 2 平均）' },
+    { mm: 0.0254, label: '25.4 µm／1 mil（≈ IPC Class 3）' },
+    { mm: 0.035,  label: '35 µm（加厚孔銅）' },
   ];
   var PLATING_DEFAULT = 0.0254;
 
