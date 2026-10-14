@@ -1,9 +1,9 @@
 /*
- * 編輯鎖膠囊（分頁列右邊 #lock-pill）＋版本徽章搬到標題列 —— headless 驗證
+ * 編輯鎖膠囊（分頁列右邊 #lock-pill）＋版本徽章（編輯鎖左邊）—— headless 驗證
  * ---------------------------------------------------------------------------
  * 原本 Tab1/2/3/5/6 每頁頂端各有一條「密碼保護」橫幅（約 100px 高），收成分頁列右邊一顆膠囊，
- * 版本號搬到最上方標題列、字縮小。驗證情境：
- *   [A] 結構：頁面上沒有任何 .protect-bar；版本徽章在 .header 裡、字小；編輯鎖在 .tabnav-row 裡
+ * 版本號放在膠囊左邊、字縮小（曾放標題列，但登入後標題列放不下而換行）。驗證情境：
+ *   [A] 結構：頁面上沒有任何 .protect-bar；版本徽章在分頁列、編輯鎖左邊、字小；編輯鎖在 .tabnav-row 裡
  *   [B] 資料庫範圍：鎖定只顯示狀態＋「解鎖編輯」→ 按下才展開密碼框（提示文字顯示）；空白 Enter 不送；
  *       密碼錯 → 提示、清空、留在展開；Esc／點外面收起；0000 → 編輯中、儲存鈕可用；「鎖定」→ 回唯讀
  *   [C] SharePoint 取鎖中：顯示「取得鎖定中…」、按鈕停用、點外面不收起；取鎖失敗 → 回唯讀
@@ -11,8 +11,10 @@
  *       展開中換分頁 → 收起（不把密碼送到別的範圍）
  *   [E] 右側工具列🔒：與膠囊同一個狀態、兩個密碼框不同時開
  *   [F] 唯讀時點編輯區 → toast 指路＋膠囊閃動（琥珀，非紅）
- *   [G] 版面：1920／1536／1366 膠囊與分頁同一行、不被右側工具列蓋住、沒有橫向捲軸（展開密碼框、已解鎖、回饋頁也一樣）；
- *       1366 展開時收掉狀態字、已解鎖時「編輯中（可儲存）」收成「編輯中」
+ *   [G] 版面（最擠的實際情況：CI 戳過版本號＋✓最新、已登入（長姓名＋email）、Windows 捲軸、Thermal Via 兩位數徽章）：
+ *       1920／1600／1536／1440／1366 × 鎖定／展開／已解鎖／回饋頁展開 —— 分頁列不換行、不被右側工具列蓋住、
+ *       沒有橫向捲軸、標題列一行、切換狀態時分頁列高度不變；≥1536 徽章在編輯鎖左邊，以下疊到編輯鎖上方；
+ *       1600 以下展開時收掉狀態字、已解鎖時「編輯中（可儲存）」收成「編輯中」
  *   [H] 版本徽章：只顯示日期時間（不含 commit），完整版本號在 tooltip；與線上相同 →「✓ 最新」
  *
  * 執行：
@@ -88,13 +90,14 @@ async function setupDb(page) {
     return {
       bars: document.querySelectorAll('.protect-bar').length,
       oldIds: ['sg-protect-bar', 'protect-bar', 'vd-protect-bar', 'via-protect-bar', 'fb-protect-bar'].filter(id => document.getElementById(id)).length,
-      badgeInHeader: !!vb.closest('.header'), badgeFont: parseFloat(getComputedStyle(vb).fontSize),
+      badgeInRow: !!vb.closest('.tabnav-side') && !vb.closest('.header') && vb.nextElementSibling === document.getElementById('lock-pill'),
+      badgeFont: parseFloat(getComputedStyle(vb).fontSize),
       pillInRow: !!document.getElementById('lock-pill').closest('.tabnav-row'),
       rowH: Math.round(document.querySelector('.tabnav-row').getBoundingClientRect().height),
     };
   });
   ok('各頁的密碼保護橫幅都拿掉了（沒有 .protect-bar、舊 id 都不在）', A.bars === 0 && A.oldIds === 0, A);
-  ok('版本徽章在最上方標題列、字縮小（≤ 10.5px）', A.badgeInHeader && A.badgeFont <= 10.5, A);
+  ok('版本徽章在分頁列、編輯鎖左邊（不在標題列，登入後標題列才不會換行）、字小（≤ 10.5px）', A.badgeInRow && A.badgeFont <= 10.5, A);
   ok('編輯鎖在分頁列裡，分頁列只有一行高（≤ 50px）', A.pillInRow && A.rowH <= 50, A);
 
   console.log('\n[B] 資料庫範圍（EE/RF/PWR 頁）');
@@ -224,48 +227,15 @@ async function setupDb(page) {
   }));
   ok('toast 指路到「解鎖編輯」、膠囊閃動（roBarPulse 琥珀色）', F.flash && /解鎖編輯/.test(F.toast) && F.anim === 'roBarPulse', F);
 
-  console.log('\n[G] 版面');
-  for (const w of [1920, 1536, 1366]) {
-    await page.setViewportSize({ width: w, height: 800 });
-    for (const mode of ['locked', 'open', 'unlocked', 'fb-open']) {
-      await page.evaluate((m) => {
-        if (m === 'unlocked') { _applyUnlockedUI(); return; }
-        if (isProtected === false) relock();
-        switchTab(m === 'fb-open' ? 'feedback' : 'specgen');
-        if (m === 'locked') lockPillCollapse(); else lockPillOpen();
-      }, mode);
-      await page.waitForTimeout(60);
-      const g = await page.evaluate(() => {
-        const p = document.getElementById('lock-pill').getBoundingClientRect();
-        const n = document.querySelector('.tab-nav').getBoundingClientRect();
-        const rail = document.getElementById('gm-rail').getBoundingClientRect();
-        const hdr = document.querySelector('.header');
-        const kids = [...hdr.children].filter(e => e.offsetParent !== null).map(e => e.getBoundingClientRect());
-        return {
-          sameLine: Math.abs((p.top + p.bottom) / 2 - (n.top + n.bottom) / 2) < 12,
-          railClear: rail.width === 0 || p.right <= rail.left - 2 || p.bottom <= rail.top || p.top >= rail.bottom,
-          hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          headerOneLine: kids.every(r => Math.abs(r.top - kids[0].top) < 30),
-          pr: Math.round(p.right), rl: Math.round(rail.left),
-        };
-      });
-      const label = { locked: '', open: '（展開密碼框）', unlocked: '（已解鎖）', 'fb-open': '（回饋頁展開密碼框）' }[mode];
-      ok(`${w}px${label}：膠囊與分頁同一行、不被工具列蓋住、沒有橫向捲軸、標題列一行`, g.sameLine && g.railClear && g.hscroll <= 0 && g.headerOneLine, g);
-    }
-  }
-  await page.evaluate(() => { relock(); switchTab('specgen'); lockPillCollapse(); });
-  ok('1366px 已解鎖：文字收成「編輯中」，完整說明在 tooltip', await page.evaluate(() => {
-    _applyUnlockedUI();
-    const t = document.getElementById('lock-pill-text');
-    const r = t.innerText.trim() === '編輯中' && /已解鎖/.test(document.getElementById('lock-pill').title);
-    relock(); return r;
-  }));
   ok('沒有 JS 錯誤', errors.length === 0, errors);
   await page.close();
 
-  console.log('\n[H] 版本徽章（CI 戳過版本號）');
+  console.log('\n[G] 版面（CI 戳過版本號、已登入、Windows 捲軸、Thermal Via 分頁有兩位數徽章 —— 最擠的實際情況）');
+  // 實際使用時：版本徽章帶「✓ 最新」、標題列有姓名＋email、Windows 有捲軸（約 15–17px）、Thermal Via 分頁常常掛著數字徽章。
+  // headless 預設隱藏捲軸 → 另開一個顯示捲軸的瀏覽器量。
   const VER = '2026.10.13.1557-98063f8';
-  const p2 = await browser.newPage();
+  const b2 = await chromium.launch(Object.assign(EXEC ? { executablePath: EXEC } : {}, { ignoreDefaultArgs: ['--hide-scrollbars'] }));
+  const p2 = await b2.newPage();
   await p2.setViewportSize({ width: 1536, height: 800 });
   await p2.route('**', async r => {
     const u = r.request().url();
@@ -278,14 +248,79 @@ async function setupDb(page) {
     return r.continue();
   });
   await p2.addInitScript(INIT);
+  const errors2 = [];
+  p2.on('pageerror', e => errors2.push(String(e)));
   await p2.goto(BASE, { waitUntil: 'domcontentloaded' });
+  await p2.waitForFunction(() => typeof lockPillSync === 'function' && document.getElementById('gm-rail'));
   await p2.waitForFunction(() => document.getElementById('version-badge').classList.contains('is-latest'), null, { timeout: 15000 }).catch(() => {});
+  await setupDb(p2);
+  await p2.evaluate(() => {
+    document.documentElement.style.overflowY = 'scroll';
+    dbAdapter.getAccountInfo = () => ({ name: 'TEDUS.CHEN 陳慶峰', email: 'Tedus.Chen@deltaww.com' });
+    _updateSpHeaderSignedIn();
+    document.getElementById('btn-pick-db').style.display = 'none';
+    const vb = document.getElementById('via-tab-badge'); vb.textContent = '12'; vb.style.display = '';
+  });
+  ok('有捲軸（版面寬度比視窗窄）', await p2.evaluate(() => window.innerWidth - document.documentElement.clientWidth >= 10));
+  for (const w of [1920, 1600, 1536, 1440, 1366]) {
+    await p2.setViewportSize({ width: w, height: 800 });
+    const heights = [];
+    for (const mode of ['locked', 'open', 'unlocked', 'fb-open']) {
+      await p2.evaluate((m) => {
+        if (m === 'unlocked') { _applyUnlockedUI(); return; }
+        if (isProtected === false) relock();
+        switchTab(m === 'fb-open' ? 'feedback' : 'specgen');
+        if (m === 'locked') lockPillCollapse(); else lockPillOpen();
+      }, mode);
+      await p2.waitForTimeout(60);
+      const g = await p2.evaluate(() => {
+        const R = (el) => el.getBoundingClientRect();
+        const p = R(document.getElementById('lock-pill'));
+        const b = R(document.getElementById('version-badge'));
+        const n = R(document.querySelector('.tab-nav'));
+        const row = R(document.querySelector('.tabnav-row'));
+        const rail = R(document.getElementById('gm-rail'));
+        const fab = R(document.getElementById('tc-fab'));
+        const hdr = document.querySelector('.header');
+        const kids = [...hdr.children].filter(e => e.offsetParent !== null).map(e => e.getBoundingClientRect());
+        const clear = (r) => r.width === 0 || p.right <= r.left - 2 || p.bottom <= r.top || p.top >= r.bottom;
+        const stacked = b.bottom <= p.top + 1;
+        return {
+          oneLine: p.top >= n.top - 4 && p.bottom <= n.bottom + 4 && b.top >= row.top - 1 && row.height <= n.height + 6,
+          badgeOk: b.width > 40 && (stacked ? (b.right <= p.right + 1 && b.right >= p.right - 40) : (b.right <= p.left && p.left - b.right <= 12)),
+          stacked, railClear: clear(rail) && clear(fab),
+          hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          headerOneLine: kids.every(r => Math.abs(r.top - kids[0].top) < 30),
+          rowH: Math.round(row.height), spare: Math.round(p.left - n.right - (stacked ? 0 : b.width + 8)),
+        };
+      });
+      heights.push(g.rowH);
+      const label = { locked: '', open: '（展開密碼框）', unlocked: '（已解鎖）', 'fb-open': '（回饋頁展開密碼框）' }[mode];
+      const where = g.stacked ? '徽章在編輯鎖上方' : '徽章在編輯鎖左邊';
+      ok(`${w}px${label}：分頁列一行（${where}）、不被工具列蓋住、沒有橫向捲軸、標題列一行`, g.oneLine && g.badgeOk && g.railClear && g.hscroll <= 0 && g.headerOneLine, g);
+      if (w >= 1536) ok(`${w}px${label}：徽章在編輯鎖左邊`, !g.stacked, g);
+    }
+    ok(`${w}px：鎖定／展開／解鎖切換時分頁列高度不變（內容不跳）`, Math.max(...heights) - Math.min(...heights) <= 1, heights);
+  }
+  await p2.evaluate(() => { relock(); switchTab('specgen'); lockPillCollapse(); });
+  ok('1366px 已解鎖：文字收成「編輯中」，完整說明在 tooltip', await p2.evaluate(() => {
+    _applyUnlockedUI();
+    const t = document.getElementById('lock-pill-text');
+    const r = t.innerText.trim() === '編輯中' && /已解鎖/.test(document.getElementById('lock-pill').title);
+    relock(); return r;
+  }));
+
+  console.log('\n[H] 版本徽章');
   const H = await p2.evaluate(() => ({
     text: document.getElementById('vb-ver').textContent, title: document.getElementById('version-badge').title,
     latest: document.getElementById('version-badge').classList.contains('is-latest'),
+    inRow: !!document.getElementById('version-badge').closest('.tabnav-row'), inHeader: !!document.getElementById('version-badge').closest('.header'),
   }));
-  ok('徽章只顯示日期時間（不含 commit）、tooltip 有完整版本號', H.text === 'v2026.10.13.1557' && H.title === '軟體版本 v' + VER, H);
+  ok('徽章只顯示日期時間（不含 commit）、tooltip 有完整版本號＋「已是最新版本」', H.text === 'v2026.10.13.1557' && H.title === '軟體版本 v' + VER + '（已是最新版本）', H);
   ok('與線上版本相同 →「✓ 最新」', H.latest, H);
+  ok('徽章在分頁列（編輯鎖旁），不在標題列', H.inRow && !H.inHeader, H);
+  ok('沒有 JS 錯誤（版面頁）', errors2.length === 0, errors2);
+  await b2.close();
 
   await browser.close();
   console.log(`\n結果：${pass} 通過、${fail} 失敗`);

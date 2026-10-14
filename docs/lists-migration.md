@@ -185,7 +185,7 @@ Phase 5 是「關掉保險」，讓 JSON 端退出寫入路徑。
 |---|---|---|---|---|---|
 | 1 | `Title` | FeedbackId | text | ✅ | **內建欄位 repurpose**。存 `FB-YYYYMMDD-HHmmss-XXXX` 格式 ID。display name 走經典 List Settings 才改得到。 |
 | 2 | `Type` | 回饋類型 | choice | ✅ | 選項：`Bug` / `改善建議` / `新功能需求` / `資料欄位問題` / `權限/登入/儲存問題` / `其他` |
-| 3 | `Tab` | 發生分頁 | choice | ✅ | 選項：`EE/RF/PWR-專案元件清單` / `TH/ME-專案元件清單` / `模擬與實測驗證` / `凸台&TIM尺寸速算` / `使用者建議與改善` / `SharePoint登入/儲存` / `整體工具` / `其他` |
+| 3 | `Tab` | 發生分頁 | choice | ✅ | 選項：`EE/RF/PWR-專案元件清單` / `TH/ME-專案元件清單` / `模擬與實測驗證` / `凸台&TIM尺寸速算` / `Thermal Via 計算` / `使用者建議與改善` / `SharePoint登入/儲存` / `整體工具` / `其他` |
 | 4 | `FbTitle` | 回饋標題 | text | ✅ | code key: `title`。Internal name 避開內建 `Title` 衝突。 |
 | 5 | `Priority` | 優先度 | choice | ✅ | 選項：`低` / `中` / `高` / `緊急` |
 | 6 | `Reporter` | 提出人 | text | ✅ | code 自動帶入 `acct.name`，使用者可手動修改（spec §6.2）。**不用 Person 型**，因為值可以是「張工程師（RF部）」這類非 AD 帳號字串。 |

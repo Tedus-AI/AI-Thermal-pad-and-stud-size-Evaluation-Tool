@@ -4689,9 +4689,10 @@
   @keyframes ub-glow  { 0%,100% { box-shadow: 0 4px 18px rgba(255,45,0,.5); } 50% { box-shadow: 0 6px 34px rgba(255,45,0,.95); } }
   @keyframes ub-spin  { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
-  /* ── 版本徽章：放在最上方標題列（小字，不搶版面）─────────────── */
+  /* ── 版本徽章：分頁列右側、編輯鎖左邊（小字，不搶版面）──────────
+     原本放在最上方標題列，但登入後標題列（姓名＋email＋按鈕）放不下、整排換行 → 移到分頁列。 */
   #version-badge {
-    display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+    display: inline-flex; align-items: center; gap: 4px;
     font-size: .62rem; color: #8a877f;
     background: #f3f1ea; border: 1px solid #e6e2d4; border-radius: 999px;
     padding: 1px 7px; line-height: 1.3; user-select: none;
@@ -4704,13 +4705,13 @@
     padding: 0 5px; font-size: .6rem; font-weight: 700;
   }
   #version-badge.is-latest .vb-latest { display: inline-flex; }
-  /* 標題列塞了版本徽章 → 1400px 以下收掉中文副標，標題列維持一行 */
-  @media (max-width: 1400px) { .header p { display: none !important; } }
+  /* 登入後標題列右側（SharePoint｜姓名、備份、登出、email、管理）約 680px → 1440px 以下收掉中文副標，標題列維持一行 */
+  @media (max-width: 1440px) { .header p { display: none !important; } }
 
-  /* ── 分頁列 + 編輯鎖同排：鎖靠最右側 ───────────────────────── */
+  /* ── 分頁列 ＋ 右側一組（版本徽章＋編輯鎖）同排，靠最右側 ───────── */
   .tabnav-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 24px; }
   .tabnav-row > .tab-nav { margin-bottom: 0 !important; }
-  .tabnav-row > #lock-pill { margin-left: auto; }
+  .tabnav-side { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   /* 右側浮動工具列在預設位置時會蓋住分頁列最右邊 → 讓出空間（與 TH/ME 頁 #tab-complist 同一條規則） */
   @media (min-width: 1101px) {
     body:has(#tc-rail-wrapper:not(.gm-moved)) .tabnav-row {
@@ -4763,11 +4764,22 @@
   .lk.open .lk-tip.lk-open-only { display: block; }
   .lk.open .lk-i { display: none; }            /* 展開時提示文字已直接顯示在下方 */
   .lk.ro-flash { animation: roBarPulse 0.7s ease-in-out 3; }
-  /* 1366 這類窄螢幕：展開密碼框時分頁列放不下（會擠到第二行、內容跳動）→ 收掉狀態字（🔒＋placeholder 已說明）、密碼框縮窄 */
-  @media (max-width: 1420px) {
-    .lk.open .lk-txt { display: none; }
+  /* 分頁列放不下就會擠到第二行（內容整片往下跳）。
+     ⚠ 算空間時要扣掉 Windows 捲軸（約 17px）與 Thermal Via 分頁的數字徽章（約 30px），見 tests/lock-pill.test.js。
+     展開密碼框時（任何寬度，含 1920）：收掉狀態字（🔒＋placeholder＋下方提示已說明）與徽章的「最新」字樣（tooltip 有）。 */
+  .lk.open .lk-txt { display: none; }
+  .tabnav-side:has(.lk.open) #version-badge .vb-latest-txt { display: none; }
+  /* 1600px 以下（17 吋筆電 1536）再收緊：分頁按鈕左右留白 20→16px、密碼框縮窄、
+     「編輯中（可儲存）」→「編輯中」（完整說明在 tooltip） */
+  @media (max-width: 1600px) {
+    .tabnav-row .tab-btn { padding-left: 16px !important; padding-right: 16px !important; }
     .lk.open input { width: 88px; }
-    .lk .lk-long { display: none; }              /* 「編輯中（可儲存）」→「編輯中」（完整說明在 tooltip） */
+    .lk .lk-long { display: none; }
+  }
+  /* 1536 以下徽章放不進編輯鎖左邊 → 疊到編輯鎖上方（靠右對齊），分頁列高度不變、不換行 */
+  @media (max-width: 1535px) {
+    .tabnav-side { flex-direction: column; align-items: flex-end; gap: 1px; }
+    #version-badge { padding: 0 6px; line-height: 1.25; }
   }
 
   /* ==================== Thermal Via 計算（原 thermal-via-calculator 移植） ====================
@@ -5213,10 +5225,6 @@
   <div class="header">
     <h1>Thermal & Component Spec Management Tool</h1>
     <p>散熱與元件規格管理工具</p>
-    <span id="version-badge" title="軟體版本">
-      <span class="vb-ver" id="vb-ver">—</span>
-      <span class="vb-latest">&#10003; 最新</span>
-    </span>
     <div class="header-db-bar">
       <span id="db-status-text">未選擇資料庫</span>
       <button id="btn-pick-db" onclick="handlePickDb()">&#128194; 資料庫目錄</button>
@@ -5258,6 +5266,12 @@
       <button class="tab-btn" onclick="switchTab('via')" title="Thermal Via 等效 K 值計算（原獨立工具 thermal-via-calculator）。數字徽章＝目前專案還沒完善 via 資訊、或配置有干涉的元件數">Thermal Via 計算<span id="via-tab-badge" class="via-tab-badge" style="display:none"></span></button>
       <button class="tab-btn" onclick="switchTab('feedback')">&#128172; 使用者建議與改善</button>
     </div>
+    <!-- 分頁列右側一組：版本徽章（左）＋編輯鎖（右）。窄螢幕時徽章疊到編輯鎖上方（見 .tabnav-side 的 CSS） -->
+    <div class="tabnav-side" id="tabnav-side">
+    <span id="version-badge" title="軟體版本">
+      <span class="vb-ver" id="vb-ver">—</span>
+      <span class="vb-latest">&#10003;<span class="vb-latest-txt">最新</span></span>
+    </span>
     <!-- 編輯鎖（原本每頁一條「密碼保護」橫幅，收成這一顆）：依目前分頁決定範圍 ——
          「使用者建議與改善」走開發者密碼（fbToggleProtection），其他分頁走資料庫密碼（toggleProtection） -->
     <span id="lock-pill" class="lk locked">
@@ -5270,6 +5284,7 @@
       <button type="button" class="lk-x lk-open-only" id="lock-pill-x" onclick="lockPillCollapse()" title="取消" aria-label="取消">&#10005;</button>
       <span class="lk-tip lk-open-only" id="lock-pill-tip"></span>
     </span>
+    </div>
   </div>
 
   <!-- ==================== Tab 3: 模擬與實測驗證 ==================== -->
@@ -5594,6 +5609,7 @@
                   <option>TH/ME-專案元件清單</option>
                   <option>模擬與實測驗證</option>
                   <option>凸台&amp;TIM尺寸速算</option>
+                  <option>Thermal Via 計算</option>
                   <option>使用者建議與改善</option>
                   <option>SharePoint登入/儲存</option>
                   <option>整體工具</option>
@@ -5751,6 +5767,7 @@
                   <option>TH/ME-專案元件清單</option>
                   <option>模擬與實測驗證</option>
                   <option>凸台&amp;TIM尺寸速算</option>
+                  <option>Thermal Via 計算</option>
                   <option>使用者建議與改善</option>
                   <option>SharePoint登入/儲存</option>
                   <option>整體工具</option>
@@ -6825,7 +6842,11 @@ window.APP_VERSION = '__APP_VERSION__';
 
   let prompted = false;
   let timer = null;
-  function markLatest(yes) { if (badge) badge.classList.toggle('is-latest', !!yes); }
+  function markLatest(yes) {
+    if (!badge) return;
+    badge.classList.toggle('is-latest', !!yes);
+    badge.title = '軟體版本 v' + BUILT + (yes ? '（已是最新版本）' : '');   // 窄螢幕「最新」字樣會收掉，tooltip 補上
+  }
 
   async function fetchLiveVersion() {
     try {
