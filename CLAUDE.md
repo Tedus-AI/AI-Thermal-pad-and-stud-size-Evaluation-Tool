@@ -590,8 +590,9 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
     匯出 Excel 最後一欄「5G-RRU 基板熱阻採用」同一套判斷。**本工具不寫回 5G-RRU 的任何欄位**。
   - 5G-RRU 讀的是存進資料庫的 `thermal_specs`：本頁存檔後，5G-RRU 切回分頁（`checkProjectFreshness`）就會換成最新的並重算。
   - 原始規格與決策過程見 `docs/5G-RRU-ThermalVia-K值-prompt.md`。
-- ⚠ 「使用者建議與改善」的「發生分頁」下拉**還沒有**「Thermal Via 計算」：回饋的讀取來源是 SharePoint List（`PRIMARY_FEEDBACK: 'list'`），
-  它的 `Tab` 欄是固定選項的 choice 欄（`docs/lists-migration.md`），要先在 List 加這個選項，再同步加到兩個下拉。
+- 「使用者建議與改善」的「發生分頁」下拉（表單 `#fb-tab-sel` 與列表的分頁篩選）有「Thermal Via 計算」。⚠ 回饋的讀取來源是
+  SharePoint List（`PRIMARY_FEEDBACK: 'list'`），它的 `Tab` 欄是固定選項的 choice 欄（`docs/lists-migration.md`）：
+  選項不在 List 裡的值寫入會被拒（JSON 照寫、List 沒有 → 列表看不到那筆）。**新增分頁選項一律先在 List 加、再改兩個下拉**，文字逐字一致。
 - 契約測試：`tests/via-calc.unit.test.js`（純 Node、兩個 repo 共用：公式與舊版對照、排列、自動間距、檢查、`keffForComp`）、
   `tests/via-tab.test.js`（headless；含 5G-RRU 說明照實際行為、Excel「5G-RRU 基板熱阻採用」欄）。5G-RRU 端：`tests/via-k.test.js`。
 
@@ -700,9 +701,10 @@ await dbAdapter.updateDoc('projects', docId, {
 - 前端（`index.html` 的 `setupUpdateChecker`）載入後延遲首檢、每 5 分鐘、切回分頁時，
   以 `cache:'no-store'` 抓 `version.json` 與烙印的 `APP_VERSION` 比對；不同才跳橫幅，
   相同則完全靜默。
-- 版本徽章 `#version-badge` 在**最上方標題列**（`.header`，標題右邊、小字）：只顯示日期時間
-  （`v2026.10.13.1557`，去掉 `-<短 SHA>`），完整版本號放 tooltip；與線上相同時加「✓ 最新」。
-  標題列放了徽章 → 1400px 以下收掉中文副標，標題列維持一行（登入後含姓名＋email 也一樣）。
+- 版本徽章 `#version-badge` 在**分頁列右側、編輯鎖左邊**（`.tabnav-side` 一組，小字）：只顯示日期時間
+  （`v2026.10.13.1557`，去掉 `-<短 SHA>`），完整版本號放 tooltip；與線上相同時加「✓ 最新」（tooltip 也補「已是最新版本」）。
+  ⚠ 曾放在最上方標題列，但登入後標題列右側（SharePoint｜姓名、備份、登出、email、管理）約 680px，17 吋筆電整排換行 →
+  移到分頁列。1536 以下放不進編輯鎖左邊 → 疊到編輯鎖上方（靠右），分頁列高度不變。標題列 1440px 以下收掉中文副標。
 
 ### 規則
 
@@ -730,10 +732,16 @@ await dbAdapter.updateDoc('projects', docId, {
 - `toggleProtection(pwd)`／`fbToggleProtection(pwd)` 的密碼一律**由參數傳入**（膠囊、工具列都一樣），不再讀各頁的隱藏欄位；
   不帶參數＝讀膠囊的密碼框。上鎖（已解鎖時再按）不需密碼，有未儲存變更時照舊先問 儲存／放棄／取消。
 - 唯讀時點編輯區（`RO_CONTAINER_BAR` 的四個容器）→ toast 指路到「解鎖編輯」＋膠囊閃動（`ro-flash`，琥珀）；膠囊在螢幕外才捲過去。
-- 版面：分頁列右邊讓出右側浮動工具列（與 TH/ME 頁同一條 `clamp((1648px − 100vw)/2)` 規則）；1420px 以下展開時收掉狀態字、
-  密碼框縮窄，「編輯中（可儲存）」收成「編輯中」——否則 1366 會擠到第二行（內容跳動）。
+- 版面：分頁列右側是「版本徽章＋編輯鎖」一組（`.tabnav-side`），讓出右側浮動工具列（與 TH/ME 頁同一條
+  `clamp((1648px − 100vw)/2)` 規則）。**分頁列不可換行**（內容整片往下跳），空間要以最擠的實際情況算：
+  版本號＋「✓ 最新」、Windows 捲軸（約 17px）、Thermal Via 分頁掛著兩位數徽章（約 30px）。因此：
+  - 展開密碼框時（任何寬度）收掉狀態字與徽章的「最新」字樣；
+  - 1600px 以下分頁按鈕左右留白 20→16px、密碼框縮窄、「編輯中（可儲存）」收成「編輯中」；
+  - 1535px 以下徽章疊到編輯鎖上方。
+  加分頁、改分頁名稱、加長膠囊文字前先跑 `tests/lock-pill.test.js` 的 [G]（它就是用上面那個最擠的情況量）。
 - `.protect-bar` 的 CSS 還留在檔案裡（與其他選擇器寫在一起），已沒有任何元素使用。
-- 契約測試：`tests/lock-pill.test.js`（1920／1536／1366 × 鎖定／展開／已解鎖／回饋頁展開都要同一行、不被工具列蓋住）。
+- 契約測試：`tests/lock-pill.test.js`（1920／1600／1536／1440／1366 × 鎖定／展開／已解鎖／回饋頁展開：分頁列不換行、
+  不被工具列蓋住、標題列一行、切換狀態時分頁列高度不變；≥1536 徽章在編輯鎖左邊）。
 
 ## 使用者體驗（UX）慣例 ⚠️ — 動任何 UI 前必讀
 

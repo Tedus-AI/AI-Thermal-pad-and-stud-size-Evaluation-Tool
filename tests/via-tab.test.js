@@ -121,6 +121,10 @@ const PROJ = () => ({
   ok('switchTab(via) → 第 5 顆按鈕 active、頁面顯示', await page.evaluate(() => document.querySelectorAll('.tab-btn')[4].classList.contains('active') && document.getElementById('tab-via').classList.contains('active')));
   await page.evaluate(() => switchTab('feedback'));
   ok('switchTab(feedback) 仍對到第 6 顆', await page.evaluate(() => document.querySelectorAll('.tab-btn')[5].classList.contains('active')));
+  ok('回饋頁「發生分頁」下拉（表單＋列表篩選）都有「Thermal Via 計算」，排在「凸台&TIM尺寸速算」後面', await page.evaluate(() => {
+    const lists = [document.getElementById('fb-tab-sel'), document.querySelector('.fb-filter-item select[onchange*="fbFilters.tab"]')];
+    return lists.every(sel => { const o = sel ? [...sel.options].map(x => x.text) : []; const i = o.indexOf('Thermal Via 計算'); return i > 0 && o[i - 1] === '凸台&TIM尺寸速算'; });
+  }));
   ok('右側工具列有「切換到 Thermal Via 計算」', await page.evaluate(() => !!document.querySelector('#gm-rail-body [data-tip="切換到 Thermal Via 計算"]')));
   await page.evaluate(() => switchTab('via'));
   ok('沒選專案 → 空白提示、匯出／儲存停用', await page.evaluate(() => !!document.querySelector('#via-container .empty-state') && document.getElementById('via-export-excel-btn').disabled && document.getElementById('via-save-btn').disabled));
