@@ -4220,7 +4220,8 @@
   /* ── 浮動工具列：可收合 + 可拖曳 ──
      預設位置維持原本（右側垂直置中）；拖曳後改用 left/top 絕對定位並記憶於 localStorage。 */
   .gm-rail-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .gm-rail-body { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .gm-rail-body,
+  .gm-rail-pinned { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .gm-action-rail .gm-rail-grip { cursor: grab; height: 22px; }
   .gm-action-rail .gm-rail-grip svg { width: 18px; height: 18px; opacity: 0.55; }
   .gm-action-rail .gm-rail-grip:hover svg { opacity: 0.9; }
@@ -4234,7 +4235,7 @@
      另注意：不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉我們設的
      inline top，垂直位置會失效；基礎規則的 top:50% 非 !important，inline 本來就蓋得過。 */
   .tc-rail-wrapper.gm-moved { right: auto !important; transform: none !important; }
-  /* 收合：body 與把手隱藏 → 只剩一顆按鈕 */
+  /* 收合：body 與把手隱藏 → 只剩展開鈕＋常駐的解鎖／儲存（.gm-rail-pinned） */
   .gm-action-rail.gm-collapsed .gm-rail-body,
   .gm-action-rail.gm-collapsed .gm-rail-grip { display: none; }
   .gm-action-rail.gm-collapsed { padding: 6px; cursor: grab; }
@@ -5225,8 +5226,8 @@
     <p class="sg-refsync-note">這顆元件是從別的專案快選帶入的。下面是<b>屬於這顆料本身</b>的欄位
       （熱阻／規格書／限溫／類型／Temp Sensor，以及 TH/ME 頁的元件大小與元件高度）在兩邊的差異
       —— 勾選要採用來源值的欄位再套用；功耗、E-Pad 尺寸、凸台／TIM、導熱方式這些跟著各專案自己的
-      散熱設計走，不在同步範圍。<br><span class="sg-refsync-hint2">※ 標「（TH/ME 頁）」的兩欄要在
-      <b>TH/ME-專案元件清單也載入同一個專案</b>時才比得出差異。</span></p>
+      散熱設計走，不在同步範圍。<br><span class="sg-refsync-hint2">※ 標「（TH/ME 頁）」的兩欄取自 <b>TH/ME-專案元件清單</b>
+      （四個功能頁同步開同一個專案；那一頁沒載入成功時這兩欄不比對）。</span></p>
     <div id="sg-refsync-body"></div>
     <div id="sg-refsync-lock" class="lock-modal-hint" style="display:none;">（未解鎖，僅供檢視；要套用請先解除密碼保護）</div>
     <div class="lock-modal-actions">
@@ -5363,11 +5364,11 @@
         <div class="comp-toolbar">
           <div class="field">
             <label>選擇專案</label>
-            <select id="vd-project-select" onchange="vdOnProjectChange()">
+            <select id="vd-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="vd-load-btn" onclick="vdLoadProjects()">載入專案</button>
+          <button class="btn btn-primary" id="vd-load-btn" onclick="projLoadClick()">載入專案</button>
           <button class="btn-export excel" onclick="vdExportExcel()" id="vd-export-excel-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128202; 匯出 Excel</button>
           <button class="btn-export pdf" onclick="vdExportPdf()" id="vd-export-pdf-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128196; 匯出 PDF</button>
           <button class="btn btn-save" id="vd-save-btn" onclick="vdSaveValidation()" disabled>儲存驗證資料</button>
@@ -5454,12 +5455,12 @@
       <div class="card-body">
         <div class="comp-toolbar">
           <div class="field">
-            <label>選擇專案 <span class="via-hd-sub" style="margin-left:2px;">（與 TH/ME-專案元件清單同一個專案，切換一邊另一邊跟著換）</span></label>
-            <select id="via-project-select" onchange="viaOnProjectChange()">
+            <label>選擇專案 <span class="via-hd-sub" style="margin-left:2px;">（四個功能頁同步：任何一頁換專案，其他頁跟著換）</span></label>
+            <select id="via-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="via-load-btn" onclick="viaLoadProjects()">載入專案</button>
+          <button class="btn btn-primary" id="via-load-btn" onclick="projLoadClick()">載入專案</button>
           <button class="btn-export excel" id="via-export-excel-btn" onclick="viaExportExcel()" disabled style="padding:7px 14px; font-size:0.82rem;">&#128202; 匯出 Excel</button>
           <button class="btn btn-save" id="via-save-btn" onclick="saveAllTabs()" disabled>儲存 Via 設計</button>
           <span id="via-save-status" class="save-status"></span>
@@ -5487,11 +5488,11 @@
         <div class="comp-toolbar">
           <div class="field">
             <label>選擇專案</label>
-            <select id="project-select" onchange="onProjectChange()">
+            <select id="project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="load-projects-btn" onclick="loadProjects()">載入專案</button>
+          <button class="btn btn-primary" id="load-projects-btn" onclick="projLoadClick()">載入專案</button>
           <button class="btn btn-save" id="save-btn" onclick="saveThermalSpecs()" style="display:none;">儲存熱設計資料</button>
           <span id="save-status" class="save-status"></span>
         </div>
@@ -5534,12 +5535,12 @@
         <div class="comp-toolbar sg-proj-toolbar">
           <div class="field sg-proj-field">
             <label>選擇專案</label>
-            <select id="sg-project-select" onchange="sgOnProjectChange()">
+            <select id="sg-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
           <div class="sg-proj-actions">
-            <button class="btn btn-primary" id="sg-load-btn" onclick="sgLoadProjects()">載入專案</button>
+            <button class="btn btn-primary" id="sg-load-btn" onclick="projLoadClick()">載入專案</button>
             <button class="btn btn-primary" id="sg-new-project-btn" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
             <button class="btn" id="sg-rename-project-btn" style="background:#e8f0fe;color:#1a3a6b;border:1px solid #b6cdf0;" onclick="sgAskRenameProject()" disabled title="需先解鎖密碼保護才能修改專案名稱">✏️ 重新命名</button>
             <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
@@ -6211,9 +6212,7 @@ async function toggleProtection(pwdArg) {
         await dbAdapter.acquireLock();
         // 取得 lock 成功後，重新載入資料以顯示最新內容
         try {
-          if (typeof loadProjects === 'function') await loadProjects();
-          if (typeof sgLoadProjects === 'function') await sgLoadProjects();
-      if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+          await projLoadAll();
         } catch (e) { console.warn('reload after acquireLock failed:', e); }
       } catch (e) {
         _lockPillBusy = false; lockPillSync();
@@ -6241,9 +6240,7 @@ async function toggleProtection(pwdArg) {
       }
       // discard:重新讀取資料庫，丟棄記憶體中的未儲存編輯（loadProjects 系列會 refresh + 重建）
       try {
-        if (typeof loadProjects === 'function')   await loadProjects();
-        if (typeof sgLoadProjects === 'function') await sgLoadProjects();
-        if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+        await projLoadAll();
       } catch (e) { console.warn('reload after discard failed:', e); }
     }
     // 重新鎖定：SharePoint 模式釋放 lock（Tab5 仍解鎖時保留共用鎖）
@@ -6358,7 +6355,7 @@ function railHideLockPopover() {
   document.removeEventListener('mousedown', railLockOutsideClose);
 }
 /* ── 浮動工具列：可收合 + 可拖曳 ──
-   收合後只剩一顆按鈕（再按展開）；展開時用左上把手拖曳，收合時整顆可拖。
+   收合後只剩展開鈕＋常駐的解鎖／儲存兩顆（再按展開）；展開時用左上把手拖曳，收合時整條可拖（移動 4px 以上才算拖曳，點按鈕照常）。
    位置／收合狀態記憶在 localStorage（讀寫皆 try/catch：隱私視窗可能丟例外）；
    未曾拖曳過就沿用 CSS 預設位置（右側垂直置中）。拖曳一律 clamp 在 viewport 內。 */
 const RAIL_POS_KEY = 'gmRailPos';
@@ -6427,7 +6424,7 @@ function railInitFloating() {
   rail.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const viaGrip = !!e.target.closest('#gm-rail-grip');
-    // 展開時只有把手可拖；收合時整顆（只剩一顆鈕）都可拖
+    // 展開時只有把手可拖；收合時整條（展開鈕＋常駐的解鎖／儲存）都可拖 —— 沒移動超過門檻就是一般點擊
     if (!viaGrip && !rail.classList.contains('gm-collapsed')) return;
     const el = railMovable();
     if (!el) return;
@@ -6550,14 +6547,20 @@ function hasUnsavedEdits() {
   if (_cleanSnap.vd !== null && _safeStr(_vdDirtyView()) !== _cleanSnap.vd) return true;
   return false;
 }
-/* 上鎖前詢問:回傳 Promise<'save' | 'discard' | 'cancel'> */
-function askUnsavedBeforeLock() {
+/* 有未存變更時詢問:回傳 Promise<'save' | 'discard' | 'cancel'>。
+   opts 換掉對話框文字（預設是「鎖定」；切換專案／重新載入／更新版本各有自己的說法）。 */
+function askUnsavedBeforeLock(opts) {
+  opts = opts || {};
   return new Promise(resolve => {
     const ov = document.getElementById('unsaved-lock-overlay');
     if (!ov) { resolve('save'); return; }   // 保險:找不到對話框時預設走儲存，避免誤丟資料
     const bSave = ov.querySelector('.ul-save');
     const bDiscard = ov.querySelector('.ul-discard');
     const bCancel = ov.querySelector('.ul-cancel');
+    const msgEl = ov.querySelector('.unsaved-lock-msg');
+    if (msgEl) msgEl.innerHTML = opts.msg || '您在元件清單／驗證頁面有尚未儲存的修改。<br>鎖定前要如何處理？';
+    bSave.textContent = opts.save || '儲存並鎖定';
+    bDiscard.textContent = opts.discard || '放棄變更並鎖定';
     const done = (val) => {
       ov.classList.remove('active');
       bSave.onclick = bDiscard.onclick = bCancel.onclick = null;
@@ -6568,6 +6571,93 @@ function askUnsavedBeforeLock() {
     bCancel.onclick = () => done('cancel');
     ov.classList.add('active');
   });
+}
+
+/* ── 四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）永遠開同一個專案 ──
+   任何一頁的專案下拉或「載入專案」鈕都走這裡，四頁一起切換／重新載入。
+   ⚠ 切換＝其他頁的畫面資料也會換掉 → 任何一頁有未存變更都先問 儲存／放棄／取消（UX 慣例 9），
+   取消就把下拉還原。各頁原本的載入函式（sgOnProjectChange／onProjectChange／vdOnProjectChange、
+   *LoadProjects）保留給程式內部呼叫，不再直接掛在下拉上。 */
+const PROJ_SELECTS = ['sg-project-select', 'project-select', 'vd-project-select', 'via-project-select'];
+const PROJ_LOAD_BTNS = ['sg-load-btn', 'load-projects-btn', 'vd-load-btn', 'via-load-btn'];
+let _projBusy = false;
+// 目前開著的專案（四頁同步，任何一頁有就是它）
+function projOpenId() {
+  return sgProjectId || currentProjectId || vdProjectId || null;
+}
+// 四個下拉都指到同一個專案；某頁的下拉還沒有這個選項（沒載入過專案列表）→ 照來源下拉補上
+function projSyncSelects(id, srcSel) {
+  const src = srcSel || PROJ_SELECTS.map(i => document.getElementById(i))
+    .find(s => s && (!id || s.querySelector('option[value="' + CSS.escape(id) + '"]')));
+  PROJ_SELECTS.forEach(sid => {
+    const s = document.getElementById(sid);
+    if (!s) return;
+    if (id && src && s !== src && !s.querySelector('option[value="' + CSS.escape(id) + '"]')) s.innerHTML = src.innerHTML;
+    s.value = id || '';
+  });
+}
+function projSetBusy(on) {
+  _projBusy = on;
+  PROJ_SELECTS.forEach(sid => { const s = document.getElementById(sid); if (s) s.disabled = on; });
+}
+// 有未存變更 → 問一次（四頁一起）；回傳 true＝可以繼續
+async function projGuardUnsaved(what) {
+  if (!hasUnsavedEdits()) return true;
+  const choice = await askUnsavedBeforeLock({
+    msg: '您在元件清單／驗證頁面有尚未儲存的修改。<br>' + what + '時四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）會一起換掉，要如何處理？',
+    save: '儲存後' + what, discard: '放棄變更並' + what,
+  });
+  if (choice === 'cancel') return false;
+  if (choice === 'save') {
+    await saveAllTabs();
+    if (hasUnsavedEdits()) return false;   // 沒存成（未解鎖、衝突取消、失敗）→ 不切換，免得丟資料
+  }
+  return true;
+}
+// 四頁一起開 id（null＝四頁一起清空）。不問未存變更 —— 呼叫端負責（projGuardUnsaved）
+async function projOpenAll(id, srcSel) {
+  projSetBusy(true);
+  try {
+    projSyncSelects(id, srcSel);
+    if (typeof viaSel !== 'undefined') { viaSel = null; viaMsg = null; }
+    await sgOnProjectChange();     // Tab1 先：TH/ME 頁、驗證頁讀得到它記憶體裡的值（改名、專案環溫）
+    await onProjectChange();       // TH/ME 頁（Thermal Via 頁與它共用 thermalSpecs，重繪時一起更新）
+    await vdOnProjectChange();
+  } finally {
+    projSetBusy(false);
+  }
+  if (typeof viaRender === 'function') viaRender();
+}
+// 任何一頁的專案下拉改了
+async function projSelectChange(sel) {
+  const id = sel.value || null;
+  const prev = projOpenId();
+  if (_projBusy) { sel.value = prev || ''; return; }
+  if (id === prev && sgProjectId === currentProjectId && currentProjectId === vdProjectId) return;
+  if (!(await projGuardUnsaved('切換專案'))) { projSyncSelects(prev, null); return; }
+  await projOpenAll(id, sel);
+}
+// 重讀資料庫、四頁的專案列表一起更新，並重新開 want（預設＝目前開著的專案）。不問未存變更
+async function projLoadAll(want) {
+  if (want === undefined) want = projOpenId();
+  projSetBusy(true);
+  try {
+    if (dbAdapter.isReady()) await dbAdapter.refresh();   // 只重讀一次，三頁共用
+    await sgLoadProjects({ noRefresh: true, want });
+    await loadProjects({ noRefresh: true, want });
+    await vdLoadProjects({ noRefresh: true, want });
+  } finally {
+    projSetBusy(false);
+  }
+  if (typeof viaRender === 'function') viaRender();
+}
+// 任何一頁的「載入專案」鈕
+async function projLoadClick() {
+  if (_projBusy) return;
+  if (!(await projGuardUnsaved('重新載入'))) return;
+  await projLoadAll();
+  const n = document.getElementById('project-select').options.length - 1;
+  if (typeof viaShowStatus === 'function' && dbAdapter.isReady()) viaShowStatus(n > 0 ? `成功載入 ${n} 個專案。` : '資料庫中尚無專案。', n > 0 ? 'success' : '');
 }
 
 /* 三大分類對應 */
@@ -6639,9 +6729,7 @@ async function initDatabase() {
       } else {
         updateDbStatusText('✅ ' + result.filename, 'success');
       }
-      await loadProjects();
-      if (typeof sgLoadProjects === 'function') await sgLoadProjects();
-      if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+      await projLoadAll();
       updateLockStatusBar();
       return;
     }
@@ -6731,9 +6819,7 @@ async function handleSpLogin() {
     if (result && result.success) {
       await graphDb._readFile();
       _updateSpHeaderSignedIn();
-      await loadProjects();
-      if (typeof sgLoadProjects === 'function') await sgLoadProjects();
-      if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+      await projLoadAll();
       updateLockStatusBar();
     } else if (result && result.reason === 'cancelled') {
       // user cancelled, do nothing
@@ -6952,7 +7038,8 @@ window.APP_VERSION = '__APP_VERSION__';
     // 有未儲存變更 → 先詢問 儲存/放棄/取消（沿用上鎖前的對話框）
     if (typeof hasUnsavedEdits === 'function' && hasUnsavedEdits()) {
       let choice = 'save';
-      if (typeof askUnsavedBeforeLock === 'function') choice = await askUnsavedBeforeLock();
+      if (typeof askUnsavedBeforeLock === 'function') choice = await askUnsavedBeforeLock({
+        msg: '您在元件清單／驗證頁面有尚未儲存的修改。<br>更新到新版本前要如何處理？', save: '儲存後更新', discard: '放棄變更並更新' });
       if (choice === 'cancel') return;
       if (choice === 'save' && typeof saveAllTabs === 'function') {
         try { await saveAllTabs(); }
@@ -7136,7 +7223,8 @@ function showSaveStatus(msg, type) {
 }
 
 /* ---- 載入專案列表 ---- */
-async function loadProjects() {
+async function loadProjects(opts) {
+  opts = opts || {};
   if (!dbAdapter.isReady()) {
     const msg = dbAdapter.isSharePointMode()
       ? '資料庫尚未連線，請先登入 SharePoint。'
@@ -7151,15 +7239,16 @@ async function loadProjects() {
   showStatus('\u6b63\u5728\u8b80\u53d6\u5c08\u6848\u5217\u8868...', '');
 
   try {
-    // Re-read from disk to discard any unsaved in-memory changes
-    await dbAdapter.refresh();
+    // Re-read from disk to discard any unsaved in-memory changes（projLoadAll 已先讀過一次 → noRefresh）
+    if (!opts.noRefresh) await dbAdapter.refresh();
 
     const projectList = await dbAdapter.getProjectsSorted();
     const select = document.getElementById('project-select');
-    const prevSelected = select.value;
+    const prevSelected = ('want' in opts) ? (opts.want || '') : select.value;
     select.innerHTML = '<option value="">-- \u8acb\u9078\u64c7\u5c08\u6848 --</option>';
 
     if (projectList.length === 0) {
+      if (currentProjectId) await onProjectChange();   // 專案被刪光 → 清掉本頁（不留已不存在的專案資料）
       showStatus('\u8cc7\u6599\u5eab\u4e2d\u5c1a\u7121\u5c08\u6848\u8cc7\u6599\u3002', 'error');
       btn.disabled = false;
       btn.textContent = '\u8f09\u5165\u5c08\u6848';
@@ -7177,6 +7266,8 @@ async function loadProjects() {
     if (prevSelected && select.querySelector(`option[value="${prevSelected}"]`)) {
       select.value = prevSelected;
       await onProjectChange();
+    } else if (currentProjectId) {
+      await onProjectChange();   // 原本開的專案已不存在（被刪）→ 清掉本頁
     }
 
     showStatus(`\u6210\u529f\u8f09\u5165 ${projectList.length} \u500b\u5c08\u6848\uff0c\u8cc7\u6599\u5df2\u5f9e\u78c1\u789f\u91cd\u65b0\u8b80\u53d6\u3002`, 'success');
@@ -7196,6 +7287,10 @@ async function onProjectChange() {
   const saveBtn   = document.getElementById('save-btn');
 
   if (!projectId) {
+    // 四頁同步：沒選專案＝本頁也清空（原本只清畫面、currentProjectId 還留著 → 存檔仍會寫那個專案）
+    currentProjectId = null; currentProjectData = null; clProjectBase = null;
+    thermalSpecs = {}; hiddenComponents = {};
+    snapClClean();
     container.innerHTML = `
       <div class="empty-state">
         <div class="icon">&#128230;</div>
@@ -8160,7 +8255,8 @@ function toDocId(name) {
 }
 
 /* ---- Load projects ---- */
-async function sgLoadProjects() {
+async function sgLoadProjects(opts) {
+  opts = opts || {};
   if (!dbAdapter.isReady()) {
     const msg = dbAdapter.isSharePointMode()
       ? '資料庫尚未連線，請先登入 SharePoint。'
@@ -8174,12 +8270,12 @@ async function sgLoadProjects() {
   btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
 
   try {
-    // Re-read from disk to discard any unsaved in-memory changes
-    await dbAdapter.refresh();
+    // Re-read from disk to discard any unsaved in-memory changes（projLoadAll 已先讀過一次 → noRefresh）
+    if (!opts.noRefresh) await dbAdapter.refresh();
 
     const projectList = await dbAdapter.getProjectsSorted();
     const select = document.getElementById('sg-project-select');
-    const prevSelected = select.value;
+    const prevSelected = ('want' in opts) ? (opts.want || '') : select.value;
     select.innerHTML = '<option value="">-- 請選擇專案 --</option>';
 
     projectList.forEach(item => {
@@ -8196,7 +8292,9 @@ async function sgLoadProjects() {
     } else {
       sgProjectId = null;
       sgProjectData = null;
+      sgProjectBase = null;
       sgRenderProjectComponents();
+      snapSgClean();   // 沒開專案＝沒有未存變更（否則還留著上一個專案的快照，切換時會誤判成有未存變更）
     }
 
     if (projectList.length === 0) {
@@ -13718,6 +13816,8 @@ function sgToggleNewProject() {
 /* ---- Create new project ---- */
 async function sgCreateProject() {
   if (isProtected) { alert('請先解鎖密碼保護'); return; }
+  // 建立後四個功能頁會一起切到新專案（SharePoint 模式還會先放掉編輯鎖）→ 有未存變更就先擋下，不偷偷丟掉
+  if (hasUnsavedEdits()) { alert('目前有尚未儲存的修改，請先按「儲存」（或放棄變更）再新增專案。\n新增後四個功能頁會一起切換到新專案。'); return; }
   const id = document.getElementById('sg-new-project-id').value.trim();
   const name = document.getElementById('sg-new-project-name').value.trim();
   if (!id) { alert('請輸入專案 ID'); return; }
@@ -13752,10 +13852,8 @@ async function sgCreateProject() {
     document.getElementById('sg-new-project-name').value = '';
     sgToggleNewProject();
 
-    // Reload and auto-select
-    await sgLoadProjects();
-    document.getElementById('sg-project-select').value = id;
-    await sgOnProjectChange();
+    // Reload and auto-select（四頁一起切到新專案）
+    await projLoadAll(id);
   } catch (e) {
     if (e instanceof ConflictError) {
       showConflictWarning();
@@ -13839,7 +13937,7 @@ function _sgRenameErr(msg) {
    ⚠ 不可呼叫 sgLoadProjects() —— 它會 dbAdapter.refresh() 重讀磁碟，
    把使用者尚未儲存的元件編輯整個丟掉。 */
 function _sgApplyRenameToUI(projId, newName) {
-  ['sg-project-select', 'project-select', 'vd-project-select'].forEach(selId => {
+  PROJ_SELECTS.forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
     const opt = sel.querySelector('option[value="' + CSS.escape(projId) + '"]');
@@ -13950,7 +14048,8 @@ async function sgDeleteProject(projectId, projectName) {
     await dbAdapter.deleteDoc('projects', projectId);
     if (sgProjectId === projectId) { sgProjectId = null; sgProjectData = null; }
     sgVariantsCache = null; sgProjectTreeCache = null;   // 專案集合改變 → 失效快選快取
-    await sgLoadProjects();          // 重讀並刷新下拉(刪到當前專案會自動清空顯示)
+    // 重讀並刷新四頁的下拉；刪到目前開著的專案 → 四頁一起清空
+    await projLoadAll(projOpenId() === projectId ? null : projOpenId());
     sgShowStatus(`已刪除專案「${projectName}」`, 'success');
   } catch (e) {
     if (e instanceof ConflictError) { showConflictWarning(); sgShowStatus('版本衝突，請重新整理後再試', 'error'); }
@@ -14210,9 +14309,7 @@ async function handlePickDb() {
   const result = await dbAdapter.pickFile();
   if (result && result.success) {
     updateDbStatusText(`✅ ${result.filename}`, 'success');
-    await loadProjects();
-    await sgLoadProjects();
-    await vdLoadProjects();
+    await projLoadAll();
     updateDbHealthBanner();
   }
 }
@@ -14255,9 +14352,7 @@ async function handleLoadOfflineDb() {
     // 寫進本地離線檔（離線就再也看不到圖）。離線時圖片一律維持 data URL。
     dbAdapter.setOfflineMode(true);
     updateDbStatusText('✅ 離線 ｜ ' + result.filename, 'success');
-    await loadProjects();
-    if (typeof sgLoadProjects === 'function') await sgLoadProjects();
-    if (typeof vdLoadProjects === 'function') await vdLoadProjects();
+    await projLoadAll();
     updateDbHealthBanner();
   } catch (e) {
     console.error('[handleLoadOfflineDb]', e);
@@ -14288,7 +14383,8 @@ function vdShowStatus(msg, type) {
   if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 4000);
 }
 
-async function vdLoadProjects() {
+async function vdLoadProjects(opts) {
+  opts = opts || {};
   if (!dbAdapter.isReady()) {
     const msg = dbAdapter.isSharePointMode()
       ? '資料庫尚未連線，請先登入 SharePoint。'
@@ -14302,10 +14398,10 @@ async function vdLoadProjects() {
   btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
 
   try {
-    await dbAdapter.refresh();
+    if (!opts.noRefresh) await dbAdapter.refresh();
     const projectList = await dbAdapter.getProjectsSorted();
     const select = document.getElementById('vd-project-select');
-    const prevSelected = select.value;
+    const prevSelected = ('want' in opts) ? (opts.want || '') : select.value;
     select.innerHTML = '<option value="">-- 請選擇專案 --</option>';
 
     projectList.forEach(item => {
@@ -14325,6 +14421,7 @@ async function vdLoadProjects() {
       vdHiddenComps = {};
       vdTaManual = null;
       vdRender();
+      snapVdClean();   // 沒開專案＝沒有未存變更
     }
 
     if (projectList.length === 0) {
@@ -14834,14 +14931,16 @@ function viaPathOf(comp, spec) {
   if (bt && HEAT_PATH_MAP[bt]) return { path: bt, src: 'rru' };
   return { path: null, src: null };
 }
-// 納入原因（三個欄位任一個有值就納入；主散熱路徑沒選時看 5G-RRU 的導熱方式）
+// 納入原因（三個欄位任一個有值就納入）：EE 清單的 TH Via 內徑／Qty 要有實際數字（N/A、空白、0 不算）、
+// 或 TH/ME 頁的主散熱路徑選了 Thermal Via。⚠ 不看 5G-RRU 的導熱方式（元件上的 Board_Type）：
+// 使用者決定 —— EE 清單標 N/A、TH/ME 頁也沒選的元件，不因為 5G-RRU 那邊設了 Thermal Via 就被拉進來。
+// （viaPathOf 仍保留 Board_Type 的 fallback：5G-RRU 說明與匯出要描述 5G-RRU 實際會怎麼算）
 function viaReasons(comp, spec) {
   const out = [];
   const d = viaTvNum(comp.TV_ID_mil), q = viaTvNum(comp.TV_Qty);
   if (d !== null) out.push({ k: 'tvd', text: 'TH Via 內徑 ' + viaFmt(d, 2) + ' mil' });
   if (q !== null) out.push({ k: 'tvq', text: 'TH Via Qty ' + viaFmt(q, 0) });
-  const p = viaPathOf(comp, spec);
-  if (p.path === 'Thermal Via') out.push({ k: 'path', text: p.src === 'tab2' ? '主散熱路徑 Thermal Via' : '導熱方式 Thermal Via（5G-RRU）' });
+  if (spec && spec.heatDirection === 'Thermal Via') out.push({ k: 'path', text: '主散熱路徑 Thermal Via' });
   return out;
 }
 function viaHasData(spec) { return !!(spec && spec.via && Object.keys(spec.via).length); }
@@ -14926,32 +15025,16 @@ function viaSyncProjectSelect() {
   if (dst.innerHTML !== src.innerHTML) dst.innerHTML = src.innerHTML;
   if (dst.value !== src.value) dst.value = src.value;
 }
+// 載入／切換專案：四個功能頁同一套（projLoadClick／projSelectChange），這兩個保留給程式與測試呼叫
 async function viaLoadProjects() {
   if (!dbAdapter.isReady()) {
     viaShowStatus(dbAdapter.isSharePointMode() ? '資料庫尚未連線，請先登入 SharePoint。' : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。', 'error');
     return;
   }
-  const btn = document.getElementById('via-load-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
-  try {
-    await loadProjects();   // 與 TH/ME 頁同一個載入（重讀磁碟、還原原本選的專案）
-    const n = document.getElementById('project-select').options.length - 1;
-    viaShowStatus(n > 0 ? `成功載入 ${n} 個專案。` : '資料庫中尚無專案。', n > 0 ? 'success' : '');
-  } catch (e) {
-    viaShowStatus('載入專案失敗：' + e.message, 'error');
-  }
-  btn.disabled = false;
-  btn.textContent = '載入專案';
-  viaRender();
+  await projLoadClick();
 }
 async function viaOnProjectChange() {
-  const v = document.getElementById('via-project-select').value;
-  const src = document.getElementById('project-select');
-  src.value = v;
-  viaSel = null; viaMsg = null;
-  await onProjectChange();   // TH/ME 頁載入同一個專案；它重繪時會呼叫 viaRender
-  viaRender();
+  await projSelectChange(document.getElementById('via-project-select'));
 }
 function viaUpdateBadge(inc) {
   const b = document.getElementById('via-tab-badge');
@@ -15072,7 +15155,7 @@ function viaSummaryHtml(parts) {
       <span class="via-count">納入 <b>${inc.length}</b> 顆</span>
       ${pill('todo', '✎ 未完善')}${pill('err', '❌ 配置有問題')}${pill('warn', '⚠ 有提醒')}${pill('ok', '✅ 完成')}
       <span class="via-count skip${skip.length ? '' : ' zero'}" title="勾了「暫不納入熱流評估」的元件：不列入待完善清單、計數與分頁徽章">⏸ 暫不納入 ${skip.length}</span>
-      <span class="via-rule-line">納入條件：EE/RF/PWR 清單填了「TH Via 內徑」或「TH Via Qty」，或 TH/ME 頁的主散熱路徑是 Thermal Via（沒選時看 5G-RRU 的導熱方式）。
+      <span class="via-rule-line">納入條件：EE/RF/PWR 清單的「TH Via 內徑」或「TH Via Qty」填了數字（N/A 不算），或 TH/ME 頁的主散熱路徑選了 Thermal Via。
         規格溫度很高、不建模的元件可勾「暫不納入」。</span>
     </div>`;
   // 一列：左邊「暫不納入」勾選（寫入，未解鎖時停用）；右邊點一下跳到該元件（唯讀也可用）
@@ -15172,7 +15255,7 @@ function viaSrcHtml(o) {
   if (o.writeback && val > 0 && (!o.integer || Number.isInteger(val)) && val !== o.srcVal) {
     const can = viaSameAsTab1();
     h += `<button type="button" class="via-mini-btn wb" data-fid="${o.k}-wb" onclick="viaWriteBack('${o.k}')" ${can ? '' : 'disabled'}
-      title="${can ? '把這個值寫回 EE/RF/PWR 清單的「' + o.srcField + '」（存檔時一起存）' : '要寫回 EE 清單，請先在「EE/RF/PWR-專案元件清單」載入同一個專案'}">⇪ 寫回 EE 清單</button>`;
+      title="${can ? '把這個值寫回 EE/RF/PWR 清單的「' + o.srcField + '」（存檔時一起存）' : 'EE/RF/PWR-專案元件清單沒有載入這個專案（可能讀取失敗），請按「載入專案」重新載入後再寫回'}">⇪ 寫回 EE 清單</button>`;
   }
   h += `</div>`;
   if (bad) h += `<div class="via-hint red">${o.integer ? '須為正整數' : '須大於 0'}</div>`;
@@ -15424,8 +15507,8 @@ function viaRulesHtml(open) {
       求所有孔壁離邊緣 ≥ ${ViaCalc.EDGE} mm 的最大間距，往下取整（mil 取 0.1、mm 取 0.001）。放不下時列出這個焊盤最多可放幾顆。</div>
     <div><b>不含</b>：銅層的橫向擴散、焊錫層與空洞、鍍銅不均。R<sub>th</sub> 只是 E-PAD 正下方穿板的那一段，不是整條散熱路徑；
       「穿板溫降」假設熱全部經這一段，是偏保守的上限估計。</div>
-    <div><b>納入條件</b>：EE/RF/PWR 清單的「TH Via 內徑」或「TH Via Qty」有填（不是 N/A），或 TH/ME 頁主散熱路徑是 Thermal Via
-      （TH/ME 頁沒選時看 5G-RRU 的導熱方式）。條件不再成立的元件，via 設計資料保留不刪，列在清單最下面。
+    <div><b>納入條件</b>：EE/RF/PWR 清單的「TH Via 內徑」或「TH Via Qty」填了數字（N/A、空白、0 不算），或 TH/ME 頁主散熱路徑選了 Thermal Via。
+      不看 5G-RRU 的導熱方式（TH/ME 頁沒選、EE 清單是 N/A 的元件不會被拉進來）。條件不再成立的元件，via 設計資料保留不刪，列在清單最下面。
       規格溫度很高、不建模的元件可勾「暫不納入熱流評估」：移出待完善清單、計數與分頁徽章，via 資料保留，取消勾選即恢復。</div>
     <div><b>資料存放</b>：跟著專案與元件存（TH/ME 頁那份元件設定裡），按任一個儲存鍵＝全部分頁一起存；元件改名時資料跟著搬。
       Via 數量／內徑預設取 EE 清單（✂ 改成本頁的試算值，可「⇪ 寫回 EE 清單」）；E-PAD 與 TH/ME 頁同一欄；
@@ -15555,7 +15638,7 @@ function viaRelock(k) {
 // 本頁的 Via 數量／內徑寫回 EE 清單（只在 EE/RF/PWR 頁載入同一個專案時；跟著那一頁的存檔寫入）
 function viaWriteBack(k) {
   if (isProtected || !viaSel) return;
-  if (!viaSameAsTab1()) { roToast('要寫回 EE 清單，請先在「EE/RF/PWR-專案元件清單」載入同一個專案'); return; }
+  if (!viaSameAsTab1()) { roToast('EE/RF/PWR-專案元件清單沒有載入這個專案，請按「載入專案」重新載入後再寫回'); return; }
   const row = viaCurRow(); if (!row) return;
   const v = viaVia(viaSel, false); if (!v) return;
   const val = ViaCalc.num(v[k]);
@@ -16511,6 +16594,9 @@ function fbShowShadowReadReport() {
       <polyline points="18 15 12 9 6 15"/>
     </svg>
   </button>
+  </div><!-- /.gm-rail-body -->
+  <!-- 解鎖＋儲存：收合時也常駐（.gm-rail-pinned 不跟著 body 收起），最常用的兩顆不必先展開工具列 -->
+  <div class="gm-rail-pinned" id="gm-rail-pinned">
   <div class="gm-rail-divider"></div>
   <button type="button" id="rail-lock-btn" data-tip="解鎖資料庫" onclick="railToggleLock()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -16525,7 +16611,7 @@ function fbShowShadowReadReport() {
       <polyline points="7 3 7 8 15 8"/>
     </svg>
   </button>
-  </div><!-- /.gm-rail-body -->
+  </div><!-- /.gm-rail-pinned -->
 </aside>
 
 </div><!-- /.tc-rail-wrapper -->

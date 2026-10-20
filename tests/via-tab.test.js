@@ -4,11 +4,11 @@
  * 驗證情境：
  *   [A] 頁籤位置：在「凸台&TIM尺寸速算」與「使用者建議與改善」之間；右側工具列有切換鈕
  *   [B] 納入條件：TH Via 內徑、TH Via Qty（EE 清單）、主散熱路徑 Thermal Via（TH/ME 頁）任一個；
- *       TH/ME 頁沒選時看 5G-RRU 的導熱方式；TH/ME 頁選了別的路徑時不看 5G-RRU 舊值；N/A／空白不算；
+ *       不看 5G-RRU 的導熱方式（TH/ME 頁沒選、EE 清單 N/A、只有 5G-RRU 設了 Thermal Via → 不納入）；N/A／空白不算；
  *       不再符合條件但有 via 資料 → 列在最下面（資料保留）
  *   [C] 未完善提示：摘要計數、待完善清單（缺哪些欄位）、分頁徽章數字；點清單跳到該元件
  *   [D] 有來源的欄位：Via 數量／內徑鎖定取 EE 清單（白底黑字＋✂）；✂ → 試算值（提醒與 EE 清單不同）；
- *       ↺ 取回；EE 頁沒載入同一個專案時「寫回 EE 清單」停用，載入後可寫回（寫進 EE 頁的元件、刪掉試算值）
+ *       ↺ 取回；EE 頁沒載入（四頁同步後只剩讀取失敗這種情況）時「寫回 EE 清單」停用，載入後可寫回（寫進 EE 頁的元件、刪掉試算值）
  *   [E] E-PAD 與 TH/ME 頁同一欄；TH/ME 頁沒填時暫用 5G-RRU 的 E-Pad 長寬（鎖定＋✂）；
  *       PCB 厚度鎖定取 5G-RRU 參數 t_PCB，沒有時必填
  *   [F] 計算：K_eff／R_th 與 viaCalc 一致；穿板溫降＝P × R_th；5G-RRU K_Via 比較
@@ -44,6 +44,7 @@ const PROJ = () => ({
     { Component: 'PreDriver', Qty: 2, 'Power(W)': 0.6, TV_ID_mil: 8, TV_Qty: 9 },
     { Component: 'PA-Final', Qty: 2, 'Power(W)': 30, TV_ID_mil: 'N/A', TV_Qty: 'N/A', Board_Type: 'Copper Coin' },
     { Component: 'Stale-BT', Qty: 1, 'Power(W)': 1, TV_ID_mil: 'N/A', TV_Qty: '', Board_Type: 'Thermal Via' },
+    { Component: 'RRU-Only', Qty: 1, 'Power(W)': 1, TV_ID_mil: 'N/A', TV_Qty: 'N/A', Board_Type: 'Thermal Via', Pad_L: 3, Pad_W: 3 },
   ],
   digital_data: [
     { Component: 'U850-Si5518', Qty: 1, 'Power(W)': 3.2, TV_ID_mil: 8, TV_Qty: 134 },
@@ -58,6 +59,7 @@ const PROJ = () => ({
     'U850-Si5518': { heatSourceSize: '12.5×12.5', heatDirection: 'Thermal Via', epadSize: '8.6*8.6', via: { fill: 'epoxy', pitchMil: 28 } },
     'PreDriver': { heatDirection: 'Thermal Via', epadSize: '1.6*1.6' },
     'Stale-BT': { heatDirection: 'IC top' },
+    'Driver-RRU': { heatDirection: 'Thermal Via' },
     'FPGA': { heatDirection: 'Copper Coin' },
     'Was-Via': { via: { fill: 'air', pitchMil: 20 } },
   },
@@ -131,18 +133,20 @@ const PROJ = () => ({
 
   // 載入專案（與 TH/ME 頁同一個選單）
   await page.evaluate(async () => { await viaLoadProjects(); document.getElementById('via-project-select').value = 'X'; await viaOnProjectChange(); });
-  ok('選專案 → TH/ME 頁也載入同一個專案', await page.evaluate(() => currentProjectId === 'X' && document.getElementById('project-select').value === 'X'));
+  ok('選專案 → 四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證）一起載入同一個專案', await page.evaluate(() => currentProjectId === 'X' && sgProjectId === 'X' && vdProjectId === 'X'
+    && ['project-select', 'sg-project-select', 'vd-project-select', 'via-project-select'].every(id => document.getElementById(id).value === 'X')));
 
   console.log('\n[B] 納入條件');
   let S = await st();
   const names = S.items.filter(i => !i.orphan).map(i => i.name);
-  ok('納入：內徑+Qty、只有內徑、只有 Qty、主散熱路徑 Thermal Via、5G-RRU 導熱方式 Thermal Via（TH/ME 沒選）',
+  ok('納入：內徑+Qty、只有內徑、只有 Qty、主散熱路徑 Thermal Via（EE 清單 N/A 也算）',
     ['Driver-RRU', 'PreDriver', 'U850-Si5518', 'Q6505', 'LDO-1'].every(n => names.includes(n)) && names.length === 5, names);
   ok('不納入：全部 N/A、Copper Coin；TH/ME 頁選了 IC top 時不看 5G-RRU 殘留的 Thermal Via', !names.includes('PA-Final') && !names.includes('FPGA') && !names.includes('Stale-BT'));
+  ok('不納入：EE 清單 N/A、TH/ME 頁沒選、只有 5G-RRU 的導熱方式是 Thermal Via（不看 5G-RRU）', !S.items.some(i => i.name === 'RRU-Only'), S.items.map(i => i.name));
   ok('不符合條件但有 via 資料 → 列在最下面（資料保留）', S.items.some(i => i.name === 'Was-Via' && i.orphan));
   await sel('Driver-RRU');
   S = await st();
-  ok('納入原因標示：5G-RRU 導熱方式', /導熱方式 Thermal Via（5G-RRU）/.test(S.head), S.head);
+  ok('納入原因標示：主散熱路徑（EE 清單 N/A 時）', /主散熱路徑 Thermal Via/.test(S.head) && !/TH Via 內徑|TH Via Qty/.test(S.head) && !/5G-RRU）/.test(S.head), S.head);
   await sel('U850-Si5518');
   S = await st();
   ok('納入原因標示：內徑＋Qty＋主散熱路徑', /TH Via 內徑 8 mil/.test(S.head) && /TH Via Qty 134/.test(S.head) && /主散熱路徑 Thermal Via/.test(S.head), S.head);
@@ -160,6 +164,8 @@ const PROJ = () => ({
   ok('點待完善清單 → 跳到該元件', S.items.find(i => i.sel).name === 'LDO-1' && /LDO-1/.test(S.head));
 
   console.log('\n[D] Via 數量／內徑：鎖定取 EE 清單＋✂ 試算＋寫回');
+  // 四頁同步後 EE 頁一定跟著載入；「寫回停用」只剩 EE 頁沒載入成功（例如讀取失敗）時 → 這裡直接把 EE 頁清空來測
+  await page.evaluate(() => { sgProjectId = null; sgProjectData = null; });
   await sel('PreDriver');
   let f = await page.evaluate(() => ({ locked: [...document.querySelectorAll('#via-form .via-locked')].map(e => e.textContent), inputs: [...document.querySelectorAll('#via-form input[data-k]')].map(e => e.dataset.k) }));
   ok('數量、內徑都是鎖定的純文字（白底黑字）＋✂，沒有輸入框', f.locked.some(t => /^9 顆/.test(t)) && f.locked.some(t => /^8 mil/.test(t)) && !f.inputs.includes('qty') && !f.inputs.includes('diaMil'), f);
@@ -172,7 +178,7 @@ const PROJ = () => ({
   ok('改成 16 → 提醒「試算值，與 EE 清單不同（9 顆）」、狀態不是完成', /試算值，與EE 清單不同（9 顆）/.test(S.form) && /Via 數量用本頁試算值 16，EE 清單是 9/.test(S.out), S.form);
   ok('資料存在 thermal_specs[PreDriver].via.qty，EE 清單沒被改', await page.evaluate(() => thermalSpecs['PreDriver'].via.qty === 16 && currentProjectData.rf_data[1].TV_Qty === 9));
   const wb = await page.evaluate(() => { const b = document.querySelector('#via-form [data-fid="qty-wb"]'); return b && { dis: b.disabled, title: b.title }; });
-  ok('EE 頁沒載入同一個專案 → 「寫回 EE 清單」停用並說明', wb && wb.dis && /請先在「EE\/RF\/PWR-專案元件清單」載入同一個專案/.test(wb.title), wb);
+  ok('EE 頁沒載入這個專案 → 「寫回 EE 清單」停用並說明（按「載入專案」重新載入）', wb && wb.dis && /沒有載入這個專案/.test(wb.title) && /載入專案/.test(wb.title), wb);
   await page.click('#via-form [data-fid="qty-relock"]');
   ok('↺ 取回 EE 清單值 → 刪掉試算值、回到鎖定', await page.evaluate(() => !(thermalSpecs['PreDriver'].via && 'qty' in thermalSpecs['PreDriver'].via) && !document.querySelector('#via-form input[data-k="qty"]')));
   // EE 頁載入同一個專案 → 可以寫回
