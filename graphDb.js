@@ -690,6 +690,27 @@ const graphDb = {
     };
   },
 
+  /* TIM 管理工具的 TIM 型號目錄（唯讀）：同一個網站文件庫的 TIM_Manager/Database/tim_catalog.json，
+     由 TIM 管理工具在材料變更後自動產生。背景讀取、不跳登入視窗；檔案不存在回 null。 */
+  async readTimCatalog() {
+    if (!_siteId) await this._resolveDriveItemId();
+    const token = await this._getAccessToken(false);
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await this._sleep(600);
+      let resp;
+      try {
+        resp = await _fetchT(`https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:/TIM_Manager/Database/tim_catalog.json:/content`,
+          { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}`, 'Cache-Control': 'no-cache' } }, GET_TIMEOUT_MS);
+      } catch (e) { lastErr = e; continue; }
+      if (resp.status === 404) return null;
+      if (resp.ok) return await resp.json();
+      lastErr = new Error('TIM 型號目錄讀取失敗 ' + resp.status);
+      if (!(resp.status === 429 || resp.status >= 500)) break;
+    }
+    throw lastErr;
+  },
+
   async getSpecSrc(path) {
     const meta = await this.getSpecMeta(path);
     return (meta && meta.downloadUrl) || null;

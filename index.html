@@ -1627,6 +1627,35 @@
   .tim-lib-status { font-size: 0.8rem; min-height: 1.2em; }
   .tim-lib-status.err { color: #c0392b; font-weight: 600; }
   .tim-lib-status.ok { color: #217346; font-weight: 600; }
+  /* 連結 TIM 管理工具的列：型號／k／廠商是參照值（純文字），來源標籤用藍色（紅色只給錯誤） */
+  .tim-lib-src {
+    display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 9px; font-size: 0.7rem; font-weight: 600;
+    background: #e1f0fb; color: #01579b; border: 1px solid #b3d7f2; white-space: nowrap; cursor: help; vertical-align: middle;
+  }
+  .tim-lib-linkcell { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+  .tim-lib-linkcell .tim-lib-mirror { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .tim-lib-linkcell .tim-lib-src { margin-left: 2px; }
+  .tim-lib-linkcell .tim-lib-cut { margin-left: 2px; flex: none; }
+  .tim-lib-mirror.tim-lib-invalid { outline: 1.5px solid #c0392b; border-radius: 4px; background: #fff5f5; }
+  .tim-lib-follow { margin-top: 3px; font-size: 0.74rem; line-height: 1.4; color: #92400e; }
+  .tim-lib-follow.ok { color: #217346; }
+  .tim-lib-follow button {
+    border: 1px solid #f0c36d; background: #fffbeb; color: #92400e; border-radius: 5px;
+    padding: 1px 6px; margin-left: 4px; cursor: pointer; font-size: 0.72rem;
+  }
+  .tim-lib-follow button:hover { background: #fef3c7; }
+  .btn-export.tim-lib .tim-lib-badge {
+    display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 0.72rem;
+    background: #fff; color: #01579b; font-weight: 700;
+  }
+  /* 從 TIM 管理工具帶入（疊在型號庫視窗之上） */
+  #tim-cat-modal { z-index: 10010; }
+  .tim-cat-search { width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid #e0e0e0; border-radius: 6px; margin: 4px 0 8px; }
+  .tim-cat-table tr.tim-cat-pick { cursor: pointer; }
+  .tim-cat-table tr.tim-cat-pick:hover td { background: #f5faff; }
+  .tim-cat-table tr.tim-cat-on td { background: #e8f3fc; }
+  .tim-cat-table td.tim-cat-k { text-align: right; font-variant-numeric: tabular-nums; }
+  .tim-cat-note { color: #64748b; font-size: 0.74rem; }
   .sg-rth-table th {
     text-align: left; font-weight: 600; color: #475569; padding: 4px 6px;
     border-bottom: 1px solid #e2e8f0; white-space: nowrap;
@@ -5098,6 +5127,9 @@
   <div class="lock-modal-box" style="max-width:860px;width:96vw;">
     <h3 class="lock-modal-title">&#129517; TIM 型號庫</h3>
     <p class="lock-modal-hint">
+      <b>TIM 材料在「TIM 管理工具」建立</b>：按「📥 從 TIM 管理工具帶入」選材料加進來，
+      <b>型號、k、廠商</b>標「TIM 管理工具」並跟著它更新（開這個視窗時套用新值，按儲存寫入）；
+      填縫厚度、預設厚度、備註仍在這裡填。沒有連結的型號照舊由本工具自行維護。<br>
       這份型號庫<b>全工具共用、不屬於任何專案</b>，之後新開的專案也能選用同一份型號。
       填了 k 值與填縫厚度，5G-RRU 端就能用同一顆 Pad 的真實值算 R_TIM；
       它的 <code>Pad2</code> 選項已移除，不同 k 值的 Pad 一律用「型號」表達。<br>
@@ -5124,12 +5156,47 @@
       <div id="tim-lib-empty" class="tim-lib-empty" style="display:none;">目前型號庫是空的，按「＋ 新增型號」開始建立。</div>
     </div>
     <div class="lock-modal-actions" style="margin-top:8px;">
-      <button id="tim-lib-add" onclick="timLibAddRow()" class="lock-modal-btn">&#10133; 新增型號</button>
+      <button id="tim-lib-cat" onclick="timCatOpen()" class="lock-modal-btn" title="從 TIM 管理工具的材料庫（TIM 型號目錄）選材料加入；型號、k、廠商之後跟著 TIM 管理工具">&#128229; 從 TIM 管理工具帶入</button>
+      <button id="tim-lib-add" onclick="timLibAddRow()" class="lock-modal-btn" title="手動新增一個不連結 TIM 管理工具的型號">&#10133; 新增型號</button>
       <span id="tim-lib-status" class="tim-lib-status"></span>
     </div>
     <div class="lock-modal-actions">
       <button id="tim-lib-save" onclick="timLibSave()" class="lock-modal-btn lock-modal-teams-btn">&#128190; 儲存型號庫</button>
       <button onclick="timLibClose()" class="lock-modal-btn">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 從 TIM 管理工具帶入：讀 TIM_Manager/Database/tim_catalog.json（TIM 管理工具自動產生的材料目錄，唯讀），
+     勾選的材料加進型號庫並連結（src/srcId）。疊在型號庫視窗之上。 -->
+<div id="tim-cat-modal" class="lock-modal-overlay" style="display:none" onclick="if(event.target===this)timCatClose()">
+  <div class="lock-modal-box" style="max-width:780px;width:94vw;">
+    <h3 class="lock-modal-title">&#128229; 從 TIM 管理工具帶入</h3>
+    <p class="lock-modal-hint" id="tim-cat-hint">
+      TIM 管理工具的材料庫（SharePoint：TIM_Manager / Database / tim_catalog.json）。勾選要加入型號庫的材料：
+      型號、k、廠商之後跟著 TIM 管理工具更新；<b>填縫厚度</b>（壓縮後的厚度，5G-RRU 算 R_TIM 用）依設計而定，加入後請在型號庫填寫。
+      型號庫已有同名、同類型但沒連結的型號時，會改為<b>連結那一列</b>（不另外新增）。
+    </p>
+    <input id="tim-cat-q" class="tim-cat-search" type="search" placeholder="搜尋廠商、型號、類型…" oninput="timCatRenderList()">
+    <div style="max-height:46vh;overflow:auto;">
+      <table class="tim-lib-table tim-cat-table">
+        <thead><tr>
+          <th style="width:34px"></th>
+          <th style="width:16%">廠商</th>
+          <th>型號</th>
+          <th style="width:20%" title="TIM 管理工具的型態 → 本工具的 TIM 類型">TIM 類型</th>
+          <th style="width:13%;text-align:right">k (W/m·K)</th>
+          <th style="width:20%">狀態</th>
+        </tr></thead>
+        <tbody id="tim-cat-rows"></tbody>
+      </table>
+    </div>
+    <div class="lock-modal-actions" style="margin-top:8px;">
+      <span id="tim-cat-status" class="tim-lib-status"></span>
+    </div>
+    <div class="lock-modal-actions">
+      <button id="tim-cat-ok" onclick="timCatAddPicked()" class="lock-modal-btn lock-modal-teams-btn" disabled>加入型號庫</button>
+      <button onclick="timCatClose()" class="lock-modal-btn">取消</button>
     </div>
   </div>
 </div>
@@ -5438,7 +5505,7 @@
       <button class="btn-export excel" onclick="exportExcel()">&#128202; 匯出 Excel</button>
       <span style="font-size:0.82rem;color:#888;">（被勾選「隱藏」的元件不會出現在匯出表格中）</span>
       <span style="flex:1;"></span>
-      <button class="btn-export tim-lib" onclick="timLibOpen()" title="維護 TIM 型號庫（k 值與預設厚度）。全工具共用，所有專案都能選用；未解鎖時可檢視">&#129517; TIM 型號庫</button>
+      <button class="btn-export tim-lib" onclick="timLibOpen()" title="維護 TIM 型號庫（型號、k 值與填縫厚度；型號、k、廠商可參照 TIM 管理工具）。全工具共用，所有專案都能選用；未解鎖時可檢視">&#129517; TIM 型號庫<span id="tim-lib-badge" class="tim-lib-badge" style="display:none"></span></button>
       <button class="btn-export ee-export" onclick="eeExportExcel()">&#128202; EE 匯出 Excel</button>
       <button class="btn-export ee-import" id="ee-import-btn" onclick="document.getElementById('ee-import-file').click()" disabled title="需先解鎖密碼保護才能使用">&#128229; EE 匯入 Excel</button>
       <input type="file" id="ee-import-file" accept=".xlsx,.xls" style="display:none;" onchange="eeImportExcel(this)">
@@ -7164,6 +7231,11 @@ async function onProjectChange() {
     if (!timLibLoaded) {
       timLibLoad().then(() => { if (currentProjectData) renderAllCategories(); })
                   .catch(e => console.warn('[timLib] 背景載入失敗', e));
+    }
+    // TIM 管理工具的型號目錄（背景、只讀）：連結的型號有更新時在「TIM 型號庫」按鈕上標 ↻n
+    if (timCatState === 'idle') {
+      Promise.all([timLibLoad(), timCatLoad()]).then(timCatBadgeSync)
+        .catch(e => console.warn('[timCat] 背景載入失敗', e));
     }
     saveBtn.style.display = '';
     saveBtn.disabled = isProtected;
@@ -9427,6 +9499,8 @@ function sgRthSave() {
                        而不是「TIM 厚度 2.5」—— 它要的是壓縮後的縫隙厚度。
      - gapUnlock     Grease/Putty 本來兩欄同步（無原始片厚的概念），此旗標為 true
                      表示使用者按 ✂ 解鎖、要分開填
+     - src / srcId   連結 TIM 管理工具：src = 'tim-manager'、srcId = 它的材料 id（見下方「TIM 型號目錄」）。
+                     沒有連結的型號沒有這兩個 key（不寫 ''）
 
    寫入策略：視窗內編輯先暫存在 _timLibRows，按「儲存型號庫」才一次寫入
    （set 用 writeBatch 合併成單一 flush，刪除另走 deleteDoc —— writeBatch 不支援 delete）。
@@ -9523,6 +9597,93 @@ function timLibListByType(timType) {
     .sort((a, b) => String(a.model || '').localeCompare(String(b.model || '')));
 }
 
+/* ══════════════════════════════════════════════════════════════
+   TIM 型號目錄（TIM 管理工具，唯讀參照）
+   --------------------------------------------------------------
+   TIM 材料在「TIM 管理工具」建立；它在同一個 SharePoint 文件庫放一份只有材料資料的目錄
+   TIM_Manager/Database/tim_catalog.json：
+     { format:'tim-catalog', version:1, db_rev, updated_at,
+       materials:[{ id, vendor, model, tim_type, type_label, family:'Pad'|'Putty'|'Grease', family_exact,
+                    k, k_method, thickness_options, avl_status, avl_label, … }] }
+   型號庫的一列可以連結其中一筆（src:'tim-manager', srcId:<材料 id>）：
+     - k、廠商：跟隨 TIM 管理工具。開型號庫時把新值套進暫存列（標「已依 TIM 管理工具更新」），按儲存寫入；
+       畫面上是白底黑字純文字（UX 慣例 2），✂ 解除連結 = 改回本工具自行維護（保留目前的值）
+     - 型號名稱、TIM 類型：元件以「型號名字串」參照（comp.TIM_Model、5G-RRU 的 resolveTim），
+       TIM 管理工具改名／改型態時**不自動改**，列上提示並給「套用」（click-to-apply，UX 慣例 2.5）
+     - 預設厚度、填縫厚度、備註：本工具的值（填縫厚度是壓縮後的厚度，依設計而定，不屬於材料）
+   讀不到目錄（本機／離線模式、未登入、檔案還沒產生）時，連結的列照用存下來的值，5G-RRU 的計算不受影響。
+   ══════════════════════════════════════════════════════════════ */
+const TIM_CAT_SRC = 'tim-manager';
+const TIM_CAT_WAIT_MS = 4000;     // 開型號庫時最多等目錄這麼久，逾時就先用存下來的值開
+let timCatalog = null;            // 讀到的目錄（null = 沒有）
+let timCatState = 'idle';         // idle | loading | ok | missing | local | error
+let timCatError = '';
+let _timCatPicked = new Set();
+
+async function timCatLoad() {
+  if (!dbAdapter.isSharePointMode() || !dbAdapter.isReady()) { timCatalog = null; timCatState = 'local'; return; }
+  timCatState = 'loading';
+  try {
+    const c = await dbAdapter.readTimCatalog();
+    if (c && c.format === 'tim-catalog' && Array.isArray(c.materials)) { timCatalog = c; timCatState = 'ok'; timCatError = ''; }
+    else { timCatalog = null; timCatState = c ? 'error' : 'missing'; timCatError = c ? '檔案格式不符' : ''; }
+  } catch (e) {
+    timCatalog = null; timCatState = 'error'; timCatError = (e && e.message) || String(e);
+    console.warn('[timCat] 讀取 TIM 型號目錄失敗', e);
+  }
+}
+/* 等目錄最多 TIM_CAT_WAIT_MS（逾時照樣在背景讀完，下次開就有） */
+function timCatLoadCapped() {
+  return Promise.race([timCatLoad(), new Promise(r => setTimeout(r, TIM_CAT_WAIT_MS))]);
+}
+function timCatFind(id) {
+  return (timCatalog && id) ? (timCatalog.materials.find(m => m && m.id === id) || null) : null;
+}
+function timCatLinked(r) { return !!r && r.src === TIM_CAT_SRC && !!r.srcId; }
+/* 目錄讀不到時的說明（型號庫狀態列、帶入視窗） */
+function timCatStateText() {
+  if (timCatState === 'local') return '本機／離線模式讀不到 TIM 管理工具的型號目錄（需以 SharePoint 開啟）；連結的型號照用存下來的值';
+  if (timCatState === 'missing') return 'SharePoint 上還沒有 TIM 型號目錄：請先用 TIM 管理工具以 SharePoint 開啟一次（會自動產生）';
+  if (timCatState === 'error') return '讀不到 TIM 管理工具的型號目錄（' + timCatError + '）；連結的型號照用存下來的值';
+  if (timCatState === 'loading') return '正在讀取 TIM 管理工具的型號目錄…';
+  return '';
+}
+
+/* 連結列套用目錄：k、廠商跟隨（回傳有變動的欄位）；型號名稱／類型不同只記下來給「套用」 */
+function timLibFollow(r) {
+  r._followed = []; r._srcModel = ''; r._srcType = ''; r._srcGone = false; r._srcInfo = null;
+  if (!timCatLinked(r) || !timCatalog) return r._followed;
+  const m = timCatFind(r.srcId);
+  if (!m) { r._srcGone = true; return r._followed; }
+  r._srcInfo = m;
+  if (m.k != null && isFinite(m.k) && Number(r.k) !== Number(m.k)) { r.k = m.k; r._followed.push('k'); }
+  const vendor = String(m.vendor || '').trim();
+  if (vendor !== String(r.vendor || '').trim()) { r.vendor = vendor; r._followed.push('廠商'); }
+  if (String(m.model || '').trim() && String(m.model).trim() !== String(r.model || '').trim()) r._srcModel = String(m.model).trim();
+  if (m.family_exact && TIM_LIB_TYPES.includes(m.family) && m.family !== r.timType) r._srcType = m.family;
+  return r._followed;
+}
+
+/* 已存的型號庫裡，跟 TIM 管理工具不一致的連結型號數（工具列徽章；開型號庫、解鎖後儲存即可套用） */
+function timCatPendingCount() {
+  if (!timCatalog) return 0;
+  let n = 0;
+  Object.values(timLibrary).forEach(v => {
+    if (!timCatLinked(v)) return;
+    const r = Object.assign({}, v);
+    if (timLibFollow(r).length || r._srcModel || r._srcType || r._srcGone) n++;
+  });
+  return n;
+}
+function timCatBadgeSync() {
+  const b = document.getElementById('tim-lib-badge');
+  if (!b) return;
+  const n = timCatPendingCount();
+  b.style.display = n ? '' : 'none';
+  b.textContent = n ? ('\u21BB ' + n) : '';
+  b.title = n ? ('TIM 管理工具有 ' + n + ' 筆型號更新（k、廠商、名稱或已刪除）：開型號庫查看，解鎖後儲存即可套用') : '';
+}
+
 async function timLibOpen() {
   if (!dbAdapter.isReady()) {
     alert(dbAdapter.isSharePointMode()
@@ -9530,8 +9691,9 @@ async function timLibOpen() {
       : '資料庫尚未開啟，請先點選「📂 資料庫目錄」。');
     return;
   }
-  await timLibLoad(true);                       // 每次開啟重讀，避免看到別人改過前的舊值
-  _timLibRows = timLibListByType(null).map(r => ({
+  // 每次開啟重讀，避免看到別人改過前的舊值；TIM 管理工具的型號目錄同時讀（最多等 TIM_CAT_WAIT_MS）
+  await Promise.all([timLibLoad(true), timCatLoadCapped()]);
+  _timLibRows = timLibListByType(null).map(r => Object.assign({
     _id: r._id,
     model: r.model || '', timType: r.timType || 'Pad',
     k: (r.k == null ? '' : r.k), thickness: (r.thickness == null ? '' : r.thickness),
@@ -9539,16 +9701,22 @@ async function timLibOpen() {
     gapUnlock: !!r.gapUnlock,
     vendor: r.vendor || '', note: r.note || '',
     at: r.at || '', by: r.by || '',
-  }));
+  }, timCatLinked(r) ? { src: r.src, srcId: r.srcId } : {}));
   _timLibRows.forEach(timLibApplyGapSync);   // 舊資料（只有預設厚度）進來時補上填縫厚度
+  const followed = _timLibRows.filter(r => timLibFollow(r).length).length;   // 連結的型號：k、廠商跟隨 TIM 管理工具
   timLibSetStatus('');
   timLibRender();
   const ro = isProtected;                       // 未解鎖 → 可檢視不可編輯（UX 慣例 9）
   const addBtn = document.getElementById('tim-lib-add');
+  const catBtn = document.getElementById('tim-lib-cat');
   const saveBtn = document.getElementById('tim-lib-save');
   if (addBtn) addBtn.style.display = ro ? 'none' : '';
+  if (catBtn) catBtn.style.display = ro ? 'none' : '';
   if (saveBtn) saveBtn.style.display = ro ? 'none' : '';
-  if (ro) timLibSetStatus('未解鎖：唯讀檢視（解鎖後才能新增/修改型號）', '');
+  const catNote = timCatStateText();
+  if (ro) timLibSetStatus('未解鎖：唯讀檢視（解鎖後才能新增/修改型號）' + (followed ? '；TIM 管理工具有 ' + followed + ' 筆型號的 k／廠商更新，解鎖後儲存即可寫入' : ''), '');
+  else if (followed) timLibSetStatus('已依 TIM 管理工具更新 ' + followed + ' 筆型號的 k／廠商，按「儲存型號庫」寫入（5G-RRU 之後就用新值）', 'ok');
+  else if (catNote && _timLibRows.some(timCatLinked)) timLibSetStatus(catNote, '');
   const m = document.getElementById('tim-lib-modal');
   if (m) m.style.display = 'flex';
 }
@@ -9575,21 +9743,197 @@ function timLibRender() {
     const meta = r.at
       ? ('登錄於 ' + new Date(r.at).toLocaleString('zh-TW') + (r.by ? ('（' + r.by + '）') : ''))
       : '尚未儲存';
-    return `<tr>
-      <td><input type="text" data-libfield="model" value="${escapeAttr(r.model)}" placeholder="如 TG-A6200" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'model',this.value)"></td>
+    const linked = timCatLinked(r);
+    return `<tr${linked ? ' class="tim-lib-linked"' : ''}>
+      <td>${linked ? timLibLinkedModelCell(r, k, ro)
+        : `<input type="text" data-libfield="model" value="${escapeAttr(r.model)}" placeholder="如 TG-A6200" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'model',this.value)">`}</td>
       <td><select ${ro ? 'disabled' : ''} onchange="timLibEdit(${k},'timType',this.value)">${
         TIM_LIB_TYPES.map(t => `<option value="${t}" ${r.timType === t ? 'selected' : ''}>${t}</option>`).join('')
-      }</select></td>
-      <td><input type="number" step="any" min="0" data-libfield="k" value="${escapeAttr(r.k)}" placeholder="如 6.2" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'k',this.value)"></td>
+      }</select>${linked && r._srcType ? `<div class="tim-lib-follow">TIM 管理工具是 ${escapeHtml(r._srcType)}${ro ? '' : `<button onclick="timLibApplySrcType(${k})">套用</button>`}</div>` : ''}</td>
+      <td>${linked
+        ? `<span class="tim-lib-mirror" data-libfield="k" title="${escapeAttr('依 TIM 管理工具' + (r._srcInfo && r._srcInfo.k_method ? '（' + r._srcInfo.k_method + '）' : '') + '。要自行填寫請在型號欄按 ✂ 解除連結')}">${escapeHtml(r.k === '' || r.k == null ? '—' : String(r.k))}</span>`
+        : `<input type="number" step="any" min="0" data-libfield="k" value="${escapeAttr(r.k)}" placeholder="如 6.2" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'k',this.value)">`}</td>
       <td><input type="number" step="any" min="0" data-libfield="thickness" value="${escapeAttr(r.thickness)}" placeholder="如 2.5" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'thickness',this.value)"></td>
       <td>${timLibGapCell(r, k, ro)}</td>
-      <td><input type="text" value="${escapeAttr(r.vendor)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'vendor',this.value)"></td>
+      <td>${linked
+        ? `<span class="tim-lib-mirror" title="依 TIM 管理工具">${escapeHtml(r.vendor || '—')}</span>`
+        : `<input type="text" value="${escapeAttr(r.vendor)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'vendor',this.value)">`}</td>
       <td><input type="text" value="${escapeAttr(r.note)}" title="${escapeAttr(meta)}" ${ro ? 'readonly' : ''} onchange="timLibEdit(${k},'note',this.value)"></td>
       <td style="text-align:center">${ro ? '' : `<button class="tim-lib-del" title="刪除此型號" onclick="timLibDelRow(${k})">&#10005;</button>`}</td>
     </tr>`;
   }).join('');
   if (empty) empty.style.display = _timLibRows.length ? 'none' : '';
   timLibMarkInvalid();
+}
+
+/* 連結 TIM 管理工具的型號欄：型號名稱純文字＋「TIM 管理工具」標籤＋✂ 解除連結；
+   改名／已刪除／k 廠商已更新的提示接在下面（改名給「套用」，不自動改：元件用名稱參照）。 */
+function timLibLinkedModelCell(r, k, ro) {
+  const m = r._srcInfo;
+  const tip = m
+    ? ('TIM 管理工具：' + [m.vendor, m.model].filter(Boolean).join(' ') + (m.type_label ? ' · ' + m.type_label : '') +
+       (m.k != null ? ' · k ' + m.k + (m.k_method ? '（' + m.k_method + '）' : '') : '') + (m.avl_label ? ' · ' + m.avl_label : '') +
+       '\n型號、k、廠商跟著 TIM 管理工具；預設厚度、填縫厚度、備註在這裡填')
+    : ('連結 TIM 管理工具的材料（' + r.srcId + '）' + (timCatalog ? '' : '\n' + timCatStateText()));
+  const cut = ro ? '' : `<button class="tim-lib-cut" title="解除連結：改回本工具自行維護（保留目前的型號、k、廠商）" onclick="timLibUnlink(${k})">&#9986;</button>`;
+  let hint = '';
+  if (r._srcGone) hint += `<div class="tim-lib-follow">TIM 管理工具已刪除這筆材料（保留目前的值）</div>`;
+  if (r._srcModel) hint += `<div class="tim-lib-follow">TIM 管理工具已改名為「${escapeHtml(r._srcModel)}」${ro ? '' : `<button onclick="timLibApplySrcName(${k})">套用</button>`}</div>`;
+  if (r._followed && r._followed.length) hint += `<div class="tim-lib-follow ok">已依 TIM 管理工具更新 ${escapeHtml(r._followed.join('、'))}（儲存後生效）</div>`;
+  return `<div class="tim-lib-linkcell"><span class="tim-lib-mirror" data-libfield="model" title="${escapeAttr(tip)}">${escapeHtml(r.model || '—')}</span><span class="tim-lib-src" title="${escapeAttr(tip)}">TIM 管理工具</span>${cut}</div>${hint}`;
+}
+
+/* ✂ 解除連結：保留目前的值，改回本工具自行維護 */
+function timLibUnlink(k) {
+  if (isProtected) return;
+  const r = _timLibRows[k];
+  if (!r) return;
+  if (!confirm('解除型號「' + (r.model || '') + '」與 TIM 管理工具的連結？\n\n目前的型號、k、廠商會保留，之後不再跟著 TIM 管理工具更新。')) return;
+  delete r.src; delete r.srcId;
+  r._followed = []; r._srcModel = ''; r._srcType = ''; r._srcGone = false; r._srcInfo = null;
+  timLibRender();
+  timLibSetStatus('已解除連結，按「儲存型號庫」寫入', '');
+}
+
+/* 套用 TIM 管理工具的新名稱（click-to-apply）：已選用舊名稱的元件要重新選型號 */
+function timLibApplySrcName(k) {
+  if (isProtected) return;
+  const r = _timLibRows[k];
+  if (!r || !r._srcModel) return;
+  if (!confirm('型號「' + r.model + '」改名為「' + r._srcModel + '」？\n\n' +
+      '⚠ 元件是用型號名稱參照的：已選用「' + r.model + '」的元件（TH/ME 頁的型號下拉、5G-RRU）會顯示「已從型號庫移除」，' +
+      '5G-RRU 改用參數控制台的 K/t 計算，需要重新選型號。')) return;
+  r.model = r._srcModel;
+  r._srcModel = '';
+  timLibRender();
+  timLibSetStatus('已套用新名稱，按「儲存型號庫」寫入；記得重新選用這個型號的元件', '');
+}
+
+/* 套用 TIM 管理工具的型態（Pad / Putty / Grease） */
+function timLibApplySrcType(k) {
+  if (isProtected) return;
+  const r = _timLibRows[k];
+  if (!r || !r._srcType) return;
+  if (!confirm('型號「' + r.model + '」的 TIM 類型改為 ' + r._srcType + '？\n\n型號隸屬於類型：已選用它的元件需要在新類型下重新選型號。')) return;
+  r.timType = r._srcType;
+  r._srcType = '';
+  timLibApplyGapSync(r);
+  timLibRender();
+}
+
+/* ── 從 TIM 管理工具帶入（#tim-cat-modal，疊在型號庫視窗之上）────────────
+   列出目錄的材料；已連結的列反灰「已在型號庫」；型號庫有同名、同類型但沒連結的 → 加入時改為連結那一列（不另外新增，
+   也不會撞到「同類型下型號不可重複」）。勾選以 data-* ＋ this.dataset 傳 id，不把名稱拼進 inline handler。 */
+function timCatFamily(m) { return TIM_LIB_TYPES.includes(m && m.family) ? m.family : 'Pad'; }
+function timCatRowState(m) {
+  const fam = timCatFamily(m);
+  const name = String(m.model || '').trim().toLowerCase();
+  return {
+    linked: _timLibRows.findIndex(r => timCatLinked(r) && r.srcId === m.id),
+    same: _timLibRows.findIndex(r => !timCatLinked(r) && r.timType === fam && String(r.model || '').trim().toLowerCase() === name),
+  };
+}
+function timCatOpen() {
+  if (isProtected) return;
+  const m = document.getElementById('tim-cat-modal');
+  if (!m) return;
+  _timCatPicked = new Set();
+  const q = document.getElementById('tim-cat-q');
+  if (q) q.value = '';
+  timCatRenderList();
+  m.style.display = 'flex';
+  if (timCatState !== 'ok') {                 // 開型號庫時沒讀到（逾時／剛產生）→ 再讀一次
+    timCatLoad().then(() => { if (m.style.display !== 'none') timCatRenderList(); });
+    timCatRenderList();
+  }
+  setTimeout(() => { if (q) q.focus(); }, 30);
+}
+function timCatClose() {
+  const m = document.getElementById('tim-cat-modal');
+  if (m) m.style.display = 'none';
+  _timCatPicked = new Set();
+}
+function timCatRenderList() {
+  const tb = document.getElementById('tim-cat-rows');
+  const okBtn = document.getElementById('tim-cat-ok');
+  const st = document.getElementById('tim-cat-status');
+  if (!tb) return;
+  if (!timCatalog) {
+    tb.innerHTML = `<tr><td colspan="6" class="tim-lib-empty">${escapeHtml(timCatStateText() || '讀取中…')}</td></tr>`;
+    if (okBtn) okBtn.disabled = true;
+    if (st) { st.textContent = ''; st.className = 'tim-lib-status'; }
+    return;
+  }
+  const qEl = document.getElementById('tim-cat-q');
+  const q = String((qEl && qEl.value) || '').trim().toLowerCase();
+  const list = timCatalog.materials.filter(m => m && String(m.model || '').trim() &&
+    (!q || [m.vendor, m.model, m.type_label, m.family].join(' ').toLowerCase().includes(q)));
+  tb.innerHTML = list.map(m => {
+    const s = timCatRowState(m);
+    const done = s.linked >= 0;
+    const on = _timCatPicked.has(m.id);
+    const status = done ? '已在型號庫'
+      : s.same >= 0 ? '型號庫有同名，將改為連結'
+      : (m.avl_label || '');
+    return `<tr class="${done ? '' : 'tim-cat-pick'}${on ? ' tim-cat-on' : ''}" data-cat-id="${escapeAttr(m.id)}" onclick="timCatToggle(this.dataset.catId)">
+      <td style="text-align:center"><input type="checkbox" ${on ? 'checked' : ''} ${done ? 'disabled' : ''} aria-label="${escapeAttr('選取 ' + (m.model || ''))}"
+        onclick="event.stopPropagation();timCatToggle(this.closest('tr').dataset.catId)"></td>
+      <td>${escapeHtml(m.vendor || '')}</td>
+      <td><b>${escapeHtml(m.model || '')}</b></td>
+      <td>${escapeHtml(timCatFamily(m))}<div class="tim-cat-note">${escapeHtml(m.type_label || '')}${m.family_exact === false ? '（加入後請確認類型）' : ''}</div></td>
+      <td class="tim-cat-k">${m.k == null ? '—' : escapeHtml(String(m.k))}${m.k_method ? `<div class="tim-cat-note">${escapeHtml(m.k_method)}</div>` : ''}</td>
+      <td class="tim-cat-note">${escapeHtml(status)}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="tim-lib-empty">${q ? '沒有符合的材料' : 'TIM 管理工具的材料庫還沒有材料'}</td></tr>`;
+  const n = _timCatPicked.size;
+  if (okBtn) { okBtn.disabled = !n; okBtn.textContent = n ? ('加入型號庫（' + n + '）') : '加入型號庫'; }
+  if (st) {
+    st.className = 'tim-lib-status';
+    st.textContent = 'TIM 管理工具 ' + timCatalog.materials.length + ' 筆材料' +
+      (timCatalog.updated_at ? '，' + new Date(timCatalog.updated_at).toLocaleString('zh-TW') + ' 更新' : '');
+  }
+}
+function timCatToggle(id) {
+  const m = timCatFind(id);
+  if (!m || timCatRowState(m).linked >= 0) return;
+  if (_timCatPicked.has(id)) _timCatPicked.delete(id); else _timCatPicked.add(id);
+  timCatRenderList();
+}
+function timCatAddPicked() {
+  if (isProtected || !timCatalog) return;
+  let added = 0, linked = 0;
+  _timCatPicked.forEach(id => {
+    const m = timCatFind(id);
+    if (!m) return;
+    const s = timCatRowState(m);
+    if (s.linked >= 0) return;
+    if (s.same >= 0) {                        // 既有同名列 → 連結它（k、廠商改跟 TIM 管理工具）
+      const r = _timLibRows[s.same];
+      r.src = TIM_CAT_SRC; r.srcId = m.id;
+      timLibFollow(r);
+      linked++;
+      return;
+    }
+    const r = {
+      _id: null, model: String(m.model || '').trim(), timType: timCatFamily(m),
+      k: (m.k == null ? '' : m.k), thickness: '', gapThickness: '', gapUnlock: false,
+      vendor: String(m.vendor || '').trim(), note: '', at: '', by: '',
+      src: TIM_CAT_SRC, srcId: m.id,
+    };
+    timLibFollow(r);
+    r._followed = [];
+    _timLibRows.push(r);
+    added++;
+  });
+  timCatClose();
+  timLibRender();
+  if (added || linked) {
+    timLibSetStatus([added ? '已加入 ' + added + ' 筆' : '', linked ? '已連結 ' + linked + ' 筆既有型號' : ''].filter(Boolean).join('、') +
+      '：請填「填縫厚度」後按「儲存型號庫」', '');
+    const rows = document.querySelectorAll('#tim-lib-rows tr');
+    const last = rows[rows.length - 1];
+    if (added && last) last.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 /* 填縫厚度欄。Grease/Putty 未解鎖時＝預設厚度的鏡像：顯示白底黑字純文字＋✂ 解鎖口
@@ -9664,7 +10008,9 @@ function timLibValidate() {
     else seen.set(key, k);
     const kv = parseFloat(r.k);
     if (r.k === '' || r.k == null || isNaN(kv) || kv <= 0) {
-      errs.push({ k, field: 'k', msg: '型號「' + model + '」的 k 值必須是大於 0 的數字' });
+      errs.push({ k, field: 'k', msg: timCatLinked(r)
+        ? '型號「' + model + '」在 TIM 管理工具沒有 k 值：請先在 TIM 管理工具的材料庫補上，或按 ✂ 解除連結自行填寫'
+        : '型號「' + model + '」的 k 值必須是大於 0 的數字' });
     }
     if (r.thickness !== '' && r.thickness != null) {
       const tv = parseFloat(r.thickness);
@@ -9726,6 +10072,8 @@ async function timLibSave() {
       gapUnlock: !!r.gapUnlock,
       vendor: String(r.vendor || '').trim(),
       note: String(r.note || '').trim(),
+      // 連結 TIM 管理工具（沒連結就不寫這兩個 key）
+      ...(timCatLinked(r) ? { src: TIM_CAT_SRC, srcId: r.srcId } : {}),
       at: prev.at || now,                  // 首次登錄時間保留
       by: prev.by || who,
       updatedAt: now,
@@ -9743,7 +10091,9 @@ async function timLibSave() {
     // writeBatch 不支援 delete，被移除的型號逐筆刪
     for (const id of removed) { try { await dbAdapter.deleteDoc('tim_library', id); } catch (e) { console.warn('[timLib] 刪除失敗', id, e); } }
     await timLibLoad(true);
+    _timLibRows.forEach(r => { if (r._followed) r._followed = []; });   // 已寫入：「已依 TIM 管理工具更新」提示收掉
     timLibRender();
+    timCatBadgeSync();
     timLibSetStatus('✅ 已儲存 ' + ops.length + ' 筆型號' + (removed.length ? ('，刪除 ' + removed.length + ' 筆') : ''), 'ok');
   } catch (e) {
     console.error('[timLibSave]', e);
@@ -9879,6 +10229,11 @@ function sgNoteSave() {
 /* 備註視窗：Ctrl+Enter 儲存、Esc 取消（多行輸入不適合用 Enter 直接送出）。
    熱阻視窗：Esc 取消（多列表單，不用 Enter 直接送出以免誤存）。 */
 document.addEventListener('keydown', (e) => {
+  const tc = document.getElementById('tim-cat-modal');     // 從 TIM 管理工具帶入：Esc 取消
+  if (tc && tc.style.display !== 'none' && tc.style.display !== '') {
+    if (e.key === 'Escape') { e.preventDefault(); timCatClose(); }
+    return;
+  }
   const sv = document.getElementById('sg-specview-modal');
   if (sv && sv.style.display !== 'none' && sv.style.display !== '') {
     if (e.key === 'Escape') { e.preventDefault(); sgSpecViewClose(); }
