@@ -318,7 +318,11 @@
   .admin-lh-row:nth-child(even) { background: #f8fafc; }
   .admin-lh-time { color: #64748b; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
   .admin-lh-name { color: #0f172a; font-weight: 600; flex: none; }
-  .admin-lh-email { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
+  .admin-lh-email { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; text-align: right; }
+  /* 哪個工具的登入（5G-RRU 的管理面板同一組色） */
+  .admin-lh-tool { flex: none; font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+  .admin-lh-tool.t-rru { color: #0f5f58; background: #d5f5ef; }
+  .admin-lh-tool.t-ait { color: #1e40af; background: #dbeafe; }
   .admin-lh-empty { padding: 12px 8px; text-align: center; color: #94a3b8; font-size: 0.8rem; }
 
   /* ── Lock status bar ── */
@@ -6769,7 +6773,8 @@ function _updateSpHeaderSignedIn() {
 /* 記錄一筆登入到共用 top-level collection `login_history`（供系統管理員查詢近期登入者）。
    節流：同一 email 60 分鐘內已有紀錄則略過，避免每次 reload 都寫共用檔。
    以唯一 id 逐筆寫入（不同 key → 樂觀寫入並發安全）；超過上限刪最舊者。fire-and-forget。
-   ⚠ 僅本工具會寫；要含 5G-RRU 端登入需 5G-RRU 同步實作。 */
+   5G-RRU 也寫同一個 collection（tool: '5G-RRU'，它的管理面板與本工具同一套）→ 節流只看「本工具」的紀錄，
+   否則剛在 5G-RRU 登入過就不會記到本工具的登入。沒有 tool 欄的舊紀錄＝本工具寫的（原本只有本工具會寫）。 */
 async function recordLoginHistory() {
   try {
     if (!(dbAdapter.isSharePointMode && dbAdapter.isSharePointMode())) return;
@@ -6781,7 +6786,7 @@ async function recordLoginHistory() {
     const now = Date.now();
     let latest = 0;
     for (const rec of Object.values(hist)) {
-      if (rec && rec.email === acct.email) {
+      if (rec && rec.email === acct.email && (rec.tool || 'AI-Thermal') === 'AI-Thermal') {
         const t = Date.parse(rec.at || '') || 0;
         if (t > latest) latest = t;
       }
@@ -14233,7 +14238,7 @@ async function adminForceRelease() {
   }
 }
 
-/* 系統管理員：查詢近期登入紀錄（讀共用 login_history，依時間新→舊列出） */
+/* 系統管理員：查詢近期登入紀錄（讀共用 login_history，依時間新→舊列出；兩個工具都會寫 → 標出是哪個工具） */
 async function adminShowLoginHistory() {
   if (!_adminAuthed) return;
   const el = document.getElementById('admin-loginhist');
@@ -14260,7 +14265,8 @@ async function adminShowLoginHistory() {
   for (const r of rows) {
     html += '<div class="admin-lh-row"><span class="admin-lh-time">' + escapeHtml(fmt(r.at)) + '</span>' +
       '<span class="admin-lh-name">' + escapeHtml(r.name || '-') + '</span>' +
-      '<span class="admin-lh-email">' + escapeHtml(r.email || '') + '</span></div>';
+      '<span class="admin-lh-tool ' + ((r.tool || 'AI-Thermal') === '5G-RRU' ? 't-rru' : 't-ait') + '">' + escapeHtml(r.tool || 'AI-Thermal') + '</span>' +
+      '<span class="admin-lh-email" title="' + escapeHtml(r.email || '') + '">' + escapeHtml(r.email || '') + '</span></div>';
   }
   html += '</div>';
   el.innerHTML = html;

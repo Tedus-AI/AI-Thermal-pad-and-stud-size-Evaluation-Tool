@@ -35,16 +35,18 @@
                                  src?, srcId? } },   // src='tim-manager'＋srcId＝TIM 管理工具的材料 id（連結時才有）
                                 // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護；
                                 // 型號／k／廠商可參照 TIM 管理工具，見下方「TIM 型號目錄」）
-  "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
+  "login_history":   { "<id>": { name, email, at, tool } },  // 登入稽核：兩個工具都寫（tool: 'AI-Thermal'／'5G-RRU'），管理面板查詢用
   "lock":            { lockedBy, lockedByEmail, lockedAt, expiresAt,
                        evictRequested?, evictBy?, evictAt? },   // 共用 SharePoint 編輯鎖（兩個工具同一把）；請離旗標見規則 7
   "version":         <number>   // 每次寫入遞增（兩個工具都要）：讀到比手上舊的不採用＝防版本回退；本機檔模式靠它偵測別人寫過檔
 }
 ```
 
-> `login_history`：登入時節流(同 email 60 分鐘一筆)逐筆 `setDoc` 一個唯一 id doc，超過上限刪最舊；
-> 系統管理員面板「🕘 使用者登入紀錄」讀出依時間列出。頂層 collection 天然與其他工具寫入隔離；
-> **僅本工具會寫**，要含 5G-RRU 端登入需 5G-RRU 同步記錄到同一 collection。
+> `login_history`：登入時節流逐筆 `setDoc` 一個唯一 id doc，超過上限（500）刪最舊；
+> 系統管理員面板「🕘 使用者登入紀錄」讀出依時間列出，每列標出**哪個工具**（`.admin-lh-tool`：AI-Thermal 藍／5G-RRU 青綠）。
+> 頂層 collection 天然與其他工具寫入隔離。**5G-RRU 也寫**（`tool: '5G-RRU'`，它的 header 也有同一套「🛡 管理」面板）→
+> 節流（60 分鐘）**只看本工具的紀錄**（`(rec.tool || 'AI-Thermal') === 'AI-Thermal'`），否則剛在 5G-RRU 登入過就記不到本工具的登入；
+> 沒有 `tool` 的舊紀錄＝本工具寫的（原本只有本工具會寫）。
 
 > `tim_library`：TIM 型號庫（型號 → k 值 / 預設厚度 / 廠商）。**刻意放頂層 collection、
 > 不掛在 `projects[id]` 底下**（共用 DB 規則第 3 條）：一顆 Pad 的 k 值只登錄一次，
@@ -681,7 +683,8 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
    `evictRequested/evictBy/evictAt`；重新解鎖不是續約 → 不沿用上次留下的旗標）。原本續約一律寫全新的鎖物件 →
    輪詢讀過之後、續約寫入之前才下的請離（或 412 重讀後）會被洗掉（`tests/lock-lifecycle.test.js` [L7]）。
    **5G-RRU 已同步實作**（其 `graphDb.js` 的 `requestEvict/forceReleaseLock`＋同一段續約保留、`index.html` 的
-   `_handleEviction`）→ 管理面板也請得動 5G-RRU 端的持鎖者。差別：5G-RRU 的自動儲存不跳任何對話框，
+   `_handleEviction`）→ 管理面板也請得動 5G-RRU 端的持鎖者；5G-RRU 的 header 也有同一套「🛡 管理」面板（同密碼、同版面），
+   兩邊操作的是同一把鎖與同一份 `login_history`。差別：5G-RRU 的自動儲存不跳任何對話框，
    遇到要使用者決定的情況（還沒存過的新專案、兩邊改到同一格…）不寫入、照樣放掉鎖，畫面上的修改留著等使用者
    重新解鎖再存（見其 CLAUDE.md「系統管理員請離」）。
    參考實作：本 repo `graphDb.js`（`requestEvict`/`forceReleaseLock`）＋ `index.html`（`_handleEviction`、
