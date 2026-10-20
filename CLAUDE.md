@@ -290,7 +290,8 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
   才用 `force=true` 覆蓋。來源沒填 → 什麼都不做（不寫 `''`、不建立空的 spec 物件）。
 - **差異比對只在「兩頁同專案」時進行**（`currentProjectId === sgProjectId`），否則本專案的現值
   根本不在記憶體裡，比了就是誤報 —— 這條與 `sgDeriveAllFromSpecs` 的「兩半都在記憶體裡才推導」
-  是同一個道理。視窗說明文字有寫這個前提，不要拿掉。
+  是同一個道理。四頁同步開專案之後（見「四個功能頁同步開同一個專案」）兩頁平常一定同專案，這條守衛留給
+  TH/ME 頁沒載入成功的情況；視窗說明文字寫的是「取自 TH/ME 頁、那一頁沒載入成功時不比對」，要與程式一致。
 - 寫入 `heatSourceSize` 後要走 `applyHeatSourceSizeEffects(specKey)`（Pad → 重算凸台/TIM Size；
   Putty ＋「自動帶入」→ 凸台同步）。這段是從 `onCellChange` 抽出來共用的，
   **兩邊都要走同一個函式**，否則「手動改」與「參照帶入」的連動行為會分岔。
@@ -551,7 +552,7 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 頁籤在「凸台&TIM尺寸速算」與「使用者建議與改善」之間（`switchTab('via')`，`tabMap.via = 4`、`feedback = 5`）。
 計算核心是純函式檔 **`viaCalc.js`**（`ViaCalc`，畫面／匯出／測試共用），畫面與資料連動在 `index.html` 的 `via*` 函式。
 
-- **專案選單與 TH/ME 頁是同一個**（`#via-project-select` 鏡像 `#project-select`，換一邊另一邊跟著換）。
+- **專案選單與其他功能頁同步**（四頁同一個專案，見「四個功能頁同步開同一個專案」；`#via-project-select` 鏡像 `#project-select`）。
   via 設計存在 **`thermal_specs[sgSpecKey(元件名)].via`**，兩頁編輯的是記憶體裡同一份 `thermalSpecs` →
   存檔（TH/ME 頁那一筆寫入）、未存變更偵測（`_clDirtyView`）、元件改名搬資料（`sgApplyRenames`／`sgMoveKey` 整筆搬）
   全部沿用既有機制，**不要另開一個 `projects[id]` 的 key**。5G-RRU **唯讀** `thermal_specs`（用 via 設計算逐顆 K_eff，見下方
@@ -571,8 +572,10 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   | `skip`／`skipNote` | `true`＝**暫不納入熱流評估**（例：規格溫度很高、不建模）／原因（選填）。取消勾選＝刪這兩個 key，其他 via 資料不動 |
 
   **計算結果（K_eff、R_th…）不存**，每次由輸入重算（單一事實來源）。
-- **納入條件**（`viaReasons`）：EE 清單 `TV_ID_mil` 或 `TV_Qty` 有值（`'N/A'`／空白／0 不算），或主散熱路徑是 Thermal Via
-  （TH/ME 頁的 `heatDirection` 優先；沒選或舊值才看元件的 `Board_Type` —— 與 `sgHeatPathOf` 同一套）。
+- **納入條件**（`viaReasons`）：EE 清單 `TV_ID_mil` 或 `TV_Qty` 填了數字（`'N/A'`／空白／0 不算），或 **TH/ME 頁的
+  `heatDirection` 選了 Thermal Via**。⚠ **不看 5G-RRU 的導熱方式**（元件上的 `Board_Type`）——使用者決定：EE 清單標 N/A、
+  TH/ME 頁也沒選的元件，不因為 5G-RRU 那邊設了 Thermal Via 就被拉進來（例：Cygnus 的元件 TV 都是 N/A 卻被納入）。
+  `viaPathOf` 仍保留 `Board_Type` fallback，只用在「5G-RRU 會怎麼算」的說明與匯出欄（那是在描述 5G-RRU 的實際行為）。
   不再符合條件但有 `via` 資料 → 列在清單最下面「不在納入條件內（資料保留）」，**不刪**。
 - **未完善提示**：頁首摘要＋「待完善清單」（缺哪些欄位、哪些有干涉，點一下跳過去）＋分頁按鈕上的數字徽章（`viaUpdateBadge`，
   未完善＋配置有問題的顆數）。EE 頁改 TH Via 內徑／Qty 時徽章就地更新（`sgOnCompEdit`／`sgOnTvChange` 呼叫）。
@@ -742,6 +745,25 @@ await dbAdapter.updateDoc('projects', docId, {
    否則 workflow 戳的版本不會上線。
 4. 參考 PR #140（`claude/version-conflict-single-user-IQ20W`）。
 
+## 四個功能頁同步開同一個專案（`projSelectChange` / `projOpenAll` / `projLoadAll`）⚠️
+
+EE/RF/PWR（Tab1）、TH/ME（Tab2）、模擬與實測驗證（Tab3）、Thermal Via 四頁**永遠開同一個專案**：任何一頁的專案下拉
+（`PROJ_SELECTS`）或「載入專案」鈕都走同一個入口，四頁一起切換／重新載入。
+
+- 下拉 `onchange="projSelectChange(this)"`；「載入專案」鈕 `projLoadClick()`（只 `dbAdapter.refresh()` 一次，再用
+  `*LoadProjects({ noRefresh: true, want })` 更新四頁的列表並重開 `want`）。程式內部要重載（解鎖取鎖後、放棄變更、登入、
+  換資料庫、新增／刪除專案）一律 `projLoadAll(want?)`，**不要再三頁各自呼叫 `loadProjects`／`sgLoadProjects`／`vdLoadProjects`**。
+- 載入順序固定 Tab1 → TH/ME → Tab3（`projOpenAll`）：後兩頁會讀 Tab1 記憶體裡的值（還沒存的改名、專案環溫）。
+- **切換或重新載入前，任何一頁有未存變更 → 先問一次**（`projGuardUnsaved`，沿用未存變更對話框、文字說明四頁會一起換）：
+  取消 → 四個下拉還原；放棄 → 照樣切換；儲存 → `saveAllTabs`，沒存成（未解鎖／衝突取消／失敗）就不切換。
+  新增專案：有未存變更直接擋下（SharePoint 模式建立後會先放鎖，不能「先存再建」）。刪除目前的專案 → 四頁一起清空。
+- 選「-- 請選擇專案 --」→ 四頁一起清空；TH/ME 頁 `onProjectChange('')` 會一併清掉 `currentProjectId` 等狀態
+  （原本只清畫面，存檔仍會寫那個專案）。清空的頁要 `snap*Clean()`，否則殘留上一個專案的快照會被誤判成有未存變更。
+- 各頁原本的載入函式（`sgOnProjectChange`／`onProjectChange`／`vdOnProjectChange`）仍是單頁載入、保留給程式與測試；
+  文件其他地方「兩頁同專案才推導／比對」的守衛**不要拿掉** —— 平常一定同專案，但某一頁載入失敗時仍可能不同。
+- 契約測試：`tests/project-sync.test.js`（四頁一起切換、載入鈕只重讀一次、未存變更的取消／放棄／儲存／存不成、清空、
+  刪除／新增專案、工具列收起時常駐解鎖／儲存）。
+
 ## 編輯鎖：分頁列右邊一顆膠囊（`#lock-pill`），取代各頁的「密碼保護」橫幅 ⚠️
 
 原本 EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via、使用者建議與改善五頁頂端各有一條約 100px 高的
@@ -754,6 +776,8 @@ await dbAdapter.updateDoc('projects', docId, {
   空白不送）；已解鎖（綠）「🔓 編輯中（可儲存） [鎖定]」；回饋頁是「回饋管理唯讀」／「開發者模式」；SharePoint 取鎖中
   「取得鎖定中…」＋按鈕停用、點外面不收起。展開中換分頁＝換範圍 → 自動收起（不會把資料庫密碼送到開發者鎖）。
 - 「若僅載入資料閱讀，請勿解鎖資料庫…」提示：鎖定時在 ⓘ 的 tooltip，展開密碼框時直接顯示在膠囊下方。
+- 右側浮動工具列**收起時**只剩展開鈕＋**解鎖、儲存**兩顆常駐（`.gm-rail-pinned`，不在 `.gm-rail-body` 裡、不跟著收）；
+  收起時整條可拖曳，移動 4px 以上才算拖曳，點按鈕照常。
 - `toggleProtection(pwd)`／`fbToggleProtection(pwd)` 的密碼一律**由參數傳入**（膠囊、工具列都一樣），不再讀各頁的隱藏欄位；
   不帶參數＝讀膠囊的密碼框。上鎖（已解鎖時再按）不需密碼，有未儲存變更時照舊先問 儲存／放棄／取消。
 - 唯讀時點編輯區（`RO_CONTAINER_BAR` 的四個容器）→ toast 指路到「解鎖編輯」＋膠囊閃動（`ro-flash`，琥珀）；膠囊在螢幕外才捲過去。
