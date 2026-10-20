@@ -410,6 +410,13 @@ const dbAdapter = {
     return await graphDb.uploadSpec(projectName, catKey, componentName, file);
   },
 
+  /* TIM 管理工具的 TIM 型號目錄（唯讀，TIM_Manager/Database/tim_catalog.json）。
+     只有 SharePoint 模式讀得到：本機／離線模式回 null（型號庫照用存下來的值）。 */
+  async readTimCatalog() {
+    if (!this.isSharePointMode()) return null;
+    return await graphDb.readTimCatalog();
+  },
+
   async getSpecSrc(path) {
     if (!this.isSharePointMode()) return null;
     return await graphDb.getSpecSrc(path);

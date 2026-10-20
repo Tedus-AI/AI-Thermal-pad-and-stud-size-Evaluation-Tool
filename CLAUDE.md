@@ -31,8 +31,10 @@
   },
   "feedback_items":  { ... },   // AI-Thermal Tab5
   "tim_library":     { "<id>": { model, timType, k, thickness, gapThickness, gapUnlock,
-                                 vendor, note, at, by, updatedAt, updatedBy } },
-                                // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護）
+                                 vendor, note, at, by, updatedAt, updatedBy,
+                                 src?, srcId? } },   // src='tim-manager'＋srcId＝TIM 管理工具的材料 id（連結時才有）
+                                // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護；
+                                // 型號／k／廠商可參照 TIM 管理工具，見下方「TIM 型號目錄」）
   "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
   "version":         <number>
 }
@@ -61,6 +63,29 @@
 > 沒有任何可編輯欄位或新增／儲存／刪除鍵。**k 值屬於「材料」不屬於「專案」，編輯入口只留這一個。**
 > 因此在本工具的型號庫改了 k 或填縫厚度，5G-RRU 端只要重讀型號庫（載入專案／開那顆按鈕）
 > 就會即時反映到它的 `R_TIM`；反過來它改不動我們的型號庫。
+
+##### TIM 型號目錄：型號庫參照「TIM 管理工具」（`src` / `srcId`）
+
+TIM 材料由 **TIM 管理工具**（Tedus-AI/Project-TIM-management-tool）建立，它在同一個 SharePoint 文件庫自動產生
+`TIM_Manager/Database/tim_catalog.json`（只有材料屬性：`{ format:'tim-catalog', version:1, db_rev, updated_at,
+materials:[{ id, vendor, model, tim_type, type_label, family:'Pad'|'Putty'|'Grease', family_exact, k, k_method, … }] }`，
+格式與 family 對照表在該 repo SPEC §5.3c）。本工具**只讀**這個檔（`graphDb.readTimCatalog` → `dbAdapter.readTimCatalog`，
+本機／離線模式回 null）。
+
+- 型號庫視窗「📥 從 TIM 管理工具帶入」（`timCatOpen`）：勾選材料 → 新增連結列（`src:'tim-manager'`、`srcId`＝材料 id、
+  TIM 類型＝`family`）。型號庫已有**同名、同類型但沒連結**的列 → 改為連結那一列，不另外新增（也不會撞到同類型不可重名的驗證）。
+  `family_exact:false`（Phase Change、石墨片、膠帶、其他）只是建議，畫面提示確認類型。
+- 連結列：**型號、k、廠商**是白底黑字純文字＋「TIM 管理工具」標籤（UX 慣例 2），✂ = 解除連結（保留目前的值、改回自行維護）。
+  **預設厚度、填縫厚度、備註**照舊在這裡填（填縫厚度是壓縮後的厚度，依設計而定，不屬於材料）。TIM 類型下拉仍可改。
+- **跟隨**（`timLibFollow`）：開型號庫時（`timLibOpen` 同時讀目錄，最多等 `TIM_CAT_WAIT_MS`）把目錄的 **k、廠商**套進暫存列並提示，
+  按「儲存型號庫」才寫入（走原本的鎖與 `writeBatch`）→ 5G-RRU 之後就用新 k。未解鎖時只說明「解鎖後儲存即可寫入」。
+  **型號名稱、類型不自動改**：元件以型號名字串參照（`comp.TIM_Model`、5G-RRU 的 `resolveTim`），只在列上提示
+  「已改名為…」「TIM 管理工具是 …」＋「套用」（click-to-apply，確認視窗說明已選用舊名稱的元件要重新選型號）。
+  目錄沒有這筆（TIM 管理工具刪了）→ 保留值並提示。連結列在目錄沒有 k → 驗證訊息指向 TIM 管理工具補值。
+- 工具列「🧪 TIM 型號庫」的 `↻n` 徽章（`timCatBadgeSync`）：已存的連結型號與目錄不一致的筆數；Tab2 載入專案時背景讀一次。
+- 存檔：連結列寫 `src`/`srcId`，沒連結的列**不寫這兩個 key**（不寫 `''`）。5G-RRU 端只讀 `tim_library`，k 仍以這裡存的為準
+  （所以要有人開型號庫並儲存，新 k 才會進到 5G-RRU）；它的唯讀檢視會標示哪些型號來自 TIM 管理工具。
+- 契約測試：`tests/tim-catalog.test.js`（帶入、同名改連結、跟隨、改名／型態只提示、刪除、徽章、解除連結、唯讀、本機模式、驗證、逸出）。
 
 ##### ⚠ 兩個厚度不是同一件事（`thickness` vs `gapThickness`）
 
