@@ -4,7 +4,8 @@
  * PR #67 的 UI 續約/驗鎖邏輯倚賴 graphDb 兩項保證：
  *   (a) 對「自己的鎖」重複 acquireLock → 延長 expiresAt、不丟錯（續約靠這個）；
  *   (b) 他人持有「有效鎖」時 acquireLock → 丟 LockError（不雙鎖，被接手時退出）。
- * 另含過期鎖可接手、releaseLock 不誤刪他人鎖（#66 樂觀寫入 skipWrite）。
+ * 另含過期鎖可接手、releaseLock 不誤刪他人鎖（#66 樂觀寫入 skipWrite）、
+ * 續約不洗掉系統管理員的請離旗標（[L7]，與 5G-RRU 同一段）。
  *
  * 以 mock Graph API 驅動實際的 graphDb.js。執行：node tests/lock-lifecycle.test.js
  */
@@ -116,6 +117,22 @@ const otherLock = (mins) => ({ lockedBy: 'Other', lockedByEmail: 'other@test.com
   await graphDb.releaseLock();
   check('伺服器鎖已移除', server.db().lock === undefined);
   check('hasLock() = false', graphDb.hasLock() === false);
+
+  console.log('[L7] 續約時保留系統管理員的請離旗標；重新解鎖（不是續約）不沿用上次留下的旗標');
+  await graphDb.acquireLock();
+  server.external(db => { Object.assign(db.lock, { evictRequested: true, evictBy: '管理員', evictAt: '2026-10-20T01:00:00.000Z' }); });
+  await graphDb.peekLock();                         // 輪詢讀到旗標前，續約先寫了也一樣
+  await sleep(5);
+  await graphDb.acquireLock();                      // 續約
+  const l7 = server.db().lock;
+  check('續約後仍是我的鎖', l7.lockedByEmail === 'me@test.com');
+  check('請離旗標沒被續約洗掉（5G-RRU 端同一段）', l7.evictRequested === true && l7.evictBy === '管理員' && l7.evictAt === '2026-10-20T01:00:00.000Z');
+  await graphDb.releaseLock();
+  server.external(db => { db.lock = { lockedBy: 'Me', lockedByEmail: 'me@test.com', lockedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60000).toISOString(), evictRequested: true, evictBy: '管理員' }; });   // 上次關分頁時沒放掉的鎖
+  await graphDb.acquireLock();                      // 重新解鎖
+  check('重新解鎖 → 不帶上次留下的請離旗標', server.db().lock.lockedByEmail === 'me@test.com' && !server.db().lock.evictRequested);
+  await graphDb.releaseLock();
 
   console.log(`\n結果：${pass} pass / ${fail} fail`);
   process.exit(fail ? 1 : 0);

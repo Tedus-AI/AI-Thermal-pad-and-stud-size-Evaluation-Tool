@@ -36,7 +36,9 @@
                                 // TIM 型號庫：全工具共用、不屬於任何專案（AI-Thermal Tab2 維護；
                                 // 型號／k／廠商可參照 TIM 管理工具，見下方「TIM 型號目錄」）
   "login_history":   { "<id>": { name, email, at, tool } },  // AI-Thermal 登入稽核(管理面板查詢用)
-  "version":         <number>
+  "lock":            { lockedBy, lockedByEmail, lockedAt, expiresAt,
+                       evictRequested?, evictBy?, evictAt? },   // 共用 SharePoint 編輯鎖（兩個工具同一把）；請離旗標見規則 7
+  "version":         <number>   // 每次寫入遞增（兩個工具都要）：讀到比手上舊的不採用＝防版本回退；本機檔模式靠它偵測別人寫過檔
 }
 ```
 
@@ -635,6 +637,9 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - **防版本回退時不可換 eTag**：`_readFile` 忽略「比手上舊」的內容時，eTag 也保留舊的。原本照樣換成新 eTag →
   下一次寫入的 If-Match 會對上，把這份過時的快取整檔寫回，蓋掉磁碟上的內容（例：SharePoint「版本歷史」還原、
   或不遞增 version 的另一個工具的寫入）。保留舊 eTag → 下一次寫入得到 412 → 以磁碟為準重讀再合併。
+- **5G-RRU 已同步這一套**（版本遞增、防版本回退＋不換 eTag、412 重讀 force、取鎖寫入成功才認定持鎖）；
+  它的本機檔模式（`fileDb.js`）也改成寫入前比對 `version`、每次寫入遞增 → 本工具本機檔模式的版本比對
+  （`ConflictError`）現在看得出 5G-RRU 寫過檔（原本 5G-RRU 不遞增 version，比對不出來、會把它的修改蓋掉）。
 - metadata 多取 `size`：**本 session 第一次讀檔就讀到空內容、但檔案大小不是 0（或拿不到大小）→ 唯讀保護**，
   不可 bootstrap 空骨架（否則下一次寫入就把整份共用 DB 抹掉）；真的是 0 bytes 才建立空骨架。
 
@@ -668,9 +673,14 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
    （密碼 `0420`，頂部「🛡 管理」）以 `requestEvict(byName)` 在**目前持鎖者**的鎖上標記 `evictRequested`
    （不搶鎖，走樂觀寫入）；持鎖者的 60 秒輪詢 `_maintainLock` 偵測到「旗標在自己鎖上」→ `_handleEviction`：
    **先自動 `saveAllTabs`（此時仍持鎖、驗鎖通過）再 `releaseLock` + 退回上鎖**。離線/無回應時管理員可
-   `forceReleaseLock()` 硬清鎖（對方未存變更會遺失，最後手段）。⚠ **跨工具限制**：5G-RRU 的
-   `acquireLock` 續約會以全新 lock 物件覆寫（不含旗標），故要**請離 5G-RRU 端使用者，5G-RRU 也必須
-   同步實作** `requestEvict/forceReleaseLock` 與 `_handleEviction` 偵測，否則對 5G-RRU 佔用者只能靠硬清鎖或等逾時。
+   `forceReleaseLock()` 硬清鎖（對方未存變更會遺失，最後手段）。
+   **續約自己的鎖要保留旗標**（`acquireLock`：本 session 已持鎖＝`renewing`、鎖是自己的且有旗標 → 新的鎖物件照帶
+   `evictRequested/evictBy/evictAt`；重新解鎖不是續約 → 不沿用上次留下的旗標）。原本續約一律寫全新的鎖物件 →
+   輪詢讀過之後、續約寫入之前才下的請離（或 412 重讀後）會被洗掉（`tests/lock-lifecycle.test.js` [L7]）。
+   **5G-RRU 已同步實作**（其 `graphDb.js` 的 `requestEvict/forceReleaseLock`＋同一段續約保留、`index.html` 的
+   `_handleEviction`）→ 管理面板也請得動 5G-RRU 端的持鎖者。差別：5G-RRU 的自動儲存不跳任何對話框，
+   遇到要使用者決定的情況（還沒存過的新專案、兩邊改到同一格…）不寫入、照樣放掉鎖，畫面上的修改留著等使用者
+   重新解鎖再存（見其 CLAUDE.md「系統管理員請離」）。
    參考實作：本 repo `graphDb.js`（`requestEvict`/`forceReleaseLock`）＋ `index.html`（`_handleEviction`、
    `admin*` 面板）。
 
