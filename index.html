@@ -4018,6 +4018,45 @@
     font-family: 'Tiempos Headline', 'Georgia', serif !important;
   }
 
+  /* ── EE/RF/PWR 頁頂部精簡（使用者要求：專案列＋高溫／常溫條件整體高度壓掉一半以上）──
+     標題列縮薄、「選擇專案」放到下拉左邊、同排按鈕 34px、拿掉「目前專案元件清單」小標題；
+     高溫／常溫條件合成一張兩列的表：同一個 grid（群組與列用 display:contents 攤平）→ 欄位上下對齊，chip 26px。
+     實測（StarKcore-12L、不含載入提示列）：面板頂端到元件表 402px → 約 165px。
+     ⚠ 元件表本體（PDF 匯出截的那一塊）不動。 */
+  #tab-specgen > .sg-panel > .sg-panel-header { padding: 6px 18px !important; font-size: 0.9rem !important; }
+  #tab-specgen > .sg-panel > .sg-panel-body { padding: 10px 18px 14px !important; }
+  #tab-specgen .sg-proj-toolbar { --sg-row-h: 34px; align-items: center; }
+  #tab-specgen .sg-proj-toolbar .sg-proj-field { display: flex; align-items: center; gap: 8px; }
+  #tab-specgen .sg-proj-toolbar .sg-proj-field label { margin: 0; white-space: nowrap; flex: none; }
+  #tab-specgen .sg-proj-toolbar .sg-proj-field select { flex: 1; min-width: 0; padding-top: 0; padding-bottom: 0; }
+  #tab-specgen .sg-proj-actions,
+  #tab-specgen .sg-proj-exports { align-items: center; }
+  #tab-specgen #sg-project-components { margin-top: 8px !important; }
+  #sg-power-summary-container { margin-bottom: 10px !important; }
+  .sg-power-grid {
+    display: grid; grid-template-columns: max-content repeat(7, max-content);
+    gap: 4px 8px; align-items: center; justify-content: start;
+    padding: 6px 10px; border: 1px solid var(--gm-border); border-radius: 12px; background: var(--gm-bg-soft);
+  }
+  .sg-power-grid .sg-power-group,
+  .sg-power-grid .sg-power-row { display: contents; }
+  .sg-power-grid .sg-power-group-label {
+    margin: 0 !important; padding-right: 4px; white-space: nowrap;
+    font-size: 0.85rem !important; line-height: 1.2;
+  }
+  .sg-power-grid .sg-param-chip,
+  .sg-power-grid .sg-power-chip {
+    height: 26px; padding: 0 10px; font-size: 0.8rem; white-space: nowrap; gap: 5px;
+  }
+  .sg-power-grid .sg-power-chip { justify-content: center; }
+  .sg-power-grid .sg-param-chip select,
+  .sg-power-grid .sg-param-chip input { height: 20px; padding: 0 4px; font-size: 0.78rem; box-sizing: border-box; }
+  /* 視窗窄到一列放不下（< 1250px）→ 改回每個條件一行、可換行，不出現橫向捲軸 */
+  @media (max-width: 1250px) {
+    .sg-power-grid { display: flex; flex-direction: column; gap: 6px; }
+    .sg-power-grid .sg-power-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  }
+
   /* ── Feedback tab ── */
   .fb-page-icon {
     background: linear-gradient(135deg, #d97757 0%, #b04e2d 100%) !important;
@@ -5574,19 +5613,17 @@
 
         <!-- Existing Project Components -->
         <div id="sg-project-components" style="display:none; margin-top:16px;">
-          <div style="display:flex; align-items:center; margin-bottom:10px;">
-            <div style="font-size:0.9rem; font-weight:700; color:#1a3a6b;">
-              目前專案元件清單
-            </div>
-          </div>
+          <!-- 高溫／常溫條件＋各分類 Total Pd(W)：同一個 grid 兩列（欄位上下對齊） -->
           <div id="sg-power-summary-container" style="display:none; margin-bottom:14px;">
-            <div class="sg-power-group">
-              <div class="sg-power-group-label">高溫條件&Total Pd(W)</div>
-              <div id="sg-power-row-hot" class="sg-power-row"></div>
-            </div>
-            <div class="sg-power-group">
-              <div class="sg-power-group-label">常溫條件&Total Pd(W)</div>
-              <div id="sg-power-row-rt" class="sg-power-row"></div>
+            <div class="sg-power-grid">
+              <div class="sg-power-group">
+                <div class="sg-power-group-label" title="高溫條件＆各分類 Total Pd(W)">高溫條件</div>
+                <div id="sg-power-row-hot" class="sg-power-row"></div>
+              </div>
+              <div class="sg-power-group">
+                <div class="sg-power-group-label" title="常溫條件＆各分類 Total Pd(W)">常溫條件</div>
+                <div id="sg-power-row-rt" class="sg-power-row"></div>
+              </div>
             </div>
           </div>
           <div id="sg-project-components-body"></div>

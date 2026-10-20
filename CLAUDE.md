@@ -523,6 +523,18 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   滑過 `noteTipShow` 顯示完整內容）。匯出 PDF 時暫時把 icon 換成備註文字再截圖。
 - 契約測試：`tests/vd-judge.test.js`。
 
+#### EE/RF/PWR 頁（Tab1）頂部精簡：專案列＋高溫／常溫條件
+
+使用者要求這一區整體高度壓掉一半以上：面板頂端到元件表 402px → 約 165px（StarKcore-12L、不含 4 秒自動收起的載入提示列）。
+
+- 標題列縮薄、「選擇專案」放到下拉左邊、同排按鈕 34px、拿掉「目前專案元件清單」小標題。
+- 高溫／常溫條件（環溫／Backoff／Duplex＋RF／Digital／PWR／Total Pd）合成**同一個 grid 的兩列**（`.sg-power-grid`；
+  `.sg-power-group`／`.sg-power-row` 用 `display: contents` 攤平）→ 欄位上下對齊，chip 26px。`sgRenderProjectComponents`
+  仍往 `#sg-power-row-hot`／`#sg-power-row-rt` 填 7 個 chip，**加減 chip 要一起改 `grid-template-columns` 的欄數**。
+- 1250px 以下放不下一列 → 改回每個條件一行（flex 換行），不出橫向捲軸。
+- PDF 匯出只截元件表本體（`#sg-project-components-body`），不受影響。
+- 契約測試：`tests/sg-head-layout.test.js`（高度 ≤ 200px、兩列對齊、環溫自訂、1920／1536／1366／1200、未解鎖停用）。
+
 #### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
 
 - 目標寬度：1920（22 吋）、1536（17 吋筆電 125% 縮放）、1600，並留餘裕到 1366。`.comp-table` **不設表格最小寬度**
