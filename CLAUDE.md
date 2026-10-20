@@ -523,17 +523,35 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   滑過 `noteTipShow` 顯示完整內容）。匯出 PDF 時暫時把 icon 換成備註文字再截圖。
 - 契約測試：`tests/vd-judge.test.js`。
 
-#### EE/RF/PWR 頁（Tab1）頂部精簡：專案列＋高溫／常溫條件
+#### 四個功能頁頂部精簡：專案卡片＋工具列（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）
 
-使用者要求這一區整體高度壓掉一半以上：面板頂端到元件表 402px → 約 165px（StarKcore-12L、不含 4 秒自動收起的載入提示列）。
+使用者要求頂部資訊欄整體高度壓掉一半以上，四頁用同一套（實測 StarKcore-12L、1536、不含 4 秒自動收起的載入提示列）：
 
-- 標題列縮薄、「選擇專案」放到下拉左邊、同排按鈕 34px、拿掉「目前專案元件清單」小標題。
-- 高溫／常溫條件（環溫／Backoff／Duplex＋RF／Digital／PWR／Total Pd）合成**同一個 grid 的兩列**（`.sg-power-grid`；
-  `.sg-power-group`／`.sg-power-row` 用 `display: contents` 攤平）→ 欄位上下對齊，chip 26px。`sgRenderProjectComponents`
-  仍往 `#sg-power-row-hot`／`#sg-power-row-rt` 填 7 個 chip，**加減 chip 要一起改 `grid-template-columns` 的欄數**。
-- 1250px 以下放不下一列 → 改回每個條件一行（flex 換行），不出橫向捲軸。
-- PDF 匯出只截元件表本體（`#sg-project-components-body`），不受影響。
-- 契約測試：`tests/sg-head-layout.test.js`（高度 ≤ 200px、兩列對齊、環溫自訂、1920／1536／1366／1200、未解鎖停用）。
+| 頁 | 原本（面板頂端 → 主要內容） | 現在 |
+|---|---|---|
+| EE/RF/PWR | 402px（含高溫／常溫條件）| 165px |
+| TH/ME | 235px（卡片＋另一條匯出列）| 104px |
+| 模擬與實測驗證 | 183px ＋ 判定規則框約 150px | 104px ＋ 判定規則 57px |
+| Thermal Via | 183px | 104px |
+
+- 卡片標題列縮薄、內距縮小（Tab1 `#tab-specgen > .sg-panel`；其他三頁 `.card.proj-card`）。
+- 工具列四頁共用 `.sg-proj-toolbar`：`.sg-proj-field`（「選擇專案」在下拉左邊）、`.sg-proj-actions`（載入／儲存…，34px）、
+  `.sg-proj-exports`（匯出鈕半高、靠右）。1281～1500px 下拉縮到 230px，1366 也排成一行；≤1280px 下拉獨佔一行。
+- **TH/ME 頁原本卡片下面另一條匯出列**（PDF／Excel／🧪 TIM 型號庫／EE 匯出／EE 匯入）併進卡片工具列右側，
+  容器仍是 `#export-toolbar`（沒選專案時整組隱藏，`renderAllCategories`／`onProjectChange` 照舊切 display）；
+  「被勾選隱藏的元件不會出現在匯出表格中」改成 PDF／Excel 鈕的 tooltip。
+- EE/RF/PWR 頁：高溫／常溫條件（環溫／Backoff／Duplex＋RF／Digital／PWR／Total Pd）合成**同一個 grid 的兩列**
+  （`.sg-power-grid`；`.sg-power-group`／`.sg-power-row` 用 `display: contents` 攤平）→ 欄位上下對齊，chip 26px。
+  `sgRenderProjectComponents` 仍往 `#sg-power-row-hot`／`#sg-power-row-rt` 填 7 個 chip，**加減 chip 要一起改
+  `grid-template-columns` 的欄數**；1250px 以下改回每個條件一行。拿掉「目前專案元件清單」小標題。
+- 模擬與實測驗證頁：判定規則（`vdRulesHtml`）收成兩行 —— ① 標題＋「RF/EE/PWR 填寫…」＋比對環溫 Ta
+  ② 溫度、Pd 兩組門檻（`.vd-rules-grp` 不換行，放不下整組換行）＋「公式與依據」（展開時 `flex-basis:100%` 自己佔一行）。
+  PDF 匯出截的就是這個 DOM，螢幕與 PDF 一致。
+- 右側浮動工具列讓位：模擬與實測驗證頁整頁讓（原本儲存鈕、比對環溫的 ✂ 被蓋住）；EE/RF/PWR 頁**只讓專案列**
+  （原本匯出 PDF 被蓋住）—— 它的元件表很寬，整頁讓的話 1366 會被裁掉一截（Cygnus 實測 9px → 65px）。
+- PDF 匯出：EE/RF/PWR 頁只截元件表本體（`#sg-project-components-body`），不受影響。
+- 契約測試：`tests/sg-head-layout.test.js`（Tab1 高度 ≤ 200px、兩列對齊、環溫自訂、1920／1536／1366／1200；
+  其他三頁卡片 ≤ 100px、工具列一行、不被右側工具列蓋住、TH/ME 匯出併入卡片、驗證頁規則兩行）。
 
 #### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
 

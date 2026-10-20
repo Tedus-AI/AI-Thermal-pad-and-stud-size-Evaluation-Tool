@@ -8,6 +8,9 @@
  *   [C] 版面：1920／1536／1366 沒有橫向捲軸、條件表兩列；環溫選「自訂」多出輸入框時兩列仍對齊；
  *       1200（窄於 grid）改成每個條件一行、不出橫向捲軸
  *   [D] 參數仍可改（Backoff、Duplex 改了會重算 Pd），未解鎖時停用
+ *   [E] TH/ME、模擬與實測驗證、Thermal Via 三頁比照同一套：專案卡片 ≤ 100px、工具列一行（1920／1536／1366）、
+ *       「選擇專案」在下拉左邊；TH/ME 頁的匯出列（PDF／Excel／TIM 型號庫／EE 匯出入）併進卡片、說明改成 tooltip；
+ *       右側浮動工具列不蓋住任何一頁的工具列按鈕；驗證頁的判定規則兩行、展開「公式與依據」時自己佔一行
  *
  * 執行：
  *   npx http-server . -p 8125 -c-1 &      # 於 repo 根目錄
@@ -66,7 +69,7 @@ const PROJ = {
     const table = R(document.getElementById('sg-project-components-body'));
     const hot = [...document.querySelectorAll('#sg-power-row-hot > *')].map(R);
     const rt = [...document.querySelectorAll('#sg-power-row-rt > *')].map(R);
-    const lab = R(document.querySelector('.sg-proj-field label')), sel = R(document.getElementById('sg-project-select'));
+    const lab = R(document.querySelector('#tab-specgen .sg-proj-field label')), sel = R(document.getElementById('sg-project-select'));
     return {
       h: Math.round(table.top - panel.top),
       hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -115,6 +118,65 @@ const PROJ = {
   ok('改 Backoff → 存進專案參數、條件表重繪（Total 照樣顯示）', after.saved === '3' && /Total : [\d.]+ W/.test(after.t), { before, after });
   await page.evaluate(() => relock());
   ok('未解鎖：Backoff／Duplex／環溫停用', await page.evaluate(() => ['sg-param-backoff', 'sg-sel-duplex', 'sg-sel-temp', 'sg-param-backoff-rt', 'sg-sel-duplex-rt'].every(id => document.getElementById(id).disabled)));
+
+  console.log('\n[E] 其他三頁');
+  await page.evaluate(() => _applyUnlockedUI());
+  const CARD = { complist: '#tab-complist > .card', validation: '#tab-validation > .card', via: '#tab-via > .card' };
+  for (const w of [1920, 1536, 1366]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    for (const [t, sel] of Object.entries(CARD)) {
+      await page.evaluate((t) => { switchTab(t); ['comp-status', 'vd-status', 'via-status'].forEach(i => { const e = document.getElementById(i); if (e) e.style.display = 'none'; }); }, t);
+      await page.waitForTimeout(60);
+      const c = await page.evaluate((sel) => {
+        const card = document.querySelector(sel), R = (el) => el.getBoundingClientRect();
+        const btns = [...card.querySelectorAll('.sg-proj-toolbar button')].filter(b => b.offsetParent !== null).map(R);
+        const rail = R(document.getElementById('gm-rail')), fab = R(document.getElementById('tc-fab'));
+        const lab = R(card.querySelector('.sg-proj-field label')), s = R(card.querySelector('.sg-proj-field select'));
+        return { h: Math.round(R(card).height), n: btns.length,
+          oneLine: btns.every(b => Math.abs((b.top + b.bottom) / 2 - (s.top + s.bottom) / 2) < 6),
+          labelLeft: lab.right <= s.left && Math.abs((lab.top + lab.bottom) / 2 - (s.top + s.bottom) / 2) < 6,
+          railClear: btns.every(b => b.right <= rail.left - 2 || b.bottom <= rail.top || b.top >= rail.bottom) && btns.every(b => b.right <= fab.left - 2 || b.bottom <= fab.top || b.top >= fab.bottom),
+          hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+      }, sel);
+      ok(`${w}px ${t}：卡片 ${c.h}px ≤ 100、工具列一行、「選擇專案」在下拉左邊、按鈕不被右側工具列蓋住、沒有橫向捲軸`, c.h <= 100 && c.oneLine && c.labelLeft && c.railClear && c.hscroll <= 0, c);
+    }
+  }
+  for (const w of [1536, 1366]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.evaluate(() => switchTab('specgen'));
+    await page.waitForTimeout(60);
+    const t1 = await page.evaluate(() => {
+      const R = (el) => el.getBoundingClientRect(), rail = R(document.getElementById('gm-rail')), fab = R(document.getElementById('tc-fab'));
+      const btns = [...document.querySelectorAll('#tab-specgen .sg-proj-toolbar button')].filter(b => b.offsetParent !== null).map(R);
+      const clear = (r) => btns.every(b => b.right <= r.left - 2 || b.bottom <= r.top || b.top >= r.bottom);
+      return { n: btns.length, clear: clear(rail) && clear(fab), maxRight: Math.round(Math.max(...btns.map(b => b.right))), railLeft: Math.round(Math.min(rail.left, fab.left)) };
+    });
+    ok(`${w}px EE/RF/PWR 頁：專案列按鈕（含匯出 PDF）不被右側工具列蓋住`, t1.n >= 7 && t1.clear, t1);
+  }
+  await page.setViewportSize({ width: 1536, height: 900 });
+  await page.evaluate(() => switchTab('complist'));
+  const ex = await page.evaluate(() => {
+    const tb = document.getElementById('export-toolbar');
+    return { inCard: !!tb.closest('#tab-complist > .card'), shown: tb.style.display !== 'none',
+      btns: [...tb.querySelectorAll('button')].map(b => b.textContent.replace(/\s+/g, ' ').trim()),
+      tip: /隱藏/.test(tb.querySelector('.btn-export.pdf').title) && /隱藏/.test(tb.querySelector('.btn-export.excel').title),
+      oldRow: !!document.querySelector('#tab-complist > .export-toolbar') };
+  });
+  ok('TH/ME 頁：匯出列併進卡片工具列（PDF／Excel／TIM 型號庫／EE 匯出／EE 匯入）、「隱藏元件不匯出」改成 tooltip',
+    ex.inCard && ex.shown && !ex.oldRow && ex.btns.length === 5 && ex.tip && /TIM 型號庫/.test(ex.btns.join()) && /EE 匯入/.test(ex.btns.join()), ex);
+  ok('TH/ME 頁：沒選專案時匯出整組隱藏', await page.evaluate(async () => { document.getElementById('project-select').value = ''; await onProjectChange();
+    const hidden = document.getElementById('export-toolbar').style.display === 'none'; await projOpenAll('X'); return hidden; }));
+  await page.evaluate(() => switchTab('validation'));
+  const vr = await page.evaluate(() => {
+    const box = document.querySelector('#vd-container .vd-rules'), rows = box.querySelectorAll(':scope > .vd-rules-row');
+    return { rows: rows.length, h: Math.round(box.getBoundingClientRect().height),
+      ta: !!rows[0].querySelector('.vd-ta'), note: /RF\/EE\/PWR 填寫/.test(rows[0].textContent), grp: rows[1].querySelectorAll('.vd-rules-grp').length };
+  });
+  ok(`驗證頁判定規則：兩行（標題＋填寫說明＋Ta／溫度＋Pd 門檻）、高度 ${vr.h}px ≤ 60`, vr.rows === 2 && vr.h <= 60 && vr.ta && vr.note && vr.grp === 2, vr);
+  await page.click('#vd-container .vd-rules-more summary');
+  const op = await page.evaluate(() => { const d = document.querySelector('#vd-container .vd-rules-more'), row = d.parentElement;
+    return { open: d.open, full: Math.abs(d.getBoundingClientRect().width - (row.getBoundingClientRect().width)) < 2 }; });
+  ok('展開「公式與依據」→ 自己佔滿一行', op.open && op.full, op);
 
   ok('沒有 JS 錯誤', errors.length === 0, errors);
   await browser.close();

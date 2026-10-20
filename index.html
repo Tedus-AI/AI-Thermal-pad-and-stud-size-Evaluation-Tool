@@ -960,11 +960,14 @@
      TH/ME 頁最右邊的欄位（備註 📝 —— 滑過預覽就摸不到）與 EE 匯入鈕，速算頁則蓋住結果卡右緣。
      工具列還在預設位置時，這兩頁右側讓出它的寬度：1536 以下固定讓 56px（48px 重疊＋8px 間距），1536～1648 之間
      內容區置中、重疊逐漸變小。使用者拖走工具列（.gm-moved）就不讓 —— 不知道它被放在哪；
-     ≤1100px 工具列本來就隱藏。 */
+     ≤1100px 工具列本來就隱藏。Thermal Via、模擬與實測驗證頁也整頁讓（儲存鈕、比對環溫的 ✂ 原本被蓋住）；
+     EE/RF/PWR 頁只讓專案列（匯出 PDF 原本被蓋住）—— 它的元件表很寬，整頁讓的話 1366 會被裁掉一截。 */
   @media (min-width: 1101px) {
     body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist,
     body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-via {
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-via,
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-validation,
+    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-specgen .sg-proj-toolbar {
       padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
     }
   }
@@ -1409,8 +1412,11 @@
   .vd-err-red    { color: #e00000; font-weight: 700; }
   .vd-sub { font-size: 0.7rem; font-weight: 500; opacity: 0.8; margin-top: 1px; white-space: nowrap; }
   /* 誤差判定規則（放在 #vd-container 裡：鎖定與 PDF 匯出都涵蓋） */
-  .vd-rules { margin-bottom: 16px; padding: 10px 16px; background: #f8f9fb; border-radius: 8px; border: 1px solid #e0e6ed; font-size: 0.82rem; color: #555; }
-  .vd-rules-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 5px; }
+  .vd-rules { margin-bottom: 12px; padding: 6px 14px; background: #f8f9fb; border-radius: 8px; border: 1px solid #e0e6ed; font-size: 0.82rem; color: #555; }
+  .vd-rules-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+  .vd-rules-row + .vd-rules-row { margin-top: 3px; }
+  .vd-rules-grp { display: inline-flex; align-items: center; gap: 5px 12px; white-space: nowrap; margin-right: 10px; }
+  .vd-rules-grp > span { display: inline-flex; align-items: center; gap: 5px; }
   .vd-rules-row > span { display: inline-flex; align-items: center; gap: 5px; }
   .vd-rules-h { font-size: 0.86rem; color: #333; }
   .vd-rules-same { color: #888; font-size: 0.76rem; }
@@ -1424,10 +1430,11 @@
   .vd-ta-input { width: 64px; padding: 3px 6px; border: 1.5px solid #cbd5e1; border-radius: 5px; font-size: 0.82rem; text-align: center; }
   .vd-ta-btn { font-size: 0.74rem; padding: 2px 8px; border-radius: 5px; border: 1px solid #cbd5e1; background: #fff; color: #555; cursor: pointer; }
   .vd-ta-btn:hover { border-color: #94a3b8; background: #f1f5f9; }
-  .vd-rules-more { margin: 4px 0 2px; }
+  .vd-rules-more { margin: 0; }
+  .vd-rules-more[open] { flex-basis: 100%; }   /* 展開時自己佔滿一行，公式清單不會擠在第二行尾巴 */
   .vd-rules-more summary { cursor: pointer; color: #2563eb; font-size: 0.78rem; }
   .vd-rules-more ul { margin: 6px 0 2px; padding-left: 20px; line-height: 1.7; }
-  .vd-rules-note { margin-top: 4px; font-weight: 600; color: #333; }
+  .vd-rules-note { font-weight: 600; color: #333; font-size: 0.78rem; }
   .vd-pd-sel {
     border: 1px solid #ccc; border-radius: 4px; padding: 2px 4px;
     font-size: 0.78rem; background: #fff; color: #333; cursor: pointer;
@@ -4022,15 +4029,26 @@
      標題列縮薄、「選擇專案」放到下拉左邊、同排按鈕 34px、拿掉「目前專案元件清單」小標題；
      高溫／常溫條件合成一張兩列的表：同一個 grid（群組與列用 display:contents 攤平）→ 欄位上下對齊，chip 26px。
      實測（StarKcore-12L、不含載入提示列）：面板頂端到元件表 402px → 約 165px。
+     TH/ME 頁原本卡片下面還有一條匯出列（PDF／Excel／TIM 型號庫／EE 匯出入），併進卡片工具列右側（#export-toolbar）。
      ⚠ 元件表本體（PDF 匯出截的那一塊）不動。 */
-  #tab-specgen > .sg-panel > .sg-panel-header { padding: 6px 18px !important; font-size: 0.9rem !important; }
+  /* TH/ME、模擬與實測驗證、Thermal Via 三頁的專案卡片（.card.proj-card）比照同一套：標題列縮薄、內距縮小、
+     工具列共用 .sg-proj-toolbar（「選擇專案」在下拉左邊、按鈕 34px、匯出鈕半高靠右） */
+  #tab-specgen > .sg-panel > .sg-panel-header,
+  .card.proj-card > .card-header { padding: 6px 18px !important; font-size: 0.9rem !important; }
   #tab-specgen > .sg-panel > .sg-panel-body { padding: 10px 18px 14px !important; }
-  #tab-specgen .sg-proj-toolbar { --sg-row-h: 34px; align-items: center; }
-  #tab-specgen .sg-proj-toolbar .sg-proj-field { display: flex; align-items: center; gap: 8px; }
-  #tab-specgen .sg-proj-toolbar .sg-proj-field label { margin: 0; white-space: nowrap; flex: none; }
-  #tab-specgen .sg-proj-toolbar .sg-proj-field select { flex: 1; min-width: 0; padding-top: 0; padding-bottom: 0; }
-  #tab-specgen .sg-proj-actions,
-  #tab-specgen .sg-proj-exports { align-items: center; }
+  .card.proj-card { margin-bottom: 14px !important; }
+  .card.proj-card > .card-body { padding: 10px 18px 12px !important; }
+  .sg-proj-toolbar { --sg-row-h: 34px; align-items: center; }
+  .sg-proj-toolbar .sg-proj-field { display: flex; align-items: center; gap: 8px; }
+  .sg-proj-toolbar .sg-proj-field label { margin: 0; white-space: nowrap; flex: none; }
+  .sg-proj-toolbar .sg-proj-field select { flex: 1; min-width: 0; padding-top: 0; padding-bottom: 0; }
+  .sg-proj-actions,
+  .sg-proj-exports { align-items: center; }
+  .card.proj-card .comp-status { margin: 10px 0 0 !important; }
+  /* 1500px 以下下拉縮窄（專案名稱都不長），TH/ME 頁的匯出鈕在 1366 才不會擠到第二行 */
+  @media (max-width: 1500px) and (min-width: 1281px) {
+    .sg-proj-toolbar .sg-proj-field { flex: 0 1 230px; max-width: 230px; min-width: 170px; }
+  }
   #tab-specgen #sg-project-components { margin-top: 8px !important; }
   #sg-power-summary-container { margin-bottom: 10px !important; }
   .sg-power-grid {
@@ -5401,21 +5419,25 @@
   <!-- ==================== Tab 3: 模擬與實測驗證 ==================== -->
   <div id="tab-validation" class="tab-content">
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card proj-card">
       <div class="card-header blue">&#128202; 模擬與實測驗證</div>
       <div class="card-body">
-        <div class="comp-toolbar">
-          <div class="field">
+        <div class="comp-toolbar sg-proj-toolbar">
+          <div class="field sg-proj-field">
             <label>選擇專案</label>
             <select id="vd-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="vd-load-btn" onclick="projLoadClick()">載入專案</button>
-          <button class="btn-export excel" onclick="vdExportExcel()" id="vd-export-excel-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128202; 匯出 Excel</button>
-          <button class="btn-export pdf" onclick="vdExportPdf()" id="vd-export-pdf-btn" style="padding:7px 14px; font-size:0.82rem;" disabled>&#128196; 匯出 PDF</button>
-          <button class="btn btn-save" id="vd-save-btn" onclick="vdSaveValidation()" disabled>儲存驗證資料</button>
-          <span id="vd-save-status" class="save-status"></span>
+          <div class="sg-proj-actions">
+            <button class="btn btn-primary" id="vd-load-btn" onclick="projLoadClick()">載入專案</button>
+            <button class="btn btn-save" id="vd-save-btn" onclick="vdSaveValidation()" disabled>儲存驗證資料</button>
+            <span id="vd-save-status" class="save-status"></span>
+          </div>
+          <div class="sg-proj-exports">
+            <button class="btn-export excel" onclick="vdExportExcel()" id="vd-export-excel-btn" disabled>&#128202; 匯出 Excel</button>
+            <button class="btn-export pdf" onclick="vdExportPdf()" id="vd-export-pdf-btn" disabled>&#128196; 匯出 PDF</button>
+          </div>
         </div>
         <div id="vd-status" class="comp-status" style="display:none;"></div>
       </div>
@@ -5493,22 +5515,26 @@
        兩頁編輯的是記憶體裡同一份 thermalSpecs，存檔走 saveAllTabs（TH/ME 頁那一筆寫入）。 -->
   <div id="tab-via" class="tab-content">
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card proj-card">
       <div class="card-header blue">&#9881;&#65039; Thermal Via 計算 <span class="via-hd-sub">等效 K 值・穿板熱阻・Via 配置檢查</span></div>
       <div class="card-body">
-        <div class="comp-toolbar">
-          <div class="field">
-            <label>選擇專案 <span class="via-hd-sub" style="margin-left:2px;">（四個功能頁同步：任何一頁換專案，其他頁跟著換）</span></label>
+        <div class="comp-toolbar sg-proj-toolbar">
+          <div class="field sg-proj-field">
+            <label>選擇專案</label>
             <select id="via-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="via-load-btn" onclick="projLoadClick()">載入專案</button>
-          <button class="btn-export excel" id="via-export-excel-btn" onclick="viaExportExcel()" disabled style="padding:7px 14px; font-size:0.82rem;">&#128202; 匯出 Excel</button>
-          <button class="btn btn-save" id="via-save-btn" onclick="saveAllTabs()" disabled>儲存 Via 設計</button>
-          <span id="via-save-status" class="save-status"></span>
+          <div class="sg-proj-actions">
+            <button class="btn btn-primary" id="via-load-btn" onclick="projLoadClick()">載入專案</button>
+            <button class="btn btn-save" id="via-save-btn" onclick="saveAllTabs()" disabled>儲存 Via 設計</button>
+            <span id="via-save-status" class="save-status"></span>
+          </div>
+          <div class="sg-proj-exports">
+            <button class="btn-export excel" id="via-export-excel-btn" onclick="viaExportExcel()" disabled>&#128202; 匯出 Excel</button>
+          </div>
         </div>
-        <div id="via-status" class="comp-status" style="display:none; margin:14px 0 0;"></div>
+        <div id="via-status" class="comp-status" style="display:none;"></div>
       </div>
     </div>
 
@@ -5525,34 +5551,33 @@
   <!-- ==================== Tab 2: Component List ==================== -->
   <div id="tab-complist" class="tab-content">
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card proj-card">
       <div class="card-header blue">&#128203; 專案元件熱設計清單</div>
       <div class="card-body">
-        <div class="comp-toolbar">
-          <div class="field">
+        <div class="comp-toolbar sg-proj-toolbar">
+          <div class="field sg-proj-field">
             <label>選擇專案</label>
             <select id="project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
               <option value="">-- 請先載入專案列表 --</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="load-projects-btn" onclick="projLoadClick()">載入專案</button>
-          <button class="btn btn-save" id="save-btn" onclick="saveThermalSpecs()" style="display:none;">儲存熱設計資料</button>
-          <span id="save-status" class="save-status"></span>
-        </div>
-        <div id="comp-status" class="comp-status" style="display:none;"></div>
-      </div>
-    </div>
-
-    <!-- Export Toolbar -->
-    <div id="export-toolbar" class="export-toolbar" style="display:none;">
-      <button class="btn-export pdf" onclick="exportPDF()">&#128196; 匯出 PDF</button>
-      <button class="btn-export excel" onclick="exportExcel()">&#128202; 匯出 Excel</button>
-      <span style="font-size:0.82rem;color:#888;">（被勾選「隱藏」的元件不會出現在匯出表格中）</span>
-      <span style="flex:1;"></span>
+          <div class="sg-proj-actions">
+            <button class="btn btn-primary" id="load-projects-btn" onclick="projLoadClick()">載入專案</button>
+            <button class="btn btn-save" id="save-btn" onclick="saveThermalSpecs()" style="display:none;">儲存熱設計資料</button>
+            <span id="save-status" class="save-status"></span>
+          </div>
+          <!-- 匯出列（原本在卡片下面另佔一列）：併進工具列右側；沒選專案時整組隱藏（renderAllCategories／onProjectChange 切 display） -->
+          <div id="export-toolbar" class="sg-proj-exports" style="display:none;">
+      <button class="btn-export pdf" onclick="exportPDF()" title="匯出 PDF（被勾選「隱藏」的元件不會出現在匯出表格中）">&#128196; 匯出 PDF</button>
+      <button class="btn-export excel" onclick="exportExcel()" title="匯出 Excel（被勾選「隱藏」的元件不會出現在匯出表格中）">&#128202; 匯出 Excel</button>
       <button class="btn-export tim-lib" onclick="timLibOpen()" title="維護 TIM 型號庫（型號、k 值與填縫厚度；型號、k、廠商可參照 TIM 管理工具）。全工具共用，所有專案都能選用；未解鎖時可檢視">&#129517; TIM 型號庫<span id="tim-lib-badge" class="tim-lib-badge" style="display:none"></span></button>
       <button class="btn-export ee-export" onclick="eeExportExcel()">&#128202; EE 匯出 Excel</button>
       <button class="btn-export ee-import" id="ee-import-btn" onclick="document.getElementById('ee-import-file').click()" disabled title="需先解鎖密碼保護才能使用">&#128229; EE 匯入 Excel</button>
       <input type="file" id="ee-import-file" accept=".xlsx,.xls" style="display:none;" onchange="eeImportExcel(this)">
+          </div>
+        </div>
+        <div id="comp-status" class="comp-status" style="display:none;"></div>
+      </div>
     </div>
 
     <!-- Component Tables by Category -->
@@ -14652,13 +14677,17 @@ function vdRulesHtml() {
     : `<span class="vd-ta-val" title="取自元件清單的專案環境溫度">${ta === null ? '—' : ta + '°C'}</span>
        <span class="vd-ta-src">（取自專案環溫）</span>
        <button type="button" class="vd-ta-btn" onclick="vdOnTaUnlock()" title="測試時的環溫與專案環溫不同時，手動指定">✂ 手動指定</button>`;
+  // 精簡成兩行（使用者要求頂部資訊欄壓低）：① 標題＋誰填哪些欄位＋比對環溫 ② 溫度、Pd 兩組門檻＋「公式與依據」。
+  // 每組門檻是一個不換行的單位（.vd-rules-grp），放不下時整組換到下一行；展開「公式與依據」時它自己佔滿一行。
   return `<div class="vd-rules">
     <div class="vd-rules-row"><b class="vd-rules-h">誤差判定規則</b><span class="vd-rules-same">與 Thermal Test Report 比對頁相同</span>
+      <span class="vd-rules-note">RF/EE/PWR 填寫：Pd(實測值) 欄位；TH 填寫：溫度相關值欄位</span>
       <span class="vd-ta">比對環溫 Ta：${taCtl}</span></div>
-    <div class="vd-rules-row"><b class="vd-rules-k">溫度</b><span class="vd-rules-basis">以溫升為基準</span>
-      <span>${dot('g')}|溫升誤差%| ≤ ${g}% 或 |溫差| ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></div>
-    <div class="vd-rules-row"><b class="vd-rules-k">Pd</b><span class="vd-rules-basis">以實測為基準</span>
-      <span>${dot('g')}|Pd 誤差%| ≤ ${g}% 或 對溫度影響 ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></div>
+    <div class="vd-rules-row">
+      <span class="vd-rules-grp"><b class="vd-rules-k">溫度</b><span class="vd-rules-basis">以溫升為基準</span>
+        <span>${dot('g')}|溫升誤差%| ≤ ${g}% 或 |溫差| ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></span>
+      <span class="vd-rules-grp"><b class="vd-rules-k">Pd</b><span class="vd-rules-basis">以實測為基準</span>
+        <span>${dot('g')}|Pd 誤差%| ≤ ${g}% 或 對溫度影響 ≤ ${gc}°C</span><span>${dot('o')}≤ ${w}% 或 ≤ ${wc}°C</span><span>${dot('r')}其餘</span></span>
     <details class="vd-rules-more"><summary>公式與依據</summary>
       <ul>
         <li>實測溫升 = 溫度(實測) − Ta；溫差 = 溫度(模擬校正) − 溫度(實測)；<b>溫升誤差% = 溫差 ÷ 實測溫升 × 100</b>（實測溫升 ≤ 0 時只看溫差）。</li>
@@ -14669,7 +14698,7 @@ function vdRulesHtml() {
         <li>Pd 也用 ${g}%／${w}%：功耗誤差會等比例變成溫升誤差，兩邊門檻一致才互相對得上。</li>
       </ul>
     </details>
-    <div class="vd-rules-note">RF/EE/PWR 填寫：Pd(實測值) 欄位；TH 填寫：溫度相關值欄位</div>
+    </div>
   </div>`;
 }
 
