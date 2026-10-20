@@ -283,9 +283,9 @@ const graphDb = {
     // 防版本回退：SharePoint 在「剛寫入後立即重讀」偶爾會回傳寫入前的舊內容
     // (服務端 read-after-write 延遲)。若伺服器版本比我們手上的還舊，保留記憶體
     // 較新的 dbCache，避免剛存好的變更在重載時看起來「消失」。
-    // 例外（force）：412 衝突後的重讀必須以磁碟現況為準——sibling 工具不遞增
-    // version、版本歷史還原也會讓磁碟 version 變小，此時拒收會讓重試把過時
-    // 快取寫回、回滾他人寫入。
+    // 例外（force）：412 衝突後的重讀必須以磁碟現況為準——不遞增 version 的寫入者
+    // （例：5G-RRU 改版前的舊前端）、版本歷史還原都會讓磁碟 version 變小，此時拒收會讓重試
+    // 把過時快取寫回、回滾他人寫入。（5G-RRU 現在每次寫入也遞增 version，見其 graphDb.js。）
     if (!(opts && opts.force) && currentVersion && parsed.version < currentVersion &&
         dbCache && Object.keys(dbCache).length) {
       console.warn(`[graphDb] 忽略較舊的讀取結果 (server v${parsed.version} < local v${currentVersion})，保留本地較新版本`);
@@ -387,6 +387,7 @@ const graphDb = {
     // 取鎖檢查與寫入透過 If-Match 構成原子 check-and-set：
     // 若他人在我們讀檔後、寫入前搶先取鎖，PUT 會 412 → 重讀後重跑此函式，
     // 看到對方的有效鎖即丟 LockError，不會兩人同時取得鎖。
+    const renewing = !!currentLock;   // 本 session 已持鎖 → 這次是續約
     const lock = await this._withOptimisticWrite((cache) => {
       const now = new Date();
       const existingLock = cache.lock;
@@ -396,13 +397,22 @@ const graphDb = {
         // Lock expired — we can take it over
       }
       const expiresAt = new Date(now.getTime() + SHAREPOINT_CONFIG.lockTimeoutMinutes * 60 * 1000);
-      cache.lock = {
+      const next = {
         lockedBy: msalAccount.name,
         lockedByEmail: msalAccount.username,
         lockedAt: now.toISOString(),
         expiresAt: expiresAt.toISOString()
       };
-      return { value: cache.lock };
+      // 續約自己的鎖時，系統管理員的請離旗標要原樣帶著（不可續約一次就把請離要求洗掉）：
+      // 輪詢先看旗標、再續約，但兩次讀檔之間（或 412 重讀後）旗標才出現的話，只有這裡留得住它。
+      // 重新解鎖（不是續約）→ 新的編輯期間，不沿用上一次留下的旗標。與 5G-RRU 的 graphDb 同一段。
+      if (renewing && existingLock && existingLock.lockedByEmail === msalAccount.username && existingLock.evictRequested) {
+        next.evictRequested = true;
+        next.evictBy = existingLock.evictBy;
+        next.evictAt = existingLock.evictAt;
+      }
+      cache.lock = next;
+      return { value: next };
     });
     currentLock = lock;   // 寫入成功才認定持鎖：LockError/412 失敗不殘留假鎖狀態
     return currentLock;
