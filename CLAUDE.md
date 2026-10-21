@@ -23,7 +23,9 @@
       //                     param_temp, param_temp_custom,
       //                     param_backoff, param_backoff_rt,
       //                     param_duplex, param_duplex_rt,
-      //                     tcPlacement
+      //                     tcPlacement,
+      //                     band（專案頻段 'FR1'／'FR2'，Tab1 新增專案時選、條件表左邊可改；沒有 key＝FR1；
+      //                           FR2 不寫 param_backoff*／param_duplex*，見「專案頻段 FR1／FR2」）
       // AI-Thermal Tab3 寫: validation_data, vd_hidden_components,
       //                    vd_ta（比對環溫 °C；只有手動指定才有值，null／沒有 key＝取專案環溫 param_temp）
       // global_params 兩邊都會碰（key set 幾乎重疊但不完全相同，例如 Draft_Angle 只有 RRU 有）
@@ -543,7 +545,8 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - EE/RF/PWR 頁：高溫／常溫條件（環溫／Backoff／Duplex＋RF／Digital／PWR／Total Pd）合成**同一個 grid 的兩列**
   （`.sg-power-grid`；`.sg-power-group`／`.sg-power-row` 用 `display: contents` 攤平）→ 欄位上下對齊，chip 26px。
   `sgRenderProjectComponents` 仍往 `#sg-power-row-hot`／`#sg-power-row-rt` 填 7 個 chip，**加減 chip 要一起改
-  `grid-template-columns` 的欄數**；1250px 以下改回每個條件一行。拿掉「目前專案元件清單」小標題。
+  `grid-template-columns` 的欄數**（第 1 欄是跨兩列的頻段 `#sg-band-cell`、第 2 欄是條件名稱，後面 7 格；
+  FR2 時 Backoff＋Duplex 合成一格跨兩欄）；1250px 以下改回每個條件一行。拿掉「目前專案元件清單」小標題。
 - 模擬與實測驗證頁：判定規則（`vdRulesHtml`）收成兩行 —— ① 標題＋「RF/EE/PWR 填寫…」＋比對環溫 Ta
   ② 溫度、Pd 兩組門檻（`.vd-rules-grp` 不換行，放不下整組換行）＋「公式與依據」（展開時 `flex-basis:100%` 自己佔一行）。
   PDF 匯出截的就是這個 DOM，螢幕與 PDF 一致。
@@ -552,6 +555,26 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
 - PDF 匯出：EE/RF/PWR 頁只截元件表本體（`#sg-project-components-body`），不受影響。
 - 契約測試：`tests/sg-head-layout.test.js`（Tab1 高度 ≤ 200px、兩列對齊、環溫自訂、1920／1536／1366／1200；
   其他三頁卡片 ≤ 100px、工具列一行、不被右側工具列蓋住、TH/ME 匯出併入卡片、驗證頁規則兩行）。
+
+#### 專案頻段 FR1／FR2（`projects[id].band`）—— Backoff／Duplex 只屬於 FR1
+
+使用者要求：新增專案時選這案子是 FR1 還是 FR2，FR2 就不填 Backoff 與 Duplex Mode。
+
+- 值 `'FR1'`／`'FR2'`，**沒有 key＝FR1**：這個選項加上去之前建的專案一律當 FR1（備份裡 8 個專案看起來都是 Sub-6 的案子，
+  FDD 的更不可能是 FR2——FR2 只有 TDD），畫面與存檔行為和原本完全相同；只是載入再存檔**不寫** `band`（`_sgDirtyView` 用 `band || 'FR1'` 比，選回 FR1 也不算未存變更）。
+  判斷一律走 `sgBandOf(p)`。
+- 新增專案表單（`sgCreateProject`）：兩張選項卡，預設 FR1，建立時一律寫 `band`；建完選項回到 FR1。
+  radio 不包在 `.field` 裡（`.field input` 會把它撐成 100% 寬）。
+- 既有專案改頻段：高溫／常溫條件表最左邊跨兩列的「頻段」下拉（`#sg-band-cell`、`sgOnBandChange`），
+  跟環溫一樣按「儲存元件變更」才寫回；未解鎖時由 `applyReadonlyLock` 停用。
+- **FR2**：條件表的 Backoff＋Duplex 換成一格「Backoff／Duplex：FR2 不適用」（`sgNaChipHtml`，參照文字不是停用的欄位）；
+  `saveAllTabs` **不寫** `param_backoff`／`param_duplex`／`param_backoff_rt`／`param_duplex_rt`（不捏造 `'TDD 75%'`）。
+  原本填過的值**留在資料庫不刪** → 切回 FR1 會再顯示；「不適用」格的 tooltip 寫出保留的值。
+- Backoff／Duplex 只是記錄的條件、**不參與 Pd 加總**（`catPower` 只看 `Power(W)`／`Power_RT(W)`），所以切換頻段不會改變任何數字。
+  5G-RRU 不讀 `band`、也不讀 `param_backoff*`／`param_duplex*`（它的 `updateDoc` merge 原樣保留這個 key）；
+  它的「複製專案」不帶本工具的欄位 → 複本沒有 `band`＝FR1。
+- 不認得的值（例：手動寫進 `'FR3'`）→ 下拉補「FR3（未知值）」照原字顯示、行為照 FR1、存檔原樣寫回，不靜默改掉。
+- 契約測試：`tests/fr-band.test.js`。
 
 #### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
 

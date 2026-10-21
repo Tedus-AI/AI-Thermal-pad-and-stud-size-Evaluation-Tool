@@ -1134,6 +1134,21 @@
   }
   .sg-new-project-form.active { display: block; }
   .sg-new-project-form .field { margin-bottom: 10px; }
+  /* 頻段（FR1／FR2）：兩張可點的選項卡。不包在 .field 裡（.field input 會把 radio 撐成 100% 寬） */
+  .sg-band-field { margin-bottom: 12px; }
+  .sg-band-title { font-size: 0.82rem; font-weight: 600; color: var(--gm-text-2, #666); margin-bottom: 6px; }
+  .sg-band-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sg-band-opt {
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    padding: 7px 12px; border: 1.5px solid #c5d9ee; border-radius: 10px; background: #fff;
+    font-size: 0.85rem; color: #334155;
+  }
+  .sg-band-opt input { margin: 0; width: 16px; height: 16px; accent-color: #1d4ed8; flex: none; }
+  .sg-band-opt b { font-size: 0.95rem; color: #1a3a6b; }
+  .sg-band-opt .sg-band-rng { color: #64748b; font-size: 0.78rem; }
+  .sg-band-opt:has(input:checked) { border-color: #1d4ed8; background: #eef4ff; box-shadow: 0 0 0 2px rgba(29,78,216,0.12); }
+  .sg-band-opt:has(input:focus-visible) { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+  .sg-band-hint { margin-top: 6px; font-size: 0.78rem; color: #64748b; }
 
   /* Project Component List in Tab 3 */
   .sg-comp-category {
@@ -4051,8 +4066,9 @@
   }
   #tab-specgen #sg-project-components { margin-top: 8px !important; }
   #sg-power-summary-container { margin-bottom: 10px !important; }
+  /* 第 1 欄是專案的頻段（跨高溫／常溫兩列），第 2 欄是條件名稱，後面 7 格是條件與 Pd */
   .sg-power-grid {
-    display: grid; grid-template-columns: max-content repeat(7, max-content);
+    display: grid; grid-template-columns: max-content max-content repeat(7, max-content);
     gap: 4px 8px; align-items: center; justify-content: start;
     padding: 6px 10px; border: 1px solid var(--gm-border); border-radius: 12px; background: var(--gm-bg-soft);
   }
@@ -4069,10 +4085,28 @@
   .sg-power-grid .sg-power-chip { justify-content: center; }
   .sg-power-grid .sg-param-chip select,
   .sg-power-grid .sg-param-chip input { height: 20px; padding: 0 4px; font-size: 0.78rem; box-sizing: border-box; }
+  /* 頻段：跨兩列的一格（「頻段」字樣在上、下拉在下） */
+  .sg-band-cell {
+    grid-row: span 2; align-self: stretch;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 0 10px; border-radius: 10px; background: #1a3a6b; color: #fff;
+    font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+  }
+  .sg-band-cell select {
+    height: 22px; padding: 0 4px; font-size: 0.82rem; font-weight: 700; box-sizing: border-box;
+    background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: 4px;
+  }
+  .sg-band-cell select option { color: #222; background: #fff; }
+  /* FR2：Backoff＋Duplex 兩格合成一格「不適用」（參照文字，不是停用的欄位） */
+  .sg-power-grid .sg-param-chip.sg-na-chip {
+    grid-column: span 2; justify-content: center;
+    background: #f1f5f9; color: #475569; border: 1px dashed #94a3b8; box-shadow: none !important; font-weight: 600;
+  }
   /* 視窗窄到一列放不下（< 1250px）→ 改回每個條件一行、可換行，不出現橫向捲軸 */
   @media (max-width: 1250px) {
     .sg-power-grid { display: flex; flex-direction: column; gap: 6px; }
     .sg-power-grid .sg-power-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+    .sg-band-cell { flex-direction: row; align-self: flex-start; height: 26px; gap: 6px; }
   }
 
   /* ── Feedback tab ── */
@@ -5629,6 +5663,14 @@
             <label>專案名稱</label>
             <input type="text" id="sg-new-project-name" placeholder="例：5G RRU 新案">
           </div>
+          <div class="sg-band-field" role="radiogroup" aria-labelledby="sg-new-band-title">
+            <div class="sg-band-title" id="sg-new-band-title">頻段</div>
+            <div class="sg-band-opts">
+              <label class="sg-band-opt"><input type="radio" name="sg-new-band" value="FR1" checked><b>FR1</b><span class="sg-band-rng">Sub-6 GHz（410 MHz – 7.125 GHz）</span></label>
+              <label class="sg-band-opt"><input type="radio" name="sg-new-band" value="FR2"><b>FR2</b><span class="sg-band-rng">毫米波（24.25 – 71 GHz）</span></label>
+            </div>
+            <div class="sg-band-hint">FR2 專案不填 Backoff 與 Duplex Mode。建立後仍可在高溫／常溫條件左邊的「頻段」改。</div>
+          </div>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-primary" onclick="sgCreateProject()">建立專案</button>
             <button class="btn" style="background:#e0e0e0;color:#555;" onclick="sgToggleNewProject()">取消</button>
@@ -5641,6 +5683,7 @@
           <!-- 高溫／常溫條件＋各分類 Total Pd(W)：同一個 grid 兩列（欄位上下對齊） -->
           <div id="sg-power-summary-container" style="display:none; margin-bottom:14px;">
             <div class="sg-power-grid">
+              <div id="sg-band-cell" class="sg-band-cell"></div>
               <div class="sg-power-group">
                 <div class="sg-power-group-label" title="高溫條件＆各分類 Total Pd(W)">高溫條件</div>
                 <div id="sg-power-row-hot" class="sg-power-row"></div>
@@ -6592,6 +6635,7 @@ function _sgDirtyView() {
     pt: sgProjectData.param_temp || '55', ptc: sgProjectData.param_temp_custom || '',
     pb: sgProjectData.param_backoff || '', pd: sgProjectData.param_duplex || 'TDD 75%',
     pbr: sgProjectData.param_backoff_rt || '', pdr: sgProjectData.param_duplex_rt || 'TDD 75%',
+    bd: sgProjectData.band || 'FR1',   // 舊專案沒有 key＝FR1：只是看一眼、選回 FR1 不算未存變更
     tcp: (typeof tcpStripTransient === 'function') ? tcpStripTransient(sgProjectData.tcPlacement) : (sgProjectData.tcPlacement || null)
   };
 }
@@ -8418,6 +8462,46 @@ const SG_CAT_MAP = {
 };
 
 
+/* ---- 頻段（FR1／FR2）：`projects[id].band` ----
+   'FR1'／'FR2'；沒有 key＝FR1（這個選項加上去之前建的專案都是 FR1，行為與原本完全相同）。
+   FR2（毫米波）不填 Backoff 與 Duplex Mode：條件表把那兩格換成「不適用」，存檔也不寫那四個 key。
+   原本填過的值留在專案裡不刪 → 切回 FR1 會再顯示。Backoff／Duplex 只是記錄的條件、不參與 Pd 加總，
+   所以切換頻段不會改變任何 Pd 數字。 */
+const SG_BANDS = {
+  FR1: { label: 'FR1', range: 'Sub-6 GHz（410 MHz – 7.125 GHz）' },
+  FR2: { label: 'FR2', range: '毫米波（24.25 – 71 GHz）' }
+};
+function sgBandOf(p) { return p && p.band === 'FR2' ? 'FR2' : 'FR1'; }   // 不認得的值照 FR1 算（下拉照原字顯示）
+
+function sgOnBandChange(sel) {
+  if (!sgProjectData) return;
+  sgProjectData.band = sel.value;
+  sgRenderProjectComponents();
+}
+
+function sgBandCellHtml() {
+  const raw = sgProjectData.band;
+  const known = raw === undefined || raw === null || raw === '' || SG_BANDS[raw];
+  const cur = sgBandOf(sgProjectData);
+  // 對方工具或手動寫進不認得的值 → 補一個選項照原字顯示，不讓瀏覽器靜默顯示成 FR1、使用者一碰就改掉
+  const opts = Object.keys(SG_BANDS).map(k =>
+    `<option value="${k}"${known && k === cur ? ' selected' : ''}>${k}</option>`).join('') +
+    (known ? '' : `<option value="${escapeAttr(String(raw))}" selected>${escapeHtml(String(raw))}（未知值）</option>`);
+  const tip = known
+    ? `專案頻段：${cur} ${SG_BANDS[cur].range}` + (raw ? '' : '（舊專案沒有指定頻段，視為 FR1）') +
+      '。FR2 不填 Backoff 與 Duplex Mode；改了要按「儲存元件變更」才寫回。'
+    : `資料庫裡的頻段是「${raw}」，本工具不認得，暫時照 FR1 顯示 Backoff／Duplex。請改選 FR1 或 FR2。`;
+  return `<span>頻段</span><select id="sg-sel-band" onchange="sgOnBandChange(this)" aria-label="專案頻段" title="${escapeAttr(tip)}">${opts}</select>`;
+}
+
+function sgNaChipHtml(backoff, duplex) {
+  // 原本填過的值還留在專案裡（切回 FR1 會再顯示）→ tooltip 寫出來，使用者知道沒被刪
+  const kept = [backoff !== '' && backoff != null ? `Backoff ${backoff} dB` : '', duplex || ''].filter(Boolean).join('、');
+  const tip = 'FR2（毫米波）專案不填 Backoff 與 Duplex Mode。' +
+    (kept ? `之前填的值（${kept}）仍保留在專案裡，切回 FR1 會再顯示。` : '');
+  return `<div class="sg-param-chip sg-na-chip" title="${escapeAttr(tip)}">Backoff／Duplex：FR2 不適用</div>`;
+}
+
 function sgOnParamChange() {
   if (!sgProjectData) return;
   const selTemp = document.getElementById('sg-sel-temp');
@@ -8664,6 +8748,9 @@ function sgRenderProjectComponents() {
 
     const hotRow = document.getElementById('sg-power-row-hot');
     const rtRow = document.getElementById('sg-power-row-rt');
+    const fr2 = sgBandOf(sgProjectData) === 'FR2';
+    const bandCell = document.getElementById('sg-band-cell');
+    if (bandCell) bandCell.innerHTML = sgBandCellHtml();
 
     if (hotRow) hotRow.innerHTML =
       `<div class="sg-param-chip">環溫(°C) <select id="sg-sel-temp" onchange="sgOnParamChange()">` +
@@ -8671,11 +8758,12 @@ function sgRenderProjectComponents() {
         `<option value="55"${pTemp === '55' ? ' selected' : ''}>55°C</option>` +
         `<option value="custom"${pTemp === 'custom' ? ' selected' : ''}>自訂</option>` +
       `</select><input type="number" class="sg-temp-custom${pTemp === 'custom' ? ' visible' : ''}" id="sg-temp-custom" value="${escapeAttr(pTempCustom)}" placeholder="℃" onchange="sgOnParamChange()"></div>` +
+      (fr2 ? sgNaChipHtml(sgProjectData.param_backoff, sgProjectData.param_duplex) :
       `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff" value="${escapeAttr(pBackoff)}" placeholder="0"> dB</div>` +
       `<div class="sg-param-chip">Duplex Mode <select id="sg-sel-duplex" onchange="sgOnParamChange()">` +
         `<option value="TDD 75%"${pDuplex === 'TDD 75%' ? ' selected' : ''}>TDD 75%</option>` +
         `<option value="FDD 100%"${pDuplex === 'FDD 100%' ? ' selected' : ''}>FDD 100%</option>` +
-      `</select></div>` +
+      `</select></div>`) +
       `<div class="sg-power-chip rf">RF : ${fmt(catPower.RF || 0)} W</div>` +
       `<div class="sg-power-chip digital">Digital : ${fmt(catPower.Digital || 0)} W</div>` +
       `<div class="sg-power-chip pwr">PWR : ${fmt(catPower.PWR || 0)} W</div>` +
@@ -8683,11 +8771,12 @@ function sgRenderProjectComponents() {
 
     if (rtRow) rtRow.innerHTML =
       `<div class="sg-param-chip">環溫(°C) <select disabled><option>25°C</option></select></div>` +
+      (fr2 ? sgNaChipHtml(sgProjectData.param_backoff_rt, sgProjectData.param_duplex_rt) :
       `<div class="sg-param-chip">Backoff <input type="number" step="any" id="sg-param-backoff-rt" value="${escapeAttr(pBackoffRT || '0')}" placeholder="0"> dB</div>` +
       `<div class="sg-param-chip">Duplex Mode <select id="sg-sel-duplex-rt" onchange="sgOnParamChange()">` +
         `<option value="TDD 75%"${pDuplexRT === 'TDD 75%' ? ' selected' : ''}>TDD 75%</option>` +
         `<option value="FDD 100%"${pDuplexRT === 'FDD 100%' ? ' selected' : ''}>FDD 100%</option>` +
-      `</select></div>` +
+      `</select></div>`) +
       `<div class="sg-power-chip rt-rf">RF : ${fmt(catPowerRT.RF || 0)} W</div>` +
       `<div class="sg-power-chip rt-digital">Digital : ${fmt(catPowerRT.Digital || 0)} W</div>` +
       `<div class="sg-power-chip rt-pwr">PWR : ${fmt(catPowerRT.PWR || 0)} W</div>` +
@@ -13547,12 +13636,16 @@ async function saveAllTabs() {
           const f = {
             param_temp: sgProjectData.param_temp || '55',
             param_temp_custom: sgProjectData.param_temp_custom || '',
+            tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
+          };
+          // FR2 不填 Backoff／Duplex → 不寫那四個 key（不捏造 'TDD 75%'；之前填過的值留在資料庫，切回 FR1 會再顯示）
+          if (sgBandOf(sgProjectData) !== 'FR2') Object.assign(f, {
             param_backoff: sgProjectData.param_backoff || '',
             param_duplex: sgProjectData.param_duplex || 'TDD 75%',
             param_backoff_rt: sgProjectData.param_backoff_rt || '',
             param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
-            tcPlacement: tcpStripTransient(sgProjectData.tcPlacement)
-          };
+          });
+          if (sgProjectData.band) f.band = sgProjectData.band;   // 舊專案沒選過 → 不寫（沒有 key＝FR1）
           sgMerge = mergeInto(f, sgBase, sgMine, cur, resolutions);
           // 名稱變了的元件：資料庫最新內容（含 5G-RRU 的改名標記）、畫面、載入時快照三方對照
           const rn = sgCollectRenames(f, [cur, sgMine, sgBase], sgBase), taken = sgTakenNames(f);
@@ -13887,6 +13980,8 @@ async function sgCreateProject() {
   if (hasUnsavedEdits()) { alert('目前有尚未儲存的修改，請先按「儲存」（或放棄變更）再新增專案。\n新增後四個功能頁會一起切換到新專案。'); return; }
   const id = document.getElementById('sg-new-project-id').value.trim();
   const name = document.getElementById('sg-new-project-name').value.trim();
+  const bandEl = document.querySelector('input[name="sg-new-band"]:checked');
+  const band = bandEl && SG_BANDS[bandEl.value] ? bandEl.value : 'FR1';
   if (!id) { alert('請輸入專案 ID'); return; }
   if (!name) { alert('請輸入專案名稱'); return; }
   if (!(await _ensureLockBeforeWrite('建立專案'))) return;   // 寫入前驗鎖（H-4）
@@ -13900,6 +13995,7 @@ async function sgCreateProject() {
 
     await dbAdapter.setDoc('projects', id, {
       project_name: name,
+      band,   // 'FR1'／'FR2'（FR2 不填 Backoff／Duplex）
       meta: { version: 'v1.0', timestamp: new Date().toISOString() },
       rf_data: [],
       digital_data: [],
@@ -13914,9 +14010,11 @@ async function sgCreateProject() {
       relock();
     }
 
-    sgShowStatus('專案「' + name + '」建立成功！', 'success');
+    sgShowStatus('專案「' + name + '」（' + band + '）建立成功！', 'success');
     document.getElementById('sg-new-project-id').value = '';
     document.getElementById('sg-new-project-name').value = '';
+    const fr1 = document.querySelector('input[name="sg-new-band"][value="FR1"]');
+    if (fr1) fr1.checked = true;   // 下一個新專案回到預設 FR1
     sgToggleNewProject();
 
     // Reload and auto-select（四頁一起切到新專案）
