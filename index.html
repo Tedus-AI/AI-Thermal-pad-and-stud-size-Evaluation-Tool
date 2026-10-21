@@ -1164,6 +1164,21 @@
     align-items: center;
     gap: 6px;
   }
+  .sg-comp-category-header { flex-wrap: wrap; row-gap: 6px; }
+  .sg-cat-name { min-width: 0; }
+  /* PCB 板厚：緊接在標題文字後面的一顆膠囊。不放最右邊：這頁的元件表很寬，右側浮動工具列（#tc-rail-wrapper）
+     在 1648px 以下會蓋住標題列的右端。色底上用白底深字的實心控制項（白字透明底在色底上對比不足） */
+  .sg-pcbt { margin-left: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 2px 3px 2px 11px;
+    border-radius: 999px; background: rgba(0,0,0,.2); font-size: .8rem; font-weight: 600; white-space: nowrap; }
+  .sg-pcbt label { color: #fff; cursor: pointer; }
+  .sg-pcbt select, .sg-pcbt input { height: 26px; border: 0; border-radius: 999px; background: #fff; color: #1e293b;
+    font: inherit; font-weight: 600; padding: 0 10px; }
+  .sg-pcbt select { padding-right: 6px; cursor: pointer; }
+  .sg-pcbt input { width: 72px; text-align: right; padding-right: 8px; }
+  .sg-pcbt input.miss { box-shadow: inset 0 0 0 2px #dc2626; background: #fff5f5; }
+  .sg-pcbt select:focus-visible, .sg-pcbt input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .sg-pcbt select:disabled, .sg-pcbt input:disabled { cursor: not-allowed; color: #334155; opacity: .92; }
+  .sg-pcbt-unit { color: #fff; padding-right: 8px; }
   .sg-comp-category-header.rf { background: #c0392b; }
   .sg-comp-category-header.digital { background: #2e6bb5; }
   .sg-comp-category-header.pwr { background: #e67e22; }
@@ -6636,6 +6651,7 @@ function _sgDirtyView() {
     pb: sgProjectData.param_backoff || '', pd: sgProjectData.param_duplex || 'TDD 75%',
     pbr: sgProjectData.param_backoff_rt || '', pdr: sgProjectData.param_duplex_rt || 'TDD 75%',
     bd: sgProjectData.band || 'FR1',   // 舊專案沒有 key＝FR1：只是看一眼、選回 FR1 不算未存變更
+    pcb: sgPcbTNorm(sgProjectData),   // 沒有 key 與 {} 相同
     tcp: (typeof tcpStripTransient === 'function') ? tcpStripTransient(sgProjectData.tcPlacement) : (sgProjectData.tcPlacement || null)
   };
 }
@@ -8473,6 +8489,88 @@ const SG_BANDS = {
 };
 function sgBandOf(p) { return p && p.band === 'FR2' ? 'FR2' : 'FR1'; }   // 不認得的值照 FR1 算（下拉照原字顯示）
 
+/* ---- PCB 板厚（`projects[id].pcb_thickness`）----
+   { RF: 2.0, Digital: 2.4, PWR: 1.6 }（mm）：RF／Digital／PWR 各自那片板子的厚度，Tab1 三個分類標題列右邊的下拉
+   （常用三個＋自訂）。沒有 key（或那個分類沒有 key）＝沒設定；選「未設定」一律 delete，不寫 ''／0。
+   本工具目前只記錄、不參與任何計算（Thermal Via 頁的板厚仍取 5G-RRU 的 t_PCB，兩個 repo 共用的 viaCalc.js 沒動）；
+   熱網路工具（RRU-Thermal-Network-Visualizer）02 匯入這個專案時，拿它當「板級導熱孔」元件的板厚。 */
+const SG_PCB_T_PRESETS = [1.6, 2.0, 2.4];
+const SG_PCB_T_MAX = 10;   // 再大就是打錯（例：把 mil 填進 mm）
+let sgPcbTCustom = { pid: null, cats: {} };   // 選了「自訂」但還沒填數字的分類（畫面暫態，不寫資料）
+function sgPcbTOf(p, cat) {
+  const v = p && p.pcb_thickness ? p.pcb_thickness[cat] : undefined;
+  return (typeof v === 'number' && isFinite(v) && v > 0) ? v : null;
+}
+/* 比對與寫入用：key 依字母排序，選了又取消、再選回原值不會因為順序不同就算成未存變更 */
+function sgPcbTNorm(p) {
+  const o = (p && p.pcb_thickness) || {}, out = {};
+  Object.keys(o).sort().forEach(k => { out[k] = o[k]; });
+  return out;
+}
+function sgPcbTHtml(cat) {
+  if (sgPcbTCustom.pid !== sgProjectId) sgPcbTCustom = { pid: sgProjectId, cats: {} };
+  const label = SG_CAT_MAP[cat].label.split(' ')[0];
+  const raw = sgProjectData.pcb_thickness ? sgProjectData.pcb_thickness[cat] : undefined;
+  const has = raw !== undefined && raw !== null && raw !== '';
+  const v = sgPcbTOf(sgProjectData, cat);
+  const unknown = has && v === null;   // 對方工具或手動寫進不認得的值 → 照原字顯示，不靜默改掉
+  const preset = v !== null && SG_PCB_T_PRESETS.some(x => Math.abs(x - v) < 1e-9);
+  const custom = !unknown && ((v !== null && !preset) || !!sgPcbTCustom.cats[cat]);
+  const sel = unknown ? '__unknown' : custom ? 'custom' : (v !== null ? String(v) : '');
+  const opts = [['', '未設定'], ...SG_PCB_T_PRESETS.map(x => [String(x), x.toFixed(1) + ' mm']), ['custom', '自訂…']];
+  if (unknown) opts.push(['__unknown', String(raw) + '（未知值）']);
+  const optHtml = opts.map(([val, text]) =>
+    `<option value="${escapeAttr(val)}"${val === sel ? ' selected' : ''}>${escapeHtml(text)}</option>`).join('');
+  const tip = unknown
+    ? `資料庫裡的 ${label} PCB 板厚是「${raw}」，本工具不認得。請改選一個板厚。`
+    : `${label} 那片板子的 PCB 厚度。熱網路工具匯入這個專案時，會拿它當「板級導熱孔」元件的板厚。` +
+      `（Thermal Via 頁的板厚目前仍取 5G-RRU 的 t_PCB。）改了要按「儲存元件變更」才寫回。`;
+  const input = custom
+    ? `<input type="number" class="sg-pcbt-input${v === null ? ' miss' : ''}" id="sg-pcbt-${cat}-v" step="0.01" min="0.1" max="${SG_PCB_T_MAX}" ` +
+      `inputmode="decimal" value="${v !== null ? v : ''}" placeholder="必填" aria-label="${escapeAttr(label)} PCB 板厚（mm）" ` +
+      `onchange="sgOnPcbTInput('${cat}', this)"><span class="sg-pcbt-unit">mm</span>`
+    : '';
+  return `<span class="sg-pcbt" id="sg-pcbt-${cat}" title="${escapeAttr(tip)}">` +
+    `<label for="sg-pcbt-${cat}-sel">PCB 板厚</label>` +
+    `<select id="sg-pcbt-${cat}-sel" aria-label="${escapeAttr(label)} PCB 板厚" onchange="sgOnPcbTSelect('${cat}', this)">${optHtml}</select>` +
+    input + `</span>`;
+}
+function sgPcbTSet(cat, v) {
+  const o = Object.assign({}, sgProjectData.pcb_thickness || {});
+  if (v === null) delete o[cat]; else o[cat] = v;
+  sgProjectData.pcb_thickness = o;
+}
+/* 只換標題列那一小塊（不整表重繪：游標、捲動位置都不動，UX 慣例 1） */
+function sgPcbTRefresh(cat, focusInput) {
+  const el = document.getElementById('sg-pcbt-' + cat);
+  if (el) el.outerHTML = sgPcbTHtml(cat);
+  applyReadonlyLock();
+  if (focusInput) { const i = document.getElementById('sg-pcbt-' + cat + '-v'); if (i) i.focus(); }
+}
+function sgOnPcbTSelect(cat, sel) {
+  if (!sgProjectData) return;
+  const val = sel.value;
+  if (val === '__unknown') return;
+  if (val === 'custom') { sgPcbTCustom.cats[cat] = true; sgPcbTRefresh(cat, true); return; }   // 填了數字才寫
+  delete sgPcbTCustom.cats[cat];
+  sgPcbTSet(cat, val === '' ? null : Number(val));
+  sgPcbTRefresh(cat);
+}
+function sgOnPcbTInput(cat, inp) {
+  if (!sgProjectData) return;
+  const n = inp.value.trim() === '' ? null : Number(inp.value);
+  if (n !== null && !(n > 0 && n <= SG_PCB_T_MAX)) {
+    // 不合理的值不寫入：留在欄位裡讓使用者改，紅框＋說明
+    inp.classList.add('miss');
+    inp.title = `板厚要大於 0、不超過 ${SG_PCB_T_MAX} mm（這個值沒有寫入）`;
+    return;
+  }
+  sgPcbTSet(cat, n);
+  // 填的剛好是常用值 → 下拉直接顯示那一項；清空 → 留在「自訂」等使用者填
+  if (n !== null) delete sgPcbTCustom.cats[cat]; else sgPcbTCustom.cats[cat] = true;
+  sgPcbTRefresh(cat, n === null);
+}
+
 function sgOnBandChange(sel) {
   if (!sgProjectData) return;
   sgProjectData.band = sel.value;
@@ -8567,7 +8665,8 @@ function sgRenderProjectComponents() {
 
     html += `<div class="sg-comp-category">
       <div class="sg-comp-category-header ${catInfo.css}">
-        ${catInfo.icon} ${catInfo.label}（${items.length} 項）
+        <span class="sg-cat-name">${catInfo.icon} ${catInfo.label}（${items.length} 項）</span>
+        ${sgPcbTHtml(catKey)}
       </div>
       <table class="sg-comp-list-table">
         <thead><tr>
@@ -13646,6 +13745,8 @@ async function saveAllTabs() {
             param_duplex_rt: sgProjectData.param_duplex_rt || 'TDD 75%',
           });
           if (sgProjectData.band) f.band = sgProjectData.band;   // 舊專案沒選過 → 不寫（沒有 key＝FR1）
+          // PCB 板厚：碰過才寫（沒碰過的專案不多一個 key）；全部改回「未設定」→ 寫 {}，shallow merge 才清得掉
+          if (sgProjectData.pcb_thickness) f.pcb_thickness = sgPcbTNorm(sgProjectData);
           sgMerge = mergeInto(f, sgBase, sgMine, cur, resolutions);
           // 名稱變了的元件：資料庫最新內容（含 5G-RRU 的改名標記）、畫面、載入時快照三方對照
           const rn = sgCollectRenames(f, [cur, sgMine, sgBase], sgBase), taken = sgTakenNames(f);
@@ -13939,7 +14040,11 @@ function sgExportExcel() {
       c['Power(W)']??'', c['Power_RT(W)']??'',
       sgRthExportText(c), c.TV_ID_mil||'', c.TV_Qty||'', c.Temp_Sensor||'', c.note||''
     ]);
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    // PCB 板厚是分類層級的值（畫面在標題列）→ 表格下面空一列再寫
+    const rawT = sgProjectData.pcb_thickness ? sgProjectData.pcb_thickness[catKey] : undefined;
+    const tVal = sgPcbTOf(sgProjectData, catKey);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, [],
+      ['PCB 板厚(mm)', tVal !== null ? tVal : (rawT !== undefined && rawT !== null && rawT !== '' ? String(rawT) : '未設定')]]);
     XLSX.utils.book_append_sheet(wb, ws, catKey);
   }
   const name = (sgProjectData.project_name || 'project').replace(/[\\/*?:[\]]/g,'');

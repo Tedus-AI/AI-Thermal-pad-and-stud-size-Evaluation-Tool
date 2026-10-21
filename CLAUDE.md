@@ -26,6 +26,8 @@
       //                     tcPlacement,
       //                     band（專案頻段 'FR1'／'FR2'，Tab1 新增專案時選、條件表左邊可改；沒有 key＝FR1；
       //                           FR2 不寫 param_backoff*／param_duplex*，見「專案頻段 FR1／FR2」）
+      //                     pcb_thickness（PCB 板厚 mm：{ RF, Digital, PWR }，Tab1 三個分類標題列的下拉；沒有 key＝沒設定；
+      //                           只記錄、不參與本工具的計算；5G-RRU 不讀；熱網路工具匯入專案時讀，見「PCB 板厚」）
       // AI-Thermal Tab3 寫: validation_data, vd_hidden_components,
       //                    vd_ta（比對環溫 °C；只有手動指定才有值，null／沒有 key＝取專案環溫 param_temp）
       // global_params 兩邊都會碰（key set 幾乎重疊但不完全相同，例如 Draft_Angle 只有 RRU 有）
@@ -575,6 +577,25 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   它的「複製專案」不帶本工具的欄位 → 複本沒有 `band`＝FR1。
 - 不認得的值（例：手動寫進 `'FR3'`）→ 下拉補「FR3（未知值）」照原字顯示、行為照 FR1、存檔原樣寫回，不靜默改掉。
 - 契約測試：`tests/fr-band.test.js`。
+
+#### PCB 板厚（`projects[id].pcb_thickness`）—— Tab1 三個分類標題列的下拉
+
+使用者要求：RF／Digital／PWR 三個分類的標題列各加一個 PCB 板厚下拉（常用三個＋自訂）。RRU 的 RF 板、數位板、電源板
+通常是不同片板子，厚度各自記在自己的分類上。
+
+- 值 `{ RF: 2.2, Digital: 2.4, PWR: 1.6 }`（mm，number）；key 與 `SG_CAT_MAP` 相同。**沒有 key（或那個分類沒有 key）＝沒設定**；
+  選「未設定」一律 `delete`，不寫 `''`／`0`。選項：未設定／1.6／2.0／2.4 mm（`SG_PCB_T_PRESETS`）／自訂…。
+- 自訂：選了先出現數字欄（聚焦、紅框「必填」），填了才寫入；> 0 且 ≤ `SG_PCB_T_MAX`（10 mm）才收，不合理的值留在欄位裡、
+  紅框、不寫入；填的剛好是常用值 → 下拉直接顯示那一項。換值只換標題列那一小塊（`sgPcbTRefresh`，不整表重繪）。
+- **位置緊接在標題文字後面，不放最右邊**：這頁的元件表很寬，右側浮動工具列在 1648px 以下會蓋住標題列的右端。
+- 存檔：碰過才寫（`sgProjectData.pcb_thickness` 存在）→ 寫整個物件（key 排序，`sgPcbTNorm`）；全部改回未設定 → 寫 `{}`
+  （shallow merge 才清得掉）。沒碰過的專案只是載入再存檔 → 不寫這個 key。未存變更比對同樣排序（改了又改回不算）。
+- 不認得的值（例：`'abc'`）→ 補「abc（未知值）」選項照原字顯示、存檔原樣寫回，不靜默改掉。未解鎖時由 `applyReadonlyLock` 停用。
+- Excel 匯出：每個分類表格下面空一列寫「PCB 板厚(mm)」；PDF 是畫面截圖，標題列上就看得到。
+- **只記錄、不參與本工具的任何計算**：Thermal Via 頁的板厚仍是「本頁指定 → 5G-RRU 的 `t_PCB`」（那段在兩個 repo 共用的
+  `viaCalc.js`，沒動）。5G-RRU 不讀這個 key（updateDoc 原樣保留）。**熱網路工具**（RRU-Thermal-Network-Visualizer）02 匯入
+  這個專案時，拿它當「板級導熱孔」元件的板厚。
+- 契約測試：`tests/pcb-thickness.test.js`。
 
 #### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
 
