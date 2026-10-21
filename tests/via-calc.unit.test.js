@@ -15,6 +15,7 @@
  *       與板厚、中心間距無關；_renamed_from 查得到；E-PAD 用 Pad_L/Pad_W fallback；N/A 當沒填；試算值優先；
  *       配置問題（超出、重疊、沒填間距）照樣 ok、列在 issues
  *   [H] resolve()／parseLW()／specKey()／tvNum() 與 AI-Thermal 頁面原本的 viaResolve／sgParseLW／sgSpecKey／viaTvNum 相同
+ *   [I] PCB 板厚：頁面指定 → AI-Thermal EE/RF/PWR 頁該分類的板厚（pcb_thickness，pcbOf）→ 5G-RRU 的 t_PCB
  *
  * ⚠ 本檔與 viaCalc.js 在 AI-Thermal 與 5G-RRU 兩個 repo 內容逐字相同，改一邊就同步另一邊。
  *
@@ -271,6 +272,31 @@ console.log('\n[H] resolve／parseLW／specKey 與 AI-Thermal 頁面原本的寫
   ok('resolve：板厚頁面指定優先、間距換成 mm、交錯排列、塞孔沒選 → kFill null', r.t === 1.2 && r.tLocal && r.srcT === 1.6 && near(r.d.pitch, 20 * MIL, 1e-12)
     && r.d.pattern === 'staggered' && r.d.kFill === null && r.fill === null && r.platingDefault && r.d.plating === V.PLATING_DEFAULT, r);
   ok('resolve：沒有 spec／沒有元件也不丟例外', V.resolve(null, null, null).d.n === null);
+}
+
+console.log('\n[I] PCB 板厚以 AI-Thermal 為主：頁面指定 → EE/RF/PWR 頁該分類的板厚（pcb_thickness）→ 5G-RRU 的 t_PCB');
+{
+  const PCB = { RF: 2.2, Digital: 2.4 };
+  ok('pcbOf：吃得下兩個工具的分類寫法，沒有設定／不是正數 → null',
+    V.pcbOf(PCB, 'RF') === 2.2 && V.pcbOf(PCB, 'rf') === 2.2 && V.pcbOf(PCB, 'rf_data') === 2.2
+    && V.pcbOf(PCB, 'digital') === 2.4 && V.pcbOf(PCB, 'PWR') === null && V.pcbOf({ PWR: 0 }, 'pwr') === null
+    && V.pcbOf({ PWR: 'abc' }, 'pwr') === null && V.pcbOf(null, 'RF') === null && V.pcbOf(PCB, 'other') === null);
+  const spec = { epadSize: '1.6*1.6', via: {} };
+  const a = V.resolve({}, spec, { t_PCB: 1.6 }, 2.2);
+  ok('有分類板厚 → 用它（srcTFrom = pcb），不用 t_PCB', a.t === 2.2 && a.srcT === 2.2 && a.srcTFrom === 'pcb' && !a.tLocal, a);
+  const b = V.resolve({}, spec, { t_PCB: 1.6 }, null);
+  ok('分類沒有設定 → 退回 t_PCB（srcTFrom = rru）', b.t === 1.6 && b.srcT === 1.6 && b.srcTFrom === 'rru', b);
+  const c = V.resolve({}, { epadSize: '1.6*1.6', via: { pcbT: 1.2 } }, { t_PCB: 1.6 }, 2.2);
+  ok('頁面指定仍然優先；srcT 是分類板厚', c.t === 1.2 && c.tLocal && c.srcT === 2.2 && c.srcTFrom === 'pcb', c);
+  const d = V.resolve({}, spec, {}, null);
+  ok('兩邊都沒有 → null', d.t === null && d.srcT === null && d.srcTFrom === null, d);
+  const full = { epadSize: '8.6*8.6', via: { fill: 'epoxy' } };
+  const comp = { Component: 'U1', TV_Qty: 134, TV_ID_mil: 8 };
+  const k1 = V.keffForComp(comp, { U1: full }, { t_PCB: 1.6 }, 2.2);
+  const k2 = V.keffForComp(comp, { U1: full }, { t_PCB: 1.6 });
+  ok('keffForComp：K_eff 與板厚無關；t／rth 跟著分類板厚、tFrom 標出來源',
+    k1.ok && near(k1.keff, k2.keff) && k1.t === 2.2 && k1.tFrom === 'pcb' && k2.t === 1.6 && k2.tFrom === 'rru'
+    && near(k1.rth, V.rint(k1, 2.2)), { k1: k1.t, k2: k2.t });
 }
 
 console.log(`\n結果：${pass} 通過、${fail} 失敗`);

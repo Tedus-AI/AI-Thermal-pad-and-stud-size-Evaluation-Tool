@@ -3,6 +3,10 @@
  * ⚠ 本檔與 tests/via-calc.unit.test.js 在 AI-Thermal 與 5G-RRU 兩個 repo 內容逐字相同（同 compMerge.js），
  *   改一邊就同步另一邊：AI-Thermal 的 Thermal Via 計算頁與 5G-RRU 的基板熱阻 R_int 用同一份算法，
  *   各自從資料庫的原始輸入（thermal_specs[元件].via＋元件欄位）當場算，不存結果（見 keffForComp）。
+ *   熱網路工具（RRU-Thermal-Network-Visualizer）02 匯入 AI-Thermal 專案時也放了一份逐字相同的副本，
+ *   用 keffForComp 把 via 設計換成「自訂導熱孔 K」。
+ *   板厚（只影響 R_th，不影響 K_eff）：本頁指定 → AI-Thermal 該分類的 PCB 板厚（pcb_thickness，見 pcbOf）
+ *   → 5G-RRU 專案參數 t_PCB。
  *
  * 原本是獨立的 thermal-via-calculator 工具（本機 localStorage／Firebase 各自存），移植成本工具的
  * 「Thermal Via 計算」頁之後，資料改存進專案（thermal_specs[元件].via），計算核心放在這裡。
@@ -267,7 +271,17 @@
   /* ── 從資料庫的原始輸入解析一顆元件的 via 設計（兩個工具共用）──────────────────
      資料在同一個專案 document：thermal_specs[specKey(元件名)]（AI-Thermal TH/ME 頁＋Thermal Via 計算頁寫）
      ＋元件物件（rf_data／digital_data／pwr_data：TV_Qty、TV_ID_mil、Board_Type、Pad_L/W、_pad_from、_renamed_from）
-     ＋global_params.t_PCB（5G-RRU 參數控制台寫）。這裡只讀，不寫任何東西。 */
+     ＋pcb_thickness[RF|Digital|PWR]（AI-Thermal EE/RF/PWR 頁三個分類標題列的 PCB 板厚，板厚的主要來源）
+     ＋global_params.t_PCB（5G-RRU 參數控制台寫，該分類沒有設定板厚時才用）。這裡只讀，不寫任何東西。 */
+
+  /* 這個分類的 PCB 板厚（mm）：pcb_thickness 是 { RF, Digital, PWR }；cat 吃得下兩個工具的寫法
+     （'RF'／'rf'／'rf_data'、'Digital'／'digital'、'PWR'／'pwr'）。沒有設定、不是正數 → null */
+  function pcbOf(pcbThickness, cat) {
+    if (!pcbThickness || typeof pcbThickness !== 'object') return null;
+    var c = String(cat || '').toLowerCase().replace(/_data$/, '');
+    var key = c === 'rf' ? 'RF' : c === 'digital' ? 'Digital' : c === 'pwr' ? 'PWR' : null;
+    return key ? pos(pcbThickness[key]) : null;
+  }
 
   // thermal_specs 的 key（＝AI-Thermal 的 sgSpecKey）：空白 → _、/ → -
   function specKey(name) { return String(name || '').replace(/ /g, '_').replace(/\//g, '-'); }
@@ -306,9 +320,10 @@
      - E-PAD：矩形取 spec.epadSize；沒填（空白）且元件的導熱方式是 Thermal Via 或 _pad_from = epadSize
        → 暫用元件的 Pad_L/Pad_W（5G-RRU 端的 E-Pad 長寬）。圓形取 via.padD。
      - 數量／內徑：via.qty／via.diaMil 有 key＝AI-Thermal 頁面的試算值，沒有 key 才取 EE 清單的 TV_Qty／TV_ID_mil。
-     - 板厚：via.pcbT 有 key＝頁面指定，沒有取 global_params.t_PCB。
+     - 板厚：via.pcbT 有 key＝頁面指定；沒有 → pcbT（呼叫端給的 AI-Thermal 該分類 PCB 板厚，見 pcbOf）；
+       也沒有 → global_params.t_PCB（5G-RRU）。srcT＝不看頁面指定時的板厚，srcTFrom＝'pcb'／'rru'／null。
      - 鍍銅厚度：via.plating 沒有 key＝預設 1 mil。塞孔材料必填、沒有預設。 */
-  function resolve(comp, spec, globalParams) {
+  function resolve(comp, spec, globalParams, pcbT) {
     spec = spec || {};
     var v = spec.via || {}, c = comp || {}, gp = globalParams || {};
     var shape = v.shape === 'circle' ? 'circle' : 'rect';
@@ -324,7 +339,9 @@
     }
     var D = shape === 'circle' ? pos(v.padD) : null;
     var srcQty = tvNum(c.TV_Qty), srcDia = tvNum(c.TV_ID_mil);
-    var srcT = pos(gp.t_PCB);
+    var pcbSrc = pos(pcbT), rruT = pos(gp.t_PCB);
+    var srcT = pcbSrc !== null ? pcbSrc : rruT;
+    var srcTFrom = pcbSrc !== null ? 'pcb' : (rruT !== null ? 'rru' : null);
     var qtyLocal = v.qty !== undefined, diaLocal = v.diaMil !== undefined, tLocal = v.pcbT !== undefined;
     var qty = qtyLocal ? num(v.qty) : srcQty;
     var diaMil = diaLocal ? num(v.diaMil) : srcDia;
@@ -339,7 +356,7 @@
       n: qty, dia: diaMil !== null ? diaMil * MIL : null, pitch: pitchMil !== null ? pitchMil * MIL : null,
       t: t, plating: plating, kFill: kFill,
     };
-    return { d: d, v: v, spec: spec, epadRaw: epadRaw, padSrc: padSrc, srcQty: srcQty, srcDia: srcDia, srcT: srcT,
+    return { d: d, v: v, spec: spec, epadRaw: epadRaw, padSrc: padSrc, srcQty: srcQty, srcDia: srcDia, srcT: srcT, srcTFrom: srcTFrom,
              qtyLocal: qtyLocal, diaLocal: diaLocal, tLocal: tLocal, qty: qty, diaMil: diaMil, t: t, pitchMil: pitchMil,
              platingDefault: v.plating === undefined, fill: fillDef ? fillDef.key : null };
   }
@@ -355,16 +372,18 @@
        ok:true  → keff 可用；issues 是配置問題（孔壁超出焊盤／重疊、沒填中心間距沒辦法檢查…）—— 不影響 K_eff 公式，照用、由呼叫端標 ⚠
        reason   → 'nodata'（沒有 via 設計）／'skip'（暫不納入熱流評估）／'missing'（缺 K_eff 需要的輸入）／
                   'over'（via 佔用面積超過焊盤，K_eff 不成立）→ 呼叫端改用通用值
-     試算值（via.qty／via.diaMil）照用：與 AI-Thermal 頁面上看到的 K_eff 一致。 */
-  function keffForComp(comp, thermalSpecs, globalParams) {
+     試算值（via.qty／via.diaMil）照用：與 AI-Thermal 頁面上看到的 K_eff 一致。
+     pcbT（選填）＝這顆所屬分類的 AI-Thermal PCB 板厚（pcbOf），只影響回傳的 t／rth，K_eff 與板厚無關。 */
+  function keffForComp(comp, thermalSpecs, globalParams, pcbT) {
     var sf = specFor(comp, thermalSpecs);
     var out = { ok: false, keff: null, aPad: null, reason: null, missing: [], issues: [], key: sf.key, renamed: sf.renamed, src: null };
     var v = sf.spec && sf.spec.via;
     if (!v || typeof v !== 'object' || !Object.keys(v).length) { out.reason = 'nodata'; return out; }
     if (v.skip === true) { out.reason = 'skip'; out.skipNote = String(v.skipNote || ''); return out; }
-    var r = resolve(comp, sf.spec, globalParams), d = r.d;
+    var r = resolve(comp, sf.spec, globalParams, pcbT), d = r.d;
     out.shape = d.shape; out.L = d.L; out.W = d.W; out.D = d.D;
     out.n = d.n; out.diaMil = r.diaMil; out.plating = d.plating; out.fill = r.fill; out.kFill = d.kFill; out.t = d.t;
+    out.tFrom = r.tLocal ? 'via' : r.srcTFrom;
     out.srcQty = r.srcQty; out.srcDia = r.srcDia;
     out.src = { pad: d.shape === 'circle' ? 'circle' : r.padSrc, qty: r.qtyLocal ? 'via' : 'ee', dia: r.diaLocal ? 'via' : 'ee',
                 plating: r.platingDefault ? 'default' : 'via' };
@@ -408,7 +427,7 @@
     grid: grid, layout: layout, check: check, autoPitch: autoPitch, maxCount: maxCount,
     milToMm: milToMm, mmToMil: mmToMil, floorTo: floorTo,
     MISS_LABEL: MISS_LABEL, KEFF_NEED: KEFF_NEED, CHECK_MAX: CHECK_MAX,
-    specKey: specKey, parseLW: parseLW, tvNum: tvNum, specFor: specFor, resolve: resolve, missLabel: missLabel,
+    specKey: specKey, parseLW: parseLW, tvNum: tvNum, specFor: specFor, pcbOf: pcbOf, resolve: resolve, missLabel: missLabel,
     keffForComp: keffForComp, rint: rint, reasonText: reasonText,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
