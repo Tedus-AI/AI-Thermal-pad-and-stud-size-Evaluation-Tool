@@ -10,7 +10,7 @@
  *   [D] 有來源的欄位：Via 數量／內徑鎖定取 EE 清單（白底黑字＋✂）；✂ → 試算值（提醒與 EE 清單不同）；
  *       ↺ 取回；EE 頁沒載入（四頁同步後只剩讀取失敗這種情況）時「寫回 EE 清單」停用，載入後可寫回（寫進 EE 頁的元件、刪掉試算值）
  *   [E] E-PAD 與 TH/ME 頁同一欄；TH/ME 頁沒填時暫用 5G-RRU 的 E-Pad 長寬（鎖定＋✂）；
- *       PCB 厚度鎖定取 5G-RRU 參數 t_PCB，沒有時必填
+ *       PCB 厚度鎖定取 EE/RF/PWR 頁該分類的 PCB 板厚（還沒存的也算、改了跟著重畫），沒設定才取 5G-RRU 參數 t_PCB，兩邊都沒有時必填
  *   [F] 計算：K_eff／R_th 與 viaCalc 一致；穿板溫降＝P × R_th；5G-RRU K_Via 比較
  *   [G] 自動間距：排得下、寫回（mil 取 0.1）、訊息；放不下時給最多顆數；手動間距太大／太小 → 干涉錯誤、徽章計數
  *   [H] 打字中不重繪表單（同一個 input、游標不跳）；提交後焦點留在下一格
@@ -228,6 +228,16 @@ const PROJ = () => ({
   ok('沒有 t_PCB → PCB 厚度變必填（待完善清單出現「缺 PCB 厚度」）', S.todo.some(t => /PreDriver/.test(t) && /缺 PCB 厚度/.test(t)) && await page.isVisible('#via-form input[data-k="pcbT"]'), S.todo);
   await page.fill('#via-form input[data-k="pcbT"]', '1.6');
   await page.evaluate(() => { currentProjectData.global_params.t_PCB = 1.6; delete thermalSpecs['PreDriver'].via.pcbT; viaRender(); });
+  // PCB 板厚以 AI-Thermal 為主：EE/RF/PWR 頁該分類的板厚優先於 5G-RRU 的 t_PCB（EE 頁改了、還沒存也算）
+  await page.evaluate(() => { const p = viaSameAsTab1() ? sgProjectData : currentProjectData; p.pcb_thickness = { RF: 2.2 }; viaRender(); });
+  ok('EE/RF/PWR 頁設了 RF PCB 板厚 → PCB 厚度鎖定取它（2.2 mm，標出來源），不用 t_PCB',
+    await page.evaluate(() => [...document.querySelectorAll('#via-form .via-locked')].some(e => /^2\.2 mm/.test(e.textContent))
+      && /EE\/RF\/PWR 頁 RF PCB 板厚/.test(document.getElementById('via-form').textContent)));
+  await page.evaluate(() => { const p = viaSameAsTab1() ? sgProjectData : currentProjectData; sgPcbTSet('RF', 2.4); if (p !== sgProjectData) p.pcb_thickness = { RF: 2.4 }; });
+  await page.waitForTimeout(60);
+  ok('EE 頁改板厚 → Thermal Via 頁跟著重畫（2.4 mm）', await page.evaluate(() => [...document.querySelectorAll('#via-form .via-locked')].some(e => /^2\.4 mm/.test(e.textContent))));
+  await page.evaluate(() => { const p = viaSameAsTab1() ? sgProjectData : currentProjectData; delete p.pcb_thickness; delete currentProjectData.pcb_thickness; if (sgProjectData) delete sgProjectData.pcb_thickness; viaRender(); });
+  ok('沒設定的分類 → 退回 5G-RRU 參數 t_PCB（1.6 mm）', await page.evaluate(() => [...document.querySelectorAll('#via-form .via-locked')].some(e => /^1\.6 mm/.test(e.textContent)) && /5G-RRU 參數 t_PCB/.test(document.getElementById('via-form').textContent)));
 
   console.log('\n[F] 計算');
   await sel('U850-Si5518');
@@ -242,6 +252,11 @@ const PROJ = () => ({
   ok('5G-RRU 說明照實際行為：會用這個 K_eff、取代通用值 K_Via = 30、R_int 算式與數字（t_PCB 1.6）',
     /5G-RRU 會用這個 Keff = 13\.11 W\/m·K/.test(calc.out) && /取代通用值 K_Via = 30 W\/m·K（÷ Via_Eff 0\.9）/.test(calc.out)
     && calc.out.includes('≈ ' + Number(rri.toFixed(3)) + ' °C/W') && /不加擴散面積、不除 Via_Eff/.test(calc.out) && !/偏樂觀/.test(calc.out), calc.out);
+  await page.evaluate(() => { const p = viaSameAsTab1() ? sgProjectData : currentProjectData; p.pcb_thickness = { Digital: 2.4 }; viaRender(); });
+  const out24 = (await st()).out;
+  ok('5G-RRU 說明的板厚跟著 EE/RF/PWR 頁的 Digital PCB 板厚（2.4 mm）',
+    out24.includes('2.4 mm ÷ (13.11') && out24.includes('≈ ' + Number((2.4 / (calc.exp.keff * 73.96) * 1000).toFixed(3)) + ' °C/W'), out24);
+  await page.evaluate(() => { delete currentProjectData.pcb_thickness; if (sgProjectData) delete sgProjectData.pcb_thickness; viaRender(); });
   await sel('Driver-RRU');
   ok('沒有 via 設計 → 說明 5G-RRU 會用通用值＋原因', /5G-RRU 這顆的基板熱阻會用通用值 K_Via = 30 W\/m·K/.test((await st()).out) && /還沒有這顆的 via 設計/.test((await st()).out), (await st()).out);
   await sel('U850-Si5518');

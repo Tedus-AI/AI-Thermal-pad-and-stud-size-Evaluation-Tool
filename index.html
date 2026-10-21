@@ -8492,8 +8492,9 @@ function sgBandOf(p) { return p && p.band === 'FR2' ? 'FR2' : 'FR1'; }   // 不�
 /* ---- PCB 板厚（`projects[id].pcb_thickness`）----
    { RF: 2.0, Digital: 2.4, PWR: 1.6 }（mm）：RF／Digital／PWR 各自那片板子的厚度，Tab1 三個分類標題列右邊的下拉
    （常用三個＋自訂）。沒有 key（或那個分類沒有 key）＝沒設定；選「未設定」一律 delete，不寫 ''／0。
-   本工具目前只記錄、不參與任何計算（Thermal Via 頁的板厚仍取 5G-RRU 的 t_PCB，兩個 repo 共用的 viaCalc.js 沒動）；
-   熱網路工具（RRU-Thermal-Network-Visualizer）02 匯入這個專案時，拿它當「板級導熱孔」元件的板厚。 */
+   PCB 板厚以這裡為主：Thermal Via 頁的板厚（viaCalc.js 的 resolve：頁面指定 → 這裡該分類的板厚 → 5G-RRU 的 t_PCB）、
+   5G-RRU 的 Thermal Via 元件板厚、熱網路工具（RRU-Thermal-Network-Visualizer）02 匯入的「板級導熱孔」板厚都讀它；
+   沒設定的分類才退回 5G-RRU 參數控制台的 t_PCB。 */
 const SG_PCB_T_PRESETS = [1.6, 2.0, 2.4];
 const SG_PCB_T_MAX = 10;   // 再大就是打錯（例：把 mil 填進 mm）
 let sgPcbTCustom = { pid: null, cats: {} };   // 選了「自訂」但還沒填數字的分類（畫面暫態，不寫資料）
@@ -8524,7 +8525,7 @@ function sgPcbTHtml(cat) {
   const tip = unknown
     ? `資料庫裡的 ${label} PCB 板厚是「${raw}」，本工具不認得。請改選一個板厚。`
     : `${label} 那片板子的 PCB 厚度。熱網路工具匯入這個專案時，會拿它當「板級導熱孔」元件的板厚。` +
-      `（Thermal Via 頁的板厚目前仍取 5G-RRU 的 t_PCB。）改了要按「儲存元件變更」才寫回。`;
+      `Thermal Via 頁與 5G-RRU 的 Thermal Via 元件也以這裡為準（沒設定才用 5G-RRU 的 t_PCB）。改了要按「儲存元件變更」才寫回。`;
   const input = custom
     ? `<input type="number" class="sg-pcbt-input${v === null ? ' miss' : ''}" id="sg-pcbt-${cat}-v" step="0.01" min="0.1" max="${SG_PCB_T_MAX}" ` +
       `inputmode="decimal" value="${v !== null ? v : ''}" placeholder="必填" aria-label="${escapeAttr(label)} PCB 板厚（mm）" ` +
@@ -8539,6 +8540,7 @@ function sgPcbTSet(cat, v) {
   const o = Object.assign({}, sgProjectData.pcb_thickness || {});
   if (v === null) delete o[cat]; else o[cat] = v;
   sgProjectData.pcb_thickness = o;
+  if (typeof viaRenderSoon === 'function') viaRenderSoon();   // Thermal Via 頁的板厚跟著這裡
 }
 /* 只換標題列那一小塊（不整表重繪：游標、捲動位置都不動，UX 慣例 1） */
 function sgPcbTRefresh(cat, focusInput) {
@@ -15250,7 +15252,18 @@ function viaPartition(rows) {
    → 它的 Pad_L/Pad_W 就是 E-Pad 長寬。 */
 function viaResolve(row) {
   const gp = (currentProjectData && currentProjectData.global_params) || {};
-  return ViaCalc.resolve(row.comp || {}, row.spec || {}, gp);
+  return ViaCalc.resolve(row.comp || {}, row.spec || {}, gp, viaPcbT(row));
+}
+/* PCB 板厚的主要來源：EE/RF/PWR 頁三個分類標題列的板厚（pcb_thickness）。EE 頁正好載入同一個專案時用它記憶體裡的值
+   （含還沒存的修改），否則用 TH/ME 頁那份專案資料。這個分類沒設定 → viaCalc 退回 5G-RRU 的 t_PCB。 */
+function viaPcbT(row) {
+  const src = viaSameAsTab1() ? sgProjectData : currentProjectData;
+  return ViaCalc.pcbOf(src && src.pcb_thickness, row.cat);
+}
+function viaCatLabel(cat) { return ({ rf: 'RF', digital: 'Digital', pwr: 'PWR' })[String(cat || '').toLowerCase()] || String(cat || ''); }
+// 板厚來源的名稱（畫面、提示、匯出同一套文字）
+function viaTName(row, from) {
+  return from === 'pcb' ? 'EE/RF/PWR 頁 ' + viaCatLabel(row.cat) + ' PCB 板厚' : (from === 'rru' ? '5G-RRU 參數 t_PCB' : '');
 }
 const VIA_CHECK_MAX = 2000;   // 數量太大（打錯）時不排、不畫，避免卡住畫面
 function viaEval(row) {
@@ -15277,7 +15290,7 @@ function viaEval(row) {
   if (r.diaLocal && r.srcDia !== null && r.diaMil !== r.srcDia) issues.push({ lv: 'warn', chip: '內徑≠EE 清單', text: `Via 內徑用本頁試算值 ${viaLen(r.diaMil)}，EE 清單是 ${viaLen(r.srcDia)}` });
   if (r.qtyLocal && r.srcQty === null && r.qty !== null) issues.push({ lv: 'info', text: 'EE 清單沒有填 TH Via Qty，Via 數量只存在本頁（可按「⇪ 寫回 EE 清單」同步）' });
   if (r.diaLocal && r.srcDia === null && r.diaMil !== null) issues.push({ lv: 'info', text: 'EE 清單沒有填 TH Via 內徑，Via 內徑只存在本頁（可按「⇪ 寫回 EE 清單」同步）' });
-  if (r.tLocal && r.srcT !== null && r.t !== r.srcT) issues.push({ lv: 'info', text: `PCB 厚度用本頁指定的 ${viaFmt(r.t, 3)} mm，5G-RRU 專案參數 t_PCB 是 ${viaFmt(r.srcT, 3)} mm` });
+  if (r.tLocal && r.srcT !== null && r.t !== r.srcT) issues.push({ lv: 'info', text: `PCB 厚度用本頁指定的 ${viaFmt(r.t, 3)} mm，${viaTName(row, r.srcTFrom)}是 ${viaFmt(r.srcT, 3)} mm` });
   const hasErr = issues.some(i => i.lv === 'err'), hasWarn = issues.some(i => i.lv === 'warn');
   const status = hasErr ? 'err' : (miss.length ? 'todo' : (hasWarn ? 'warn' : 'ok'));
   return { r, miss, res, chk, issues, status };
@@ -15617,8 +15630,8 @@ function viaFormHtml(row) {
   h += `<div class="via-row"><label>PCB 厚度</label>` + viaSrcHtml({
     k: 'pcbT', local: r.tLocal, localVal: r.tLocal ? ViaCalc.num(v.pcbT) : null, srcVal: r.srcT,
     disp: (x) => viaFmt(x, 3) + ' mm', toInput: (x) => viaFmt(x, 4), unit: 'mm', ph: '例 1.6',
-    srcName: '5G-RRU 參數 t_PCB', srcShort: ' t_PCB', writeback: false,
-    noSrcHint: '5G-RRU 專案參數沒有 PCB 板厚度（t_PCB），請在這裡填',
+    srcName: viaTName(row, r.srcTFrom), srcShort: r.srcTFrom === 'pcb' ? ' EE 頁板厚' : ' t_PCB', writeback: false,
+    noSrcHint: 'EE/RF/PWR 頁沒有設定 ' + viaCatLabel(row.cat) + ' PCB 板厚（分類標題列的下拉），5G-RRU 也沒有 t_PCB：請到 EE 頁設定，或在這裡填',
   }) + `</div>`;
   const plIsPreset = ViaCalc.PLATINGS.some(p => Math.abs(p.mm - r.d.plating) < 1e-9);
   const plCustom = viaCustomUi.has(row.key) || (!r.platingDefault && !plIsPreset);
@@ -15670,21 +15683,22 @@ function viaRruNoteHtml(row) {
   const gp = (currentProjectData && currentProjectData.global_params) || {};
   const kv = ViaCalc.pos(gp.K_Via), ve = ViaCalc.pos(gp.Via_Eff);
   const generic = '通用值 K_Via = ' + (kv ? viaFmt(kv, 2) + ' W/m·K' + (ve ? '（÷ Via_Eff ' + viaFmt(ve, 2) + '）' : '') : '（5G-RRU 參數控制台，預設 30 W/m·K）');
-  const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp);
+  const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp, viaPcbT(row));
   const path = viaPathOf(row.comp, row.spec).path;
   if (path !== 'Thermal Via') {
     if (!kr.ok) return '';
     return `<div class="via-note info">ℹ 5G-RRU 只對導熱方式＝Thermal Via 的元件使用逐顆 K<sub>eff</sub>；這顆目前${path ? '是「' + escapeHtml(path) + '」' : '沒有選主散熱路徑'} → 5G-RRU 不會用到這個值</div>`;
   }
   if (!kr.ok) return `<div class="via-note info">ℹ 5G-RRU 這顆的基板熱阻會用${escapeHtml(generic)}：${escapeHtml(ViaCalc.reasonText(kr))}</div>`;
-  const tP = ViaCalc.pos(gp.t_PCB);
+  // 5G-RRU 這顆的板厚＝EE/RF/PWR 頁該分類的 PCB 板厚，沒設定才用它參數控制台的 t_PCB（與 viaCalc 同一個順序）
+  const r0 = viaResolve(row), tP = r0.srcT, tName = r0.srcTFrom === 'pcb' ? viaTName(row, 'pcb') : '5G-RRU 參數控制台的 PCB 板厚度';
   const ri = tP ? ViaCalc.rint(kr, tP) : null;
   let s = `ℹ 5G-RRU 會用這個 K<sub>eff</sub> = ${viaFmt(kr.keff, 2)} W/m·K 算這顆的基板熱阻，取代${escapeHtml(generic)}：` +
     `R<sub>int</sub> = PCB 板厚度 ÷ (K<sub>eff</sub> × 焊盤面積)` +
     (ri ? ` = ${viaFmt(tP, 3)} mm ÷ (${viaFmt(kr.keff, 2)} × ${viaFmt(kr.aPad, 2)} mm²) ≈ <b>${viaFmt(ri, 3)} °C/W</b>` : '') +
     `（不加擴散面積、不除 Via_Eff）`;
   const r = row.ev && row.ev.r;
-  if (r && r.tLocal && r.t !== tP) s += `；板厚用 5G-RRU 參數控制台的 PCB 板厚度${tP ? ' ' + viaFmt(tP, 3) + ' mm' : ''}，不是本頁指定的 ${viaFmt(r.t, 3)} mm`;
+  if (r && r.tLocal && r.t !== tP) s += `；板厚用${tName}${tP ? ' ' + viaFmt(tP, 3) + ' mm' : ''}，不是本頁指定的 ${viaFmt(r.t, 3)} mm`;
   if (kr.issues.length) s += `；配置有問題（${escapeHtml(kr.issues.map(i => i.text).join('；'))}）→ K<sub>eff</sub> 照用，5G-RRU 元件清單會標 ⚠`;
   return `<div class="via-note ${kr.issues.length ? 'warn' : 'info'}">${s}。存檔後 5G-RRU 重新載入（或切回分頁）就會套用。</div>`;
 }
@@ -15787,7 +15801,7 @@ function viaRulesHtml(open) {
       規格溫度很高、不建模的元件可勾「暫不納入熱流評估」：移出待完善清單、計數與分頁徽章，via 資料保留，取消勾選即恢復。</div>
     <div><b>資料存放</b>：跟著專案與元件存（TH/ME 頁那份元件設定裡），按任一個儲存鍵＝全部分頁一起存；元件改名時資料跟著搬。
       Via 數量／內徑預設取 EE 清單（✂ 改成本頁的試算值，可「⇪ 寫回 EE 清單」）；E-PAD 與 TH/ME 頁同一欄；
-      PCB 厚度預設取 5G-RRU 專案參數 t_PCB。計算結果不存，每次依輸入重算。</div>
+      PCB 厚度預設取 EE/RF/PWR 頁該分類標題列的 PCB 板厚，沒設定才取 5G-RRU 專案參數 t_PCB。計算結果不存，每次依輸入重算。</div>
   </div></details>`;
 }
 
@@ -15973,7 +15987,7 @@ function viaExportExcel() {
   // 5G-RRU 怎麼用這顆（與頁面上的說明同一套判斷：ViaCalc.keffForComp；只對導熱方式＝Thermal Via 的元件）
   const rruUse = (row) => {
     if (viaPathOf(row.comp, row.spec).path !== 'Thermal Via') return '不適用（導熱方式不是 Thermal Via）';
-    const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp);
+    const kr = ViaCalc.keffForComp(row.comp, thermalSpecs, gp, viaPcbT(row));
     return kr.ok ? '逐顆 K_eff' + (kr.issues.length ? '（配置有問題：' + kr.issues.map(i => i.text).join('；') + '）' : '')
                  : '通用值 K_Via：' + ViaCalc.reasonText(kr);
   };
@@ -15987,7 +16001,7 @@ function viaExportExcel() {
       d.shape === 'circle' ? '圓形' : '方形', n(d.L, 4), n(d.W, 4), n(d.D, 4), n(ViaCalc.padArea(d) || null, 4),
       d.pattern === 'staggered' ? '交錯' : '矩陣', n(d.n, 0), r.qtyLocal ? '本頁試算值' : (r.srcQty !== null ? 'EE 清單' : ''),
       n(r.diaMil, 3), n(d.dia, 4), r.diaLocal ? '本頁試算值' : (r.srcDia !== null ? 'EE 清單' : ''),
-      n(r.pitchMil, 2), n(d.pitch, 4), n(d.t, 4), r.tLocal ? '本頁指定' : (r.srcT !== null ? '5G-RRU t_PCB' : ''),
+      n(r.pitchMil, 2), n(d.pitch, 4), n(d.t, 4), r.tLocal ? '本頁指定' : (r.srcTFrom === 'pcb' ? 'EE 頁 ' + viaCatLabel(row.cat) + ' 板厚' : (r.srcTFrom === 'rru' ? '5G-RRU t_PCB' : '')),
       n(d.plating, 4), (ViaCalc.fillOf(r.fill) || {}).label || '', n(d.kFill, 3),
       res ? n(res.keff, 3) : '', res ? n(res.rth, 4) : '', res ? n(res.cuRatio * 100, 3) : '', res ? n(res.singleR, 3) : '',
       isFinite(P) ? P : '', (res && P > 0) ? n(P * res.rth, 3) : '', rruUse(row)];

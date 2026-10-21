@@ -27,7 +27,8 @@
       //                     band（專案頻段 'FR1'／'FR2'，Tab1 新增專案時選、條件表左邊可改；沒有 key＝FR1；
       //                           FR2 不寫 param_backoff*／param_duplex*，見「專案頻段 FR1／FR2」）
       //                     pcb_thickness（PCB 板厚 mm：{ RF, Digital, PWR }，Tab1 三個分類標題列的下拉；沒有 key＝沒設定；
-      //                           只記錄、不參與本工具的計算；5G-RRU 不讀；熱網路工具匯入專案時讀，見「PCB 板厚」）
+      //                           **PCB 板厚的主要來源**：Thermal Via 頁、5G-RRU 的 Thermal Via 元件板厚、熱網路工具匯入都讀它；
+      //                           沒設定的分類才退回 5G-RRU 的 t_PCB，見「PCB 板厚」）
       // AI-Thermal Tab3 寫: validation_data, vd_hidden_components,
       //                    vd_ta（比對環溫 °C；只有手動指定才有值，null／沒有 key＝取專案環溫 param_temp）
       // global_params 兩邊都會碰（key set 幾乎重疊但不完全相同，例如 Draft_Angle 只有 RRU 有）
@@ -592,9 +593,12 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   （shallow merge 才清得掉）。沒碰過的專案只是載入再存檔 → 不寫這個 key。未存變更比對同樣排序（改了又改回不算）。
 - 不認得的值（例：`'abc'`）→ 補「abc（未知值）」選項照原字顯示、存檔原樣寫回，不靜默改掉。未解鎖時由 `applyReadonlyLock` 停用。
 - Excel 匯出：每個分類表格下面空一列寫「PCB 板厚(mm)」；PDF 是畫面截圖，標題列上就看得到。
-- **只記錄、不參與本工具的任何計算**：Thermal Via 頁的板厚仍是「本頁指定 → 5G-RRU 的 `t_PCB`」（那段在兩個 repo 共用的
-  `viaCalc.js`，沒動）。5G-RRU 不讀這個 key（updateDoc 原樣保留）。**熱網路工具**（RRU-Thermal-Network-Visualizer）02 匯入
-  這個專案時，拿它當「板級導熱孔」元件的板厚。
+- **PCB 板厚以這裡為主**（使用者決定，2026-10）：
+  - Thermal Via 頁：`ViaCalc.resolve` 的板厚順序＝本頁指定（`via.pcbT`）→ **這裡該分類的板厚**（`ViaCalc.pcbOf(pcb_thickness, cat)`）
+    → 5G-RRU 的 `t_PCB`（`srcTFrom` = `'pcb'`／`'rru'`，鎖定欄位、提示、5G-RRU 說明、Excel「板厚來源」照它寫）。EE 頁正好載入同一個專案時
+    讀它記憶體裡的值（還沒存的也算，`sgPcbTSet` 會 `viaRenderSoon`）。
+  - 5G-RRU：導熱方式＝Thermal Via 的元件，板厚（`Thick(mm)`）＝這裡該分類的板厚，沒設定才用它參數控制台的 `t_PCB`（唯讀參照，它不寫這個 key）。
+  - **熱網路工具**（RRU-Thermal-Network-Visualizer）02 匯入這個專案時，拿它當「板級導熱孔」元件的板厚。
 - 契約測試：`tests/pcb-thickness.test.js`。
 
 #### TH/ME-專案元件清單（Tab2）版面：22 吋與 17 吋筆電都不可有橫向捲軸 ⚠️
@@ -644,7 +648,7 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   | `pattern` | `'staggered'`（沒有 key＝矩陣）|
   | `qty`／`diaMil` | **有 key＝本頁的試算值**（✂ 解鎖後、或 EE 清單沒填時）；沒有 key＝取 EE 清單的 `TV_Qty`／`TV_ID_mil` |
   | `pitchMil` | 中心間距（mil；畫面可切 mm，存一律 mil）|
-  | `pcbT` | 有 key＝本頁指定；沒有＝取 5G-RRU 專案參數 `global_params.t_PCB`（**唯讀參照，本工具不寫 global_params**）|
+  | `pcbT` | 有 key＝本頁指定；沒有＝取 EE/RF/PWR 頁該分類的 PCB 板厚（`pcb_thickness`），也沒有才取 5G-RRU 專案參數 `global_params.t_PCB`（**唯讀參照，本工具不寫 global_params**）|
   | `plating` | 鍍銅厚度 mm（沒有 key＝預設 1 mil）。⚠ 是**孔壁電鍍銅**（barrel plating），不是表層銅箔；選項：20 µm（IPC-6012 Class 2 平均）／25.4 µm（≈ Class 3，預設）／35 µm（加厚孔銅）／自訂。舊工具的「1 oz」標籤已改（值 0.035 不變）|
   | `fill`／`fillK` | 塞孔材料（`ViaCalc.FILLS` 的 key，必填）／自訂 K |
   | `skip`／`skipNote` | `true`＝**暫不納入熱流評估**（例：規格溫度很高、不建模）／原因（選填）。取消勾選＝刪這兩個 key，其他 via 資料不動 |
@@ -682,17 +686,20 @@ Thermal-Test-Report-Builder 比對頁的 `SIM_DEV_*` **數值一致，改門檻�
   就用它的 K_eff，抓不到才用 5G-RRU 參數控制台的通用值 `K_Via`。**共用「算法」、不共用「結果」**：兩邊各自從資料庫的原始輸入當場算
   （**不要**另存一個元件欄位給 5G-RRU 讀 —— 快選複製會帶出過期值、存檔推導只在兩頁同專案時才跑、還得加進兩邊的 carry 白名單）。
   - **`viaCalc.js` 與 `tests/via-calc.unit.test.js` 在兩個 repo 內容逐字相同**（同 `compMerge.js`），改一邊就同步另一邊（`diff` 無輸出）。
-  - 單一事實來源 `ViaCalc.keffForComp(comp, thermal_specs, global_params)` → `{ ok, keff, aPad, reason, missing, issues, src, … }`；
+    熱網路工具也放了一份逐字相同的 `viaCalc.js`（`src/importers/component/viaCalc.js`，02 匯入時算 K_eff），改了要一起換。
+  - 單一事實來源 `ViaCalc.keffForComp(comp, thermal_specs, global_params, pcbT?)` → `{ ok, keff, aPad, reason, missing, issues, src, t, tFrom, … }`
+    （`pcbT`＝這顆所屬分類的 PCB 板厚，`ViaCalc.pcbOf`；只影響 `t`／`rth`，K_eff 與板厚無關）；
     輸入解析 `ViaCalc.resolve`（本頁的 `viaResolve` 就是它的薄包裝，`sgParseLW`／`sgSpecKey`／`viaTvNum` 的同等邏輯也在裡面，
     viaCalc.js 不依賴 index.html 的任何全域函式）。spec 先用 `specKey(元件名)` 找，找不到且元件有 `_renamed_from` → 用舊名稱。
   - K_eff 只需要焊盤、數量、內徑、鍍銅、塞孔材料（**與 PCB 厚度、中心間距無關**）。試算值（`via.qty`／`via.diaMil`）**照用**
     （與本頁看到的 K_eff 一致）。不 ok 的原因（`ViaCalc.reasonText`，兩邊同一套文字）：`nodata`（沒有 via 設計）、`skip`（暫不納入）、
     `missing`（缺 K_eff 需要的輸入）、`over`（via 面積超過焊盤）→ 5G-RRU 用通用值。配置有問題（孔壁超出／重疊、沒填中心間距）→ K_eff 照用、
     5G-RRU 標 ⚠（`issues`）。
-  - 5G-RRU 的基板熱阻（使用者決定）：`R_int ＝ 5G-RRU 的 PCB 板厚度 ÷ (K_eff × A_pad)`（`ViaCalc.rint`）＝ 本頁的 R_th（板厚相同時）：
+  - 5G-RRU 的基板熱阻（使用者決定）：`R_int ＝ 板厚 ÷ (K_eff × A_pad)`（`ViaCalc.rint`；板厚＝EE 頁該分類的 PCB 板厚，沒設定才用 5G-RRU 的 `t_PCB`）＝ 本頁的 R_th（板厚相同時）：
     via 只在焊盤底下 → **不加擴散面積**；K_eff 已含銅壁／塞孔／FR4 → **不除 Via_Eff**。通用值那條路徑照舊（擴散面積、÷ Via_Eff）。
   - 本頁的說明（`viaRruNoteHtml`，主散熱路徑＝Thermal Via 時顯示）照 5G-RRU 的實際行為寫（UX 慣例 11）：ok →「5G-RRU 會用這個 K_eff…
-    R_int = t_PCB ÷ (K_eff × 焊盤面積) ≈ X °C/W」；不 ok →「會用通用值 K_Via = 30（原因）」；路徑不是 Thermal Via → 「5G-RRU 不會用到」。
+    R_int = 板厚 ÷ (K_eff × 焊盤面積) ≈ X °C/W」（板厚與它實際用的同一個：分類 PCB 板厚 → `t_PCB`）；不 ok →「會用通用值 K_Via = 30（原因）」；
+    路徑不是 Thermal Via → 「5G-RRU 不會用到」。
     匯出 Excel 最後一欄「5G-RRU 基板熱阻採用」同一套判斷。**本工具不寫回 5G-RRU 的任何欄位**。
   - 5G-RRU 讀的是存進資料庫的 `thermal_specs`：本頁存檔後，5G-RRU 切回分頁（`checkProjectFreshness`）就會換成最新的並重算。
   - 原始規格與決策過程見 `docs/5G-RRU-ThermalVia-K值-prompt.md`。
