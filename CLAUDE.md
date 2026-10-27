@@ -17,7 +17,8 @@
     "<project_id>": {
       // 5G-RRU 寫: meta, project_name, global_params, rf_data, digital_data, pwr_data,
       //            layout3d（5G-RRU 3D 頁的調整：元件橫向位置／轉向、I/O、天線座、屏蔽罩設定、FDD 通道配對開關 pair、
-      //                      鰭片截斷 cut；元件的調整以元件 _cid 為 key，所以元件改名不影響。本工具不讀不寫、updateDoc 原樣保留）
+      //                      鰭片截斷 cut；元件的調整以元件 _cid 為 key，所以元件改名不影響。本工具不讀不寫、updateDoc 原樣保留）,
+      //            rru_result（5G-RRU 存檔時的設計結果：鰭片高、片數、外型、h、η、K_FIN；熱網路工具 06 唯讀。本工具不讀不寫、原樣保留）
       // AI-Thermal Tab2 寫: thermal_specs（含 Thermal Via 頁的 thermal_specs[元件].via）, hidden_components,
       //                     ⚠ 5G-RRU **唯讀** thermal_specs（3D 元件大小、Thermal Via 逐顆 K_eff：via、epadSize），永遠不寫
       //                     param_temp, param_temp_custom,
