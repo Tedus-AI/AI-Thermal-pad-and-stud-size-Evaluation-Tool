@@ -324,7 +324,8 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 
 - **依主散熱路徑取用**（`sgHeatPathOf` → `sgRjcWantFor` → `sgRjcFromRth`）：熱從哪一面出去，就用那一面的 θJC。
   `IC top`（熱從封裝上表面經 TIM 出去、5G-RRU 端 `R_int = 0`）→ **θJC,top**；
-  `Copper Coin`／`Thermal Via`（穿板、從底面出去）→ **θJC,bottom**。同一種有多筆 → 標「主要」的優先。
+  `Copper Coin`／`Thermal Via`（穿板、從底面出去）→ **θJC,bottom**；`Metal Face`（金屬散熱面，不分上下）→ 同沒選，
+  維持原本順序、不標 fallback。同一種有多筆 → 標「主要」的優先。
   主散熱路徑取自 Tab2（兩頁同專案用 TH/ME 頁記憶體裡的最新值），沒有就看元件上的 `Board_Type`。
   ⚠ 原本一律優先取標「主要」／θJC,bottom：露銅焊墊封裝的 θJC,bottom 通常比 θJC,top 小很多 →
   IC top 元件的 Tj 被低估（偏樂觀）。
@@ -349,7 +350,13 @@ Tab2 原本的「散熱方向」（`IC top`/`IC bot`/`雙向`）改為 **「主�
 | `Copper Coin` | `Copper Coin` | `heatSourceSize`（元件大小）|
 | `Thermal Via` | `Thermal Via` | `epadSize`（**E-PAD 大小**，選此值才出現的分支欄）|
 | `IC top` | `IC top` | `heatSourceSize`（不穿板：5G-RRU 端 `R_int = 0`、`R_TIM` 以元件上表面積 `Pad_L×Pad_W` 計算）|
+| `Metal Face` | `Metal Face` | `heatSourceSize`（**金屬散熱面**：腔體濾波器本體、模組底板、法蘭直接貼散熱器，不穿板；5G-RRU 端算法同 `IC top`）|
 | `None` | `None` | `0` |
+
+> `Metal Face` 是使用者要求加的（2026-10）：熱網路工具有「金屬散熱面（底板・法蘭・模組面）」這條路徑，
+> 原本這裡沒有對應的選項，腔體濾波器只能選 `None` → 熱網路工具當成「沒指定」、散熱路徑鎖不上。
+> 熱網路工具把它讀成 `DirectMetal` 並鎖定；5G-RRU 的 `BOARD_TYPES` 同時加上同名選項（**三個 repo 一起改**）。
+> 下拉的值照舊是英文（與 5G-RRU 的導熱方式同名），每個選項有中文說明（`HEAT_DIR_TIPS`，滑過去看得到）。
 
 - `Pad_L`/`Pad_W` 是 **E-PAD（散熱焊墊）尺寸，不是 IC 外型尺寸**。Copper Coin 也需要它
   （5G-RRU 的 die-attach solder 項是 `t_Solder/(K_Solder × pa × Voiding)`，直接除以 `pa`），

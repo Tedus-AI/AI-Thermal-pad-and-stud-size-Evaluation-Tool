@@ -6797,11 +6797,21 @@ const CATEGORIES = {
    直接對應 5G-RRU 的 Board_Type（導熱方式），同時決定 Pad_L/Pad_W 取哪個尺寸：
      Copper Coin  → Board_Type='Copper Coin'，Pad = 元件大小
      Thermal Via  → Board_Type='Thermal Via'，Pad = E-PAD 大小（本欄選此值才出現的分支欄）
-     IC top       → Board_Type='None'（不穿板），Pad = 元件大小 → 5G-RRU 以上表面積算 R_TIM
+     IC top       → Board_Type='IC top'（不穿板），Pad = 元件大小 → 5G-RRU 以上表面積算 R_TIM
+     Metal Face   → Board_Type='Metal Face'（金屬散熱面：腔體濾波器本體、模組底板、法蘭直接貼散熱器，
+                    不穿板），Pad = 元件大小；與熱網路工具的「金屬散熱面（底板・法蘭・模組面）」同一條路徑
      None         → Board_Type='None'，Pad = 0
    ⚠ 舊值 'IC bot' / 'IC 雙向' 在新設計沒有對應（資料裡看不出是 Coin 還是 Via），
      載入時一律清空讓使用者重選；HEAT_PATH_LEGACY 用於辨識這些舊值。 */
-const HEAT_DIR_OPTIONS = ['Copper Coin', 'Thermal Via', 'IC top', 'None'];
+const HEAT_DIR_OPTIONS = ['Copper Coin', 'Thermal Via', 'IC top', 'Metal Face', 'None'];
+/* 選項的說明（下拉滑過去看得到；值本身照舊是英文，5G-RRU 的導熱方式同名） */
+const HEAT_DIR_TIPS = {
+  'Copper Coin': '銅塊焊接：熱從封裝底面經銅塊穿板到散熱器',
+  'Thermal Via': '導熱孔：熱從 E-PAD 經導熱孔穿板到散熱器',
+  'IC top':      '元件表面：熱從封裝上表面經 TIM 到散熱器（不穿板）',
+  'Metal Face':  '金屬散熱面：底板／法蘭／模組面直接貼散熱器（例：腔體濾波器、電源模組底板；不穿板）',
+  'None':        '不計散熱路徑'
+};
 const HEAT_PATH_LEGACY = ['IC bot', '雙向'];
 
 /* TIM 種類選項 */
@@ -7537,7 +7547,7 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="editable-col boss-surface-col">凸台<br>表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
-          <th class="editable-col heat-dir-col" title="元件的主要散熱路徑。存檔時寫成 5G-RRU 元件清單的「導熱方式」（Copper Coin／Thermal Via／IC top／None 同名對應），並決定 Pad 尺寸要帶 E-PAD 大小還是元件大小過去">主散熱路徑</th>
+          <th class="editable-col heat-dir-col" title="元件的主要散熱路徑。存檔時寫成 5G-RRU 元件清單的「導熱方式」（Copper Coin／Thermal Via／IC top／Metal Face／None 同名對應；Metal Face＝金屬散熱面：腔體濾波器、模組底板、法蘭），並決定 Pad 尺寸要帶 E-PAD 大小還是元件大小過去">主散熱路徑</th>
           <th class="editable-col ic-hsk-col">IC 距離<br>HSK</th>
           <th class="editable-col note-col" title="📝 滑過看內容、點一下編輯（灰色＝還沒寫）">備註</th>
         </tr></thead>`;
@@ -7747,7 +7757,7 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
                 onchange="onCellChange(this)">
                 <option value="">\u2014</option>
                 ${HEAT_DIR_OPTIONS.map(o =>
-                  `<option value="${o}" ${heatDir === o ? 'selected' : ''}>${o}</option>`
+                  `<option value="${o}" title="${escapeAttr(HEAT_DIR_TIPS[o] || '')}" ${heatDir === o ? 'selected' : ''}>${o}</option>`
                 ).join('')}
               </select>
               ${heatDirLegacy
@@ -9568,7 +9578,8 @@ function rthTypeLabel(r) { return rthTypeDef(r && r.type).label; }
      硬塞進去會讓 5G-RRU 的 Tj 重複計算而失真，因此一律不取用。
    取值：依主散熱路徑決定要 top 還是 bottom（同一種有多筆 → 標「主要」的優先）；
          熱阻表沒有那一種 → 暫用另一種並標 fallback（熱阻表與 5G-RRU 都會提示）；
-         沒選主散熱路徑 → 維持原本順序（主要 → θJC,bottom → θJC,top）。 */
+         沒選主散熱路徑 → 維持原本順序（主要 → θJC,bottom → θJC,top）。
+   Metal Face（金屬散熱面）不分上下（模組底板、法蘭、濾波器本體）→ 同「沒選」，維持原本順序、不標 fallback。 */
 const RTH_RJC_TYPES = ['JC_bot', 'JC_top'];
 function sgRjcWantFor(path) {
   if (path === 'IC top') return 'JC_top';
@@ -9630,6 +9641,7 @@ function sgSyncRjcAll(projectData) {
      Thermal Via → Board_Type='Thermal Via'，Pad = E-PAD 大小（分支欄）
      IC top      → Board_Type='IC top'（不穿板：5G-RRU 端 R_int=0、R_TIM 以元件上表面積
                    Pad_L×Pad_W 計算，不加板厚的擴散面積），Pad = 元件大小
+     Metal Face  → Board_Type='Metal Face'（金屬散熱面，不穿板：5G-RRU 端算法同 IC top），Pad = 元件大小
      None        → Board_Type='None'，Pad = 0
    未選主散熱路徑（含清空的舊值 IC bot/雙向）→ 不寫任何 key，留給 5G-RRU 端的閘門檢查，
    不可寫 '' —— 空字串會覆蓋掉 5G-RRU 自己的預設值並讓它的計算變成 NaN 或靜默的 0。 */
@@ -9637,6 +9649,7 @@ const HEAT_PATH_MAP = {
   'Copper Coin': { board: 'Copper Coin', pad: 'elem' },
   'Thermal Via': { board: 'Thermal Via', pad: 'epad' },
   'IC top':      { board: 'IC top',      pad: 'elem' },
+  'Metal Face':  { board: 'Metal Face',  pad: 'elem' },
   'None':        { board: 'None',        pad: 'zero' },
 };
 
@@ -9785,7 +9798,7 @@ function sgRthRenderRjcHint() {
     el.innerHTML = '🔗 5G-RRU 體積評估的「熱阻 Rjc」將取用：<b>' + escapeHtml(d.label) +
       ' = ' + escapeHtml(String(got.value)) + ' °C/W</b>' +
       (got.cond ? '（' + escapeHtml(got.cond) + '）' : '') +
-      '　<span style="opacity:.75">依' + pathNote + '取用（IC top → θJC,top；Copper Coin／Thermal Via → θJC,bottom）。' +
+      '　<span style="opacity:.75">依' + pathNote + '取用（IC top → θJC,top；Copper Coin／Thermal Via → θJC,bottom；Metal Face 不分上下，標「主要」的優先）。' +
       'θJA／θJB／Ψ 熱路徑不同，不會被取用。</span>' +
       (got.fallback ? '<div class="sg-rth-fallback">⚠ ' + pathNote + '應該用 <b>' + escapeHtml(rthTypeDef(got.want).label) +
         '</b>，這張表沒有 → 暫用上面這一筆，Tj 可能失真。請補上 ' + escapeHtml(rthTypeDef(got.want).label) + '。</div>' : '');

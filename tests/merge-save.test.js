@@ -188,14 +188,17 @@ const PROJ = {
     const icTop = sgRjcFromRth(pa);                                   // Tab2：IC top
     thermalSpecs.PA.heatDirection = 'Thermal Via';
     const via = sgRjcFromRth(pa);
+    thermalSpecs.PA.heatDirection = 'Metal Face';
+    const metal = sgRjcFromRth(pa);                                   // 不分上下 → 標「主要」的
     thermalSpecs.PA.heatDirection = 'IC top';
     const onlyBot = sgRjcFromRth({ Component: 'PA', Rth: [{ type: 'JC_bot', value: '0.5' }] });
     const noPath = sgRjcFromRth({ Component: 'NoSpec', Rth: [{ type: 'JC_top', value: '4', primary: true }, { type: 'JC_bot', value: '0.6' }] });
     sgSyncRjc(pa);
-    return { icTop, via, onlyBot, noPath, rjc: pa.R_jc, from: pa._rjc_from };
+    return { icTop, via, metal, onlyBot, noPath, rjc: pa.R_jc, from: pa._rjc_from };
   });
   ok('IC top → θJC,top（3.2），不是標「主要」的 θJC,bottom', f.icTop.type === 'JC_top' && f.icTop.value === 3.2 && !f.icTop.fallback, f.icTop);
   ok('Thermal Via → θJC,bottom（0.5）', f.via.type === 'JC_bot' && f.via.value === 0.5, f.via);
+  ok('Metal Face → 不分上下：標「主要」的（θJC,bottom 0.5），不標 fallback', f.metal.type === 'JC_bot' && f.metal.value === 0.5 && !f.metal.fallback, f.metal);
   ok('IC top 但只有 θJC,bottom → 暫用並標 fallback', f.onlyBot.type === 'JC_bot' && f.onlyBot.fallback === true && f.onlyBot.want === 'JC_top', f.onlyBot);
   ok('沒選主散熱路徑 → 維持原本順序（標「主要」的優先）', f.noPath.type === 'JC_top' && f.noPath.value === 4, f.noPath);
   ok('寫進元件的 R_jc 與來源標記跟著路徑', f.rjc === 3.2 && f.from === 'JC_top', f);
