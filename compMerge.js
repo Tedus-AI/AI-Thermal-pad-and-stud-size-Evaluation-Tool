@@ -21,7 +21,7 @@
  * 這些欄位不列入比對、不算「我改過這顆」、也不會跳衝突，一律用畫面上的值，呼叫端合併後再重新推導。
  * （不排除的話，載入時自動帶入的板厚會被當成「我改過」，對方刪掉那顆元件時就變成假衝突。）
  *
- * 另外放了兩個「共用元件語意」函式（limitRef／limitSuspect）：兩個工具的畫面與計算必須判斷一致，
+ * 另外放了幾個「共用元件語意」函式（limitRef／limitSuspect、快選參照的 refOrigin／refTidy）：兩個工具的畫面與計算必須判斷一致，
  * 放在這份兩邊逐字相同的檔案裡，才不會各寫一份、日後改一邊漏一邊。
  */
 (function (root) {
@@ -398,6 +398,56 @@
     return null;
   }
 
+  /* 快選參照的來源：兩個工具的畫面與存檔都呼叫這裡，判斷才會一致。
+     快選時元件上記下 _ref_origin_id（來源專案 id；改名只動 project_name、id 不變）、_ref_origin_project（當時的名稱）、
+     _ref_locked（瓦數鎖定）；規格書每一份的 _from、_pd_meas_from 也是當時的名稱。
+     projects＝{ 專案 id: document }（資料庫的 projects collection）；沒讀到就傳 null → 只回存著的名稱、不判斷來源在不在。
+
+     refOrigin(c, projects) → null（沒有參照）或 { id, name, stored, gone }
+       name：來源目前的名稱（專案已刪除、或沒給 projects → 存著的名稱）；stored：元件上存著的名稱
+       gone：'project'＝來源專案已刪除；'comp'＝來源專案裡（三類都找過）已經沒有同名元件
+             （多半是這顆在本專案改了名、已經是另一顆料，或來源那顆被刪／改名）；false＝還在
+     refTidy(c, projects)：存檔時整理（對「要寫的那份複本」做）：
+       來源專案還在 → 存著的名稱換成目前名稱（_pd_meas_from、規格書 _from 等於舊名稱的一起換）；
+       來源已不存在 → 拿掉 _ref_origin_project／_ref_origin_id／_ref_locked（瓦數照留、解除鎖定）。
+       ⚠ 規格書的 _from 是「檔案在別的專案資料夾、刪除時不可刪檔」的保護標記 → 不拿掉。
+       回傳 null（沒有參照或沒給 projects）或 { renamed, dropped: false|'project'|'comp' }。 */
+  var REF_KEYS = ['_ref_origin_project', '_ref_origin_id', '_ref_locked'];
+  function refOrigin(c, projects) {
+    if (!isObj(c)) return null;
+    var id = (typeof c._ref_origin_id === 'string') ? c._ref_origin_id : '';
+    var stored = (typeof c._ref_origin_project === 'string') ? c._ref_origin_project : '';
+    if (!id && !stored) return null;
+    if (!id || !isObj(projects)) return { id: id, name: stored || id, stored: stored, gone: false };
+    var p = projects[id];
+    if (!isObj(p)) return { id: id, name: stored || id, stored: stored, gone: 'project' };
+    var now = String(p.project_name || '').trim() || id;
+    var nm = nameOf(c), found = false;
+    for (var i = 0; i < CATS.length && !found && nm; i++) {
+      var list = Array.isArray(p[CATS[i]]) ? p[CATS[i]] : [];
+      for (var j = 0; j < list.length; j++) { if (nameOf(list[j]) === nm) { found = true; break; } }
+    }
+    return { id: id, name: now, stored: stored, gone: found ? false : 'comp' };
+  }
+  function refTidy(c, projects) {
+    if (!isObj(projects)) return null;
+    var r = refOrigin(c, projects);
+    if (!r || !r.id) return null;
+    var out = { renamed: false, dropped: false }, old = r.stored;
+    if (r.gone !== 'project' && r.name !== old) {
+      c._ref_origin_project = r.name;
+      if (old && c._pd_meas_from === old) c._pd_meas_from = r.name;
+      var specs = Array.isArray(c.SpecFile) ? c.SpecFile : (isObj(c.SpecFile) ? [c.SpecFile] : []);
+      specs.forEach(function (s) { if (isObj(s) && old && s._from === old) s._from = r.name; });
+      out.renamed = true;
+    }
+    if (r.gone) {
+      REF_KEYS.forEach(function (k) { delete c[k]; });
+      out.dropped = r.gone;
+    }
+    return out;
+  }
+
   /* ── 畫面：衝突選擇視窗與提示 ─────────────────────────── */
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -595,7 +645,7 @@
     MergePending: MergePending, saveWithMerge: saveWithMerge,
     showConflictDialog: showConflictDialog, toast: toast, summaryText: summaryText,
     fmtUnit: fmtUnit,
-    limitRef: limitRef, limitSuspect: limitSuspect,
+    limitRef: limitRef, limitSuspect: limitSuspect, refOrigin: refOrigin, refTidy: refTidy, REF_KEYS: REF_KEYS,
     LIMIT_REF_TC_TYPES: LIMIT_REF_TC_TYPES, LIMIT_REF_TJ_TYPES: LIMIT_REF_TJ_TYPES, LIMIT_SUSPECTS: LIMIT_SUSPECTS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
