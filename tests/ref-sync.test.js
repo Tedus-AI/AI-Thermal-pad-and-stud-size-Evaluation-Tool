@@ -11,7 +11,8 @@
  *   [C] 視窗列出「目前 vs 來源」；勾選套用會深拷貝（不與快取共用參照）、
  *       規格書重新標 _from、熱阻套用後 R_jc 跟著重算、空值 delete key 不寫 ''。
  *   [D] 來源被清空的欄位預設不勾（不順手清掉本專案的值）；全選／全不選可用。
- *   [E] 來源專案或同名元件不見了 → 顯示「來源已不存在」，不給更新鈕也不報錯。
+ *   [E] 來源專案或同名元件不見了 → 參照已失效：整個參照標記不顯示、瓦數不鎖、不給更新鈕也不報錯
+ *       （存檔時清掉標記，見 tests/ref-origin-name.test.js）。
  *   [F] 未解鎖（唯讀）→ 可以開來看差異，但沒有套用鍵。
  *
  * 執行：
@@ -68,6 +69,9 @@ function ok(name, cond, extra) {
         },
       }],
     }], Digital: [], PWR: [] };
+    // 專案名單（判斷來源在不在、目前名稱）：A 裡有 Final PA
+    sgProjDocs = { A: { project_name: '專案A', rf_data: [{ Component: 'Final PA' }], digital_data: [], pwr_data: [] },
+                   B: { project_name: '專案B', rf_data: [], digital_data: [], pwr_data: [] } };
     sgProjectId = 'B';
     sgProjectData = { project_name: '專案B', rf_data: [
       { Component: 'Final PA', 'Power(W)': 52, Pad_L: 12, Pad_W: 12, Board_Type: 'Thermal Via',
@@ -200,21 +204,28 @@ function ok(name, cond, extra) {
   ok('沒勾的欄位不動（限溫仍是 225）', d2.limitKept === 225, d2);
   ok('熱阻清掉後來源標記也清掉', d2.rjcFrom === undefined, d2);
 
-  console.log('\n[E] 來源不見了');
+  console.log('\n[E] 來源不見了 → 參照失效：不顯示');
   const e = await page.evaluate(() => {
-    sgProjectData.rf_data[0] = { Component: '不存在的元件', _ref_origin_project: '專案A', _ref_origin_id: 'A', _ref_locked: true };
+    const row = () => document.querySelector('#sg-project-components-body tbody tr');
+    const look = () => { const r = row(); return {
+      badge: !!r.querySelector('.sg-ref-badge'), goneText: !!r.querySelector('.sg-ref-gone'),
+      btn: !!r.querySelector('.sg-ref-sync-btn'), locked: !!r.querySelector('.sg-locked-val'),
+      powerInput: !!r.querySelector('input[data-field="Power(W)"]'), text: r.textContent }; };
+    sgProjectData.rf_data[0] = { Component: '不存在的元件', 'Power(W)': 12, _ref_origin_project: '專案A', _ref_origin_id: 'A', _ref_locked: true };
     sgRenderProjectComponents();
-    const gone = document.querySelector('#sg-project-components-body .sg-ref-gone');
-    const btn = document.querySelector('#sg-project-components-body .sg-ref-sync-btn');
+    const comp = look();
+    const lockedFn = sgRefLocked(sgProjectData.rf_data[0]);
     // 整個來源專案不見
-    sgProjectData.rf_data[0].Component = 'Final PA';
-    sgProjectData.rf_data[0]._ref_origin_id = 'ZZZ';
+    sgProjectData.rf_data[0] = { Component: 'Final PA', 'Power(W)': 12, _ref_origin_project: '專案A', _ref_origin_id: 'ZZZ', _ref_locked: true };
     sgRenderProjectComponents();
-    const gone2 = !!document.querySelector('#sg-project-components-body .sg-ref-gone');
-    return { goneText: gone ? gone.textContent : '', noBtn: !btn, gone2 };
+    const proj = look();
+    return { comp, proj, lockedFn, dataKept: sgProjectData.rf_data[0]._ref_origin_id === 'ZZZ' };
   });
-  ok('來源同名元件不見 → 顯示「來源已不存在」且不給更新鈕', /來源已不存在/.test(e.goneText) && e.noBtn, e);
-  ok('整個來源專案不見也一樣', e.gone2 === true, e);
+  ok('來源同名元件不見 → 不顯示「參照自／曾參照自」，也沒有「來源已不存在」字樣、沒有更新鈕',
+     !e.comp.badge && !e.comp.goneText && !e.comp.btn && !/參照自|來源已不存在/.test(e.comp.text), e.comp);
+  ok('瓦數不再鎖定（可直接改）', !e.comp.locked && e.comp.powerInput && e.lockedFn === false, e.comp);
+  ok('整個來源專案不見也一樣', !e.proj.badge && !e.proj.goneText && !e.proj.locked && e.proj.powerInput, e.proj);
+  ok('只是顯示：資料裡的標記要等存檔才清', e.dataKept === true, e);
 
   console.log('\n[F] 唯讀（未解鎖）');
   const f = await page.evaluate(() => {

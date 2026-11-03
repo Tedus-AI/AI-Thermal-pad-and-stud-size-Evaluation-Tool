@@ -146,7 +146,8 @@ materials:[{ id, vendor, model, tim_type, type_label, family:'Pad'|'Putty'|'Grea
 >
 > 內部欄位（底線開頭，兩個工具都原樣保留、**不列入** carry 白名單）：`_cid`（元件 id，存檔三方合併配對用，
 > 兩邊都會補發，見下方「存檔三方合併」）、`_defaults_ok`（5G-RRU 寫：使用者確認過這顆不是舊版罐頭預設值）、
-> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`／`_ref_*`（5G-RRU 的排除與快選參照）、
+> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`（5G-RRU 的排除）、`_ref_*`（兩個工具的快選參照；
+> 來源不存在時存檔會清掉，見「快選參照的來源專案名稱用 id 查」）、
 > `_renamed_from`（5G-RRU 寫：改過名的元件，本工具以名稱當 key 的資料還掛在哪個名稱底下；本工具存檔搬完就清掉，
 > 見下方「元件改名」）、`_limit_ok`（兩邊都會寫：使用者確認「限溫疑似範例值」其實是實際規格時，記下**確認的那個限溫數字**，
 > 見下方「限溫對象」）。
@@ -280,27 +281,34 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 > **不在同步範圍**（跟著各專案自己的工況與散熱設計）；來源已清空的欄位**預設不勾**，
 > 勾了是 `delete` key 而非寫 `''`；套用物件欄位要深拷貝（否則與 `sgProjectTreeCache` 共用參照）；
 > `SpecFile` 套用後要重標 `_from`；改到 `Rth` 就呼叫 `sgSyncRjc(comp)` 讓 `R_jc` 跟著重算。
-> 來源專案或同名元件不見了 → 顯示「來源已不存在」，不給更新鈕也不報錯。
+> 來源專案或同名元件不見了 → 參照已失效：整個參照標記不顯示、瓦數不鎖、不給更新鈕，存檔時清掉標記（見下一節）。
 
-#### 快選參照的「來源專案名稱」用 id 查，來源改名會跟著變 ⚠️
+#### 快選參照的「來源專案名稱」用 id 查、來源不存在就清掉 ⚠️ 兩個工具共用規則
 
 快選時元件上抄的是來源專案**當時的名稱**：`_ref_origin_project`、規格書每一份的 `SpecFile._from`、`_pd_meas_from`。
-專案改名只動 `project_name`、id 不變（兩個工具都一樣），所以這些名稱會過時 —— 使用者回報「參照自 FDD 4T4R 60W」
-在來源改名後還是舊名稱。
+使用者回報兩件事：① 專案改名只動 `project_name`、id 不變（兩個工具都一樣）→「參照自 FDD 4T4R 60W」在來源改名後還是舊名稱；
+② 來源已經不存在（專案被刪、或來源裡已經沒有同名元件 —— 多半是這顆快選後在本專案改了名、已經是另一顆料）
+還寫著「曾參照自 X・來源已不存在」。
 
-- **顯示一律用 `_ref_origin_id` 查目前名稱**：`sgRefOriginName(comp)`（`sgProjNames[id]`，查不到＝來源已刪除 → 用存著的名稱）。
-  規格書的 `_from` 只存名稱、沒有 id → `sgSpecFromName(comp, s)`：`_from` 等於元件存著的 `_ref_origin_project` 時換成目前名稱，
-  否則照原字。所有顯示點（參照標記、`sgRefSyncOpen` 標題、規格書 👁／清單／預覽／刪除確認、TH/ME 頁的 👁）都走這兩個函式，
-  **不要再直接印 `_ref_origin_project`／`s._from`**。參照標記的 tooltip 另外寫出「快選當時名稱」（追溯用）。
-- `sgProjNames`（專案 id → 目前名稱）在 `sgLoadProjects`、`sgLoadVariantsCache`、存檔前（讀 `getCollection('projects')`）更新；
-  本工具改名（`_sgApplyRenameToUI`）就地換掉它、快選面板群組名稱（`sgProjectTreeCache`）與 `sgVariantsCache` 的來源名稱。
-- **存檔時把存著的名稱換成目前名稱**（`sgRefreshRefNames`，在 `saveAllTabs` 的 `mergeInto` **合併之後**、對要寫的那份複本做）：
-  `_ref_origin_project`、`_pd_meas_from`（等於舊名稱時）、`SpecFile._from`（等於舊名稱時）。合併後才換 → 不算「我改過」、不會跳衝突；
-  5G-RRU 在我們載入後才改名也拿得到最新名稱。**規格書路徑不動**（實體檔沒有搬，同上方「專案改名」）。
-  `_ref_origin_id`、`_ref_locked` 不動；來源已刪除（id 查不到）的不動。只是載入、沒有存檔 → 資料不變、不算未存變更。
-- ⚠ **5G-RRU 端目前仍直接顯示 `_ref_origin_project`**（它的元件表「↩ 參照自／曾參照自」），所以它要等本工具存過參照它的專案
-  才會看到新名稱；它若也改成用 `_ref_origin_id` 查它手上的專案列表，就能即時跟上（跨 repo，待 5G-RRU 同步）。
-- 契約測試：`tests/ref-origin-name.test.js`。
+- **判斷在兩邊逐字相同的 `compMerge.js`**：`CompMerge.refOrigin(comp, projects)` → `{ id, name（目前名稱）, stored, gone }`，
+  `gone` ＝ `'project'`（來源專案已刪除）／`'comp'`（來源專案三類都找過、沒有同名元件）／`false`；
+  `CompMerge.refTidy(comp, projects)` 存檔時整理。`projects` 沒讀到就傳 `null` → **不判斷失效**（不在不確定時刪參照）。
+- **顯示**：`sgRefInfo(comp)`（名單 `sgProjDocs`＝專案 id → document，只讀）／`sgRefOriginName`／`sgSpecFromName`／`sgRefLocked`。
+  規格書的 `_from` 只存名稱、沒有 id → `_from` 等於元件存著的 `_ref_origin_project` 時換成目前名稱，否則照原字。
+  所有顯示點（參照標記、`sgRefSyncOpen` 標題、規格書 👁／清單／預覽／刪除確認、TH/ME 頁的 👁）都走這幾個函式，
+  **不要再直接印 `_ref_origin_project`／`s._from`、不要再直接讀 `_ref_locked`**。參照標記的 tooltip 另外寫出「快選當時名稱」。
+  **參照失效 → 整個參照標記不顯示（不再有「來源已不存在」字樣）、瓦數不鎖**（`sgRefLocked`；`sgApplyMeasured` 也照它）、
+  不給「↻ 來源有更新」。`sgRefSource` 先問 `refOrigin` 在不在，再到 `sgProjectTreeCache` 找來源（同類先找、再找其他類）比對差異。
+- `sgProjDocs` 在 `sgLoadProjects`、`sgLoadVariantsCache`、存檔前（讀 `getCollection('projects')`）更新；
+  本工具改名（`_sgApplyRenameToUI`）就地換掉它（**複本**，不改 DB 快取）、快選面板群組名稱（`sgProjectTreeCache`）與 `sgVariantsCache` 的來源名稱。
+- **存檔時整理**（`sgRefTidyAll`，在 `saveAllTabs` 的 `mergeInto` **合併之後**、對要寫的那份複本做）：
+  還在 → 換成目前名稱（`_ref_origin_project`；`_pd_meas_from`、`SpecFile._from` 等於舊名稱的一起換）；
+  失效 → 拿掉 `_ref_origin_project`／`_ref_origin_id`／`_ref_locked`（瓦數照留）。合併後才做 → 不算「我改過」、不會跳衝突；
+  5G-RRU 在我們載入後才改名／刪專案也跟得上。有清掉時狀態列附一句「清掉 N 顆元件的失效參照」。
+  **規格書的 `_from` 不拿掉**（刪除時的保護標記：檔案在別的專案資料夾）、**路徑不動**（實體檔沒有搬，同下方「專案改名」）。
+  只是載入、沒有存檔 → 資料不變、不算未存變更。
+- 5G-RRU 同一套（`refInfoOf`／`refTidyFields`，見它的 CLAUDE.md「快選參照」）。
+- 契約測試：`tests/ref-origin-name.test.js`、`tests/ref-sync.test.js` [E]；規則本身在共用的 `tests/comp-merge.unit.test.js` [O]。
 
 #### ⚠ 參照也涵蓋 Tab2 的「元件大小／元件高度」（值不在元件物件上）
 
@@ -465,7 +473,7 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
 - ⚠ **既有規格書檔案不會跟著搬**：每顆元件的 `SpecFile.path` 存的是完整路徑，所以下載
   照常；只有改名後「新上傳」的檔案會進新資料夾。這點在彈窗說明裡有明講，不要拿掉。
 - 別的專案從這個專案快選過的元件：「參照自」用 id 查名稱，改名後立刻顯示新名稱；元件上存的名稱等那個專案下次存檔時更新
-  （見上方「快選參照的來源專案名稱用 id 查」）。改名本身**不去寫別的專案**。
+  （見上方「快選參照的來源專案名稱用 id 查」；5G-RRU 也一樣）。改名本身**不去寫別的專案**。
 
 #### 元件改名 → 以元件名稱當 key 的資料一起搬（兩個工具都能改名）⚠️
 
@@ -504,7 +512,7 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
 回本工具改瓦數存檔 → 高度被蓋回沒有）。
 
 - **`compMerge.js`（＋`tests/comp-merge.unit.test.js`）在兩個 repo 內容逐字相同**，改一邊就同步另一邊。
-  它也放了兩個**共用元件語意**函式（`limitRef`／`limitSuspect`）：兩個工具的畫面與計算必須判斷一致。
+  它也放了幾個**共用元件語意**函式（`limitRef`／`limitSuspect`、快選參照的 `refOrigin`／`refTidy`）：兩個工具的畫面與計算必須判斷一致。
 - 快照：`sgProjectBase`（Tab1 載入時）、`clProjectBase`（Tab2 載入時；TH/ME 頁單獨推導別的專案、把三個陣列
   補進 Tab2 的寫入時用）。載入時 `CompMerge.ensureProjectCids` 補發 `_cid`，快照與畫面同一份 id；
   `sgMakeComp`（含快選）一律給**新的** `_cid`。

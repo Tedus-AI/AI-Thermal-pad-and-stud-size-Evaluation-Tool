@@ -8730,9 +8730,11 @@ function sgRenderProjectComponents() {
       const selectVal = isPredefined ? typeVal : (typeVal ? '其他' : '');
       const customVal = (!isPredefined && typeVal) ? typeVal : '';
       const customVisible = selectVal === '其他' ? ' visible' : '';
-      const refLocked = !!comp._ref_locked;
-      // 來源專案的「目前」名稱（用 id 查；來源改名後跟著變），快選當時的名稱放 tooltip 供追溯
-      const refOrigin = sgRefOriginName(comp);
+      // 快選參照：來源專案的「目前」名稱（用 id 查；來源改名後跟著變），快選當時的名稱放 tooltip 供追溯。
+      // 來源已不存在（專案已刪除／來源裡沒有同名元件）→ 參照已失效：不顯示、瓦數不鎖，存檔時清掉標記（sgRefTidyAll）
+      const refInfo = sgRefInfo(comp);
+      const refLocked = sgRefLocked(comp);
+      const refOrigin = (refInfo && !refInfo.gone) ? refInfo.name : '';
       const refOld = comp._ref_origin_project || '';
       const refTip = '來源專案：' + refOrigin +
         ((refOld && refOld !== refOrigin) ? '\n（快選當時名稱：' + refOld + '；來源之後改名，下次存檔時一併更新）' : '');
@@ -9159,28 +9161,32 @@ const SG_VARIANT_CARRY = [
   'Height(mm)', 'Thick(mm)', 'Limit(C)', 'Limit_Ref',
 ];
 
-/* ── 參照來源的專案名稱：一律用專案 id 查「目前的名稱」 ──
+/* ── 快選參照的來源：一律用專案 id 查（判斷在兩個工具共用的 CompMerge.refOrigin／refTidy）──
    快選時元件上抄的是當時的名稱（_ref_origin_project、規格書的 _from、_pd_meas_from），
-   來源專案之後改名（本工具或 5G-RRU 改都一樣：改名只動 project_name、id 不變）就會過時。
-   → 顯示時用 _ref_origin_id 查 sgProjNames（sgRefOriginName／sgSpecFromName）；
-     存檔時把存著的名稱換成目前的名稱（sgRefreshRefNames：5G-RRU 也顯示 _ref_origin_project，
-     來源被刪掉之後「曾參照自」顯示的也才是最後的名稱）。
-   sgProjNames 在載入專案列表、讀快選快取、存檔前、改名時更新；查不到（來源已刪）→ 用存著的名稱。 */
-let sgProjNames = {};   // { 專案 id: 目前名稱 }
+   來源專案之後改名（本工具或 5G-RRU 改都一樣：改名只動 project_name、id 不變）就會過時；
+   來源專案被刪、或來源裡已經沒有同名元件（多半是這顆在本專案改了名、已經是另一顆料）→ 參照已經失效。
+   → 顯示：用 _ref_origin_id 查目前名稱（sgRefOriginName／sgSpecFromName）；失效的參照不顯示、瓦數不鎖（sgRefInfo）。
+   → 存檔：要寫的那份複本換成目前名稱、失效的參照標記拿掉（sgRefTidyAll；5G-RRU 也顯示 _ref_origin_project）。
+   sgProjDocs（專案 id → document，只讀）在載入專案列表、讀快選快取、存檔前、改名時更新；還沒讀到 → 不判斷失效。 */
+let sgProjDocs = null;   // { 專案 id: document }（資料庫 projects 的參照，只讀不改）
 function sgProjNamesFrom(projects) {
   const m = {};
-  const add = (id, p) => {
-    const nm = String((p && p.project_name) || '').trim();
-    if (id) m[id] = nm || id;
-  };
-  if (Array.isArray(projects)) projects.forEach(p => add(p && p.id, p));
-  else Object.entries(projects || {}).forEach(([id, p]) => add(id, p));
-  sgProjNames = m;
+  if (Array.isArray(projects)) projects.forEach(p => { if (p && p.id) m[p.id] = p; });
+  else Object.entries(projects || {}).forEach(([id, p]) => { if (id && p) m[id] = p; });
+  sgProjDocs = m;
+}
+function sgRefInfo(comp) {
+  return CompMerge.refOrigin(comp, (sgProjDocs && Object.keys(sgProjDocs).length) ? sgProjDocs : null);
 }
 function sgRefOriginName(comp) {
-  if (!comp) return '';
-  const id = comp._ref_origin_id;
-  return (id && sgProjNames[id]) || comp._ref_origin_project || '';
+  const r = sgRefInfo(comp);
+  return r ? r.name : '';
+}
+/* 瓦數鎖定：參照還有效才鎖（來源已不存在 → 鎖著沒有意義） */
+function sgRefLocked(comp) {
+  if (!comp || !comp._ref_locked) return false;
+  const r = sgRefInfo(comp);
+  return !(r && r.gone);
 }
 /* 規格書的 _from 只存名稱（沒有 id）：等於元件快選當時的來源名稱 → 換成來源目前的名稱 */
 function sgSpecFromName(comp, s) {
@@ -9189,19 +9195,16 @@ function sgSpecFromName(comp, s) {
   if (comp && comp._ref_origin_id && f === comp._ref_origin_project) return sgRefOriginName(comp);
   return f;
 }
-/* 存檔時：元件上存著的來源名稱換成目前的名稱（doc＝要寫入的那份，已是複本）。回傳換了幾顆。 */
-function sgRefreshRefNames(doc) {
-  let n = 0;
+/* 存檔時：要寫的那份（doc，已是複本）整理參照。回傳 { renamed, dropped } 顆數。 */
+function sgRefTidyAll(doc) {
+  const n = { renamed: 0, dropped: 0 };
+  const projs = (sgProjDocs && Object.keys(sgProjDocs).length) ? sgProjDocs : null;
   ['rf_data', 'digital_data', 'pwr_data'].forEach(k => {
     (doc && Array.isArray(doc[k]) ? doc[k] : []).forEach(c => {
-      if (!c || !c._ref_origin_id) return;
-      const now = sgProjNames[c._ref_origin_id];
-      const old = c._ref_origin_project;
-      if (!now || now === old) return;
-      c._ref_origin_project = now;
-      if (old && c._pd_meas_from === old) c._pd_meas_from = now;
-      sgSpecList(c).forEach(s => { if (old && s._from === old) s._from = now; });
-      n++;
+      const r = CompMerge.refTidy(c, projs);
+      if (!r) return;
+      if (r.dropped) n.dropped++;
+      else if (r.renamed) n.renamed++;
     });
   });
   return n;
@@ -11236,7 +11239,7 @@ function sgMeasuredPd(catKey, componentName) {
 function sgApplyMeasured(cat, idx, field) {
   if (isProtected) { alert('請先解鎖密碼保護'); return; }
   const comp = sgProjectData?.[SG_CAT_MAP[cat]?.field]?.[idx];
-  if (!comp || comp._ref_locked) return;
+  if (!comp || sgRefLocked(comp)) return;
   const meas = sgMeasuredPd(cat, comp.Component);
   if (!meas) return;
   if (field === 'both') {
@@ -11571,17 +11574,21 @@ function sgApplySpec2(projId, compName, vals, force) {
   return { applied: Object.keys(clean), pending: true };
 }
 
-/* 來源元件（同一個專案 id ＋ 同名）。回傳 null = 沒有參照；{gone:true} = 來源已不在。 */
+/* 來源元件（同一個專案 id ＋ 同名）。回傳 null = 沒有參照；{gone} = 來源已不在（參照失效）；{pending} = 快取還沒讀好。 */
 function sgRefSource(comp, cat) {
-  const pid = comp && comp._ref_origin_id;
-  if (!pid) return null;
-  const groups = (sgProjectTreeCache && sgProjectTreeCache[cat]) || null;
-  if (!groups) return { pending: true };          // 快取還沒讀好 → 這次不判斷
-  const g = groups.find(x => x.projId === pid);
+  const r = sgRefInfo(comp);
+  if (!r || !r.id) return null;
+  if (r.gone) return { gone: r.gone };
+  if (!sgProjectTreeCache) return { pending: true };   // 快取還沒讀好 → 這次不判斷
   const name = String(comp.Component || '').trim();
-  const hit = g && g.comps.find(x => x.name === name);
-  if (!hit) return { gone: true };
-  return { group: g, src: hit.src || {}, spec2: hit.spec2 || {} };
+  // 先找同一類，再找其他類（判斷「還在不在」的 refOrigin 三類都找）
+  const cats = [cat].concat(['RF', 'Digital', 'PWR'].filter(x => x !== cat));
+  for (const k of cats) {
+    const g = (sgProjectTreeCache[k] || []).find(x => x.projId === r.id);
+    const hit = g && g.comps.find(x => x.name === name);
+    if (hit) return { group: g, src: hit.src || {}, spec2: hit.spec2 || {} };
+  }
+  return { pending: true };   // 名單說還在、快取裡沒有（快取比較舊）→ 這次不比對
 }
 
 function _sgRefNorm(v) {
@@ -11637,10 +11644,7 @@ function sgRefDiff(comp, cat) {
 
 function sgRefSyncBadge(comp, cat, idx) {
   const r = sgRefSource(comp, cat);
-  if (!r || r.pending) return '';
-  if (r.gone) {
-    return `<span class="sg-ref-gone" title="${escapeAttr('來源專案裡已經找不到同名元件（可能被改名或刪除）。本專案的資料不受影響，只是無法再比對來源。')}">・來源已不存在</span>`;
-  }
+  if (!r || r.pending || r.gone) return '';   // 參照失效 → 整個參照標記都不顯示（見 sgRefInfo）
   const diff = sgRefDiff(comp, cat);
   if (!diff.length) return '';
   const tip = '來源專案的規格類欄位有更新：' + diff.map(d => d.label).join('、')
@@ -13805,7 +13809,10 @@ async function saveAllTabs() {
     const sgMine = hasSg ? { rf_data: sgProjectData.rf_data || [], digital_data: sgProjectData.digital_data || [],
                              pwr_data: sgProjectData.pwr_data || [] } : null;
     const sgBase = sgProjectBase, clBase = clProjectBase;
-    // 參照來源的專案名稱：存檔前讀一次目前的專案名稱（別的工具剛改名也跟得上），合併完在要寫的那份上更新
+    // 快選參照：存檔前讀一次目前的專案（別的工具剛改名／刪專案也跟得上），合併完在要寫的那份上
+    // 換成目前名稱、清掉失效的參照（CompMerge.refTidy）。每次計算（412 重算）重新數，存完在狀態列說一聲。
+    const refDropped = new WeakMap();   // 要寫的那份 → 清掉幾顆失效參照（412 重算時是新的一份，自然重數）
+    const refTidy = (f) => { refDropped.set(f, sgRefTidyAll(f).dropped); };
     try {
       const projs = await dbAdapter.getCollection('projects');
       if (projs && Object.keys(projs).length) sgProjNamesFrom(projs);
@@ -13815,12 +13822,12 @@ async function saveAllTabs() {
         const m = CompMerge.mergeProject(base, mine, cur, { resolutions, derivedKeys: SG_MERGE_DERIVED });
         if (m.unresolved.length) throw CompMerge.MergePending(m.unresolved);
         Object.assign(f, m.fields);
-        sgRefreshRefNames(f);   // 合併後才換（f 是複本）：不算「我改過」、不會因此跳衝突
+        refTidy(f);   // 合併後才整理（f 是複本）：不算「我改過」、不會因此跳衝突
         return m;
       }
       // 新專案／沒有載入時快照 → 以畫面為準（型別整理照做：共用欄位空值不寫 key）
       CompMerge.CATS.forEach(k => { if (mine[k]) f[k] = mine[k].map(CompMerge.normalizeComp); });
-      sgRefreshRefNames(f);
+      refTidy(f);
       return null;
     };
     // 元件改名 → 以名稱當 key 的資料（TH/ME 頁、Tab3、標註）一起搬（見 sgCollectRenames／sgApplyRenames）。
@@ -13990,7 +13997,10 @@ async function saveAllTabs() {
       if (hasVd && typeof vdRender === 'function') vdRender();
 
       snapAllClean();   // 已持久化 → 重設乾淨基準
-      const note = [sgMerge, clMerge].map(m => (m ? CompMerge.summaryText(m) : '')).filter(Boolean).join('；');
+      const nDrop = [sgWritten, clWritten].reduce((t, w) => t + ((w && refDropped.get(w)) || 0), 0);
+      const note = [sgMerge, clMerge].map(m => (m ? CompMerge.summaryText(m) : ''))
+        .concat(nDrop ? ['清掉 ' + nDrop + ' 顆元件的失效參照（來源專案已刪除或已找不到同名元件）'] : [])
+        .filter(Boolean).join('；');
       setStatus('全部儲存成功！' + (note ? '（' + note + '）' : ''), 'saved', note ? 6000 : 3000);
     }
   } catch (e) {
@@ -14328,7 +14338,7 @@ function _sgApplyRenameToUI(projId, newName) {
   });
   // 參照這個專案的元件：顯示用 id 查名稱 → 換掉名稱表即可（存檔時再把元件上存的名稱更新）；
   // 快選面板的群組名稱、之後快選帶入的名稱也要是新的
-  sgProjNames[projId] = newName;
+  if (sgProjDocs && sgProjDocs[projId]) sgProjDocs[projId] = Object.assign({}, sgProjDocs[projId], { project_name: newName });   // 複本：不改 DB 快取
   Object.values(sgProjectTreeCache || {}).forEach(groups => (groups || []).forEach(g => {
     if (g && g.projId === projId) g.projName = newName;
   }));

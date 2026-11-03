@@ -17,6 +17,7 @@
  *   [L] 呼叫端自己推導的欄位（derivedKeys）不比對、不跳假衝突
  *   [M] 限溫與限溫對象（Limit_Ref）整組比對
  *   [N] 共用元件語意：limitRef（限溫對象自動判定）、limitSuspect（限溫疑似範例值）
+ *   [O] 快選參照的來源：refOrigin（目前名稱、來源在不在）、refTidy（存檔時換名稱、清掉失效參照）
  *
  * 執行：node tests/comp-merge.unit.test.js
  */
@@ -266,6 +267,51 @@ const BASE = {
        sus({ Component: 'SFP', 'Limit(C)': 200, _limit_ok: 200 }) === null && sus({ Component: 'SFP', 'Limit(C)': 150, _limit_ok: 200 }) === 'sfp:150' &&
        sus({ Component: 'SFP', 'Limit(C)': '200', _limit_ok: '200' }) === null);
     ok('沒有限溫 → 不提醒（缺值交給必填檢查）', sus({ Component: 'SFP' }) === null && sus({ Component: 'SFP', 'Limit(C)': '' }) === null);
+  }
+
+  console.log('\n[O] 快選參照的來源：refOrigin／refTidy');
+  {
+    const PROJS = {
+      A: { project_name: 'FDD B1B3 4T4R 480W', rf_data: [{ Component: 'BTS6201U-PreDriver-B1' }], digital_data: [{ Component: ' DDR4 ' }], pwr_data: [] },
+      E: { project_name: '', rf_data: [{ Component: 'PA' }] },
+    };
+    const ref = (o) => Object.assign({ _ref_origin_project: 'FDD 4T4R 60W', _ref_origin_id: 'A', _ref_locked: true }, o);
+    const r1 = CM.refOrigin(ref({ Component: 'BTS6201U-PreDriver-B1' }), PROJS);
+    ok('來源還在 → 目前的名稱、gone=false', r1.name === 'FDD B1B3 4T4R 480W' && r1.stored === 'FDD 4T4R 60W' && r1.gone === false, r1);
+    ok('同名元件在別的分類、名稱前後有空白也算還在', CM.refOrigin(ref({ Component: 'DDR4' }), PROJS).gone === false);
+    const r2 = CM.refOrigin(ref({ Component: 'GTRB097152NCV1-Final' }), PROJS);
+    ok('來源專案裡沒有同名元件（本專案改了名）→ gone=comp，名稱照樣給目前的', r2.gone === 'comp' && r2.name === 'FDD B1B3 4T4R 480W', r2);
+    const r3 = CM.refOrigin(ref({ Component: 'X', _ref_origin_id: 'Z', _ref_origin_project: '已刪除的專案' }), PROJS);
+    ok('來源專案已刪除 → gone=project，名稱用存著的', r3.gone === 'project' && r3.name === '已刪除的專案', r3);
+    const r4 = CM.refOrigin(ref({ Component: 'X', _ref_origin_id: 'Z' }), null);
+    ok('沒給 projects（還沒讀到）→ 不判斷、用存著的名稱', r4.gone === false && r4.name === 'FDD 4T4R 60W', r4);
+    ok('沒有參照 → null；專案沒有名稱 → 用 id', CM.refOrigin({ Component: 'PA' }, PROJS) === null &&
+       CM.refOrigin({ Component: 'PA', _ref_origin_id: 'E' }, PROJS).name === 'E');
+
+    const SPEC = (from) => ({ path: '/SPEC/FDD 4T4R 60W/RF/a.pdf', name: 'a.pdf', _from: from });
+    const c1 = ref({ Component: 'BTS6201U-PreDriver-B1', 'Power(W)': 1.2, _pd_meas_from: 'FDD 4T4R 60W',
+                     SpecFile: [SPEC('FDD 4T4R 60W'), SPEC('別的專案')] });
+    const t1 = CM.refTidy(c1, PROJS);
+    ok('來源還在：存著的名稱換成目前名稱（_ref_origin_project、_pd_meas_from、等於舊名稱的規格書 _from）',
+       t1.renamed && !t1.dropped && c1._ref_origin_project === 'FDD B1B3 4T4R 480W' && c1._pd_meas_from === 'FDD B1B3 4T4R 480W' &&
+       c1.SpecFile[0]._from === 'FDD B1B3 4T4R 480W' && c1.SpecFile[1]._from === '別的專案' && c1._ref_locked === true, c1);
+    ok('規格書路徑不動（實體檔沒有搬）', c1.SpecFile[0].path === '/SPEC/FDD 4T4R 60W/RF/a.pdf');
+    const c2 = ref({ Component: 'GTRB097152NCV1-Final', 'Power(W)': 40, SpecFile: SPEC('FDD 4T4R 60W') });
+    const t2 = CM.refTidy(c2, PROJS);
+    ok('找不到同名元件 → 拿掉三個參照標記、瓦數照留；規格書 _from 換成目前名稱但不拿掉（刪除保護）',
+       t2.dropped === 'comp' && !('_ref_origin_project' in c2) && !('_ref_origin_id' in c2) && !('_ref_locked' in c2) &&
+       c2['Power(W)'] === 40 && c2.SpecFile._from === 'FDD B1B3 4T4R 480W', c2);
+    const c3 = ref({ Component: 'X', _ref_origin_id: 'Z', _ref_origin_project: '已刪除的專案', SpecFile: SPEC('已刪除的專案') });
+    const t3 = CM.refTidy(c3, PROJS);
+    ok('來源專案已刪除 → 拿掉參照標記；規格書 _from 照留', t3.dropped === 'project' && !t3.renamed &&
+       !('_ref_origin_id' in c3) && c3.SpecFile._from === '已刪除的專案', c3);
+    const c4 = ref({ Component: 'X', _ref_origin_id: 'Z' });
+    ok('沒給 projects → 什麼都不動（不可在不確定時刪掉參照）', CM.refTidy(c4, null) === null && c4._ref_origin_id === 'Z');
+    const c5 = { Component: 'PA', _ref_origin_project: 'FDD B1B3 4T4R 480W', _ref_origin_id: 'A' };
+    c5.Component = 'BTS6201U-PreDriver-B1';
+    const t5 = CM.refTidy(c5, PROJS);
+    ok('名稱已經是目前的、來源也在 → 不動', t5.renamed === false && t5.dropped === false && c5._ref_origin_project === 'FDD B1B3 4T4R 480W');
+    ok('沒有參照的元件 → null', CM.refTidy({ Component: 'PA', SpecFile: SPEC('X') }, PROJS) === null);
   }
 
   console.log('\n[K] ensureCids／projectDigest／saveWithMerge');
