@@ -725,6 +725,10 @@
   }
   /* 鎖定值與 ✂ 同一行（不要讓 ✂ 掉到下一行）：欄寬下限因此＝值＋✂ 的寬度 */
   .comp-table td.lock-cell { white-space: nowrap; }
+  /* TIM Type = None → 凸台／TIM 四欄不適用：反灰（參照文字，不是停用的輸入框）。
+     !important：主題樣式的 .comp-table tr:hover td 帶 !important，否則滑過那一列就不灰了（同 heat-dir-legacy） */
+  .comp-table td.tim-na-cell, .comp-table tr:hover td.tim-na-cell { background: #eef0f3 !important; text-align: center; white-space: nowrap; }
+  .comp-table .tim-na-val { color: #9ca3af; font-size: 0.78rem; cursor: default; }
   .comp-table .tim-unlock-btn {
     margin-left: 3px; padding: 0 4px; font-size: 0.72rem; line-height: 1.5;
     border: 1px solid #d1d5db; border-radius: 4px; background: #fff;
@@ -6847,6 +6851,24 @@ const TIM_AUTO = {
   Grease: { surface: '表面光滑', boss: 'custom', timSizeEqualsBoss: true, lockIc: true },
 };
 
+/* TIM Type = None（不使用介面材料）→ 凸台大小／凸台表面處理／TIM 厚度／TIM Size 不適用。
+   畫面四格反灰顯示「不適用」、不給輸入；匯出 Excel／PDF 同樣寫「不適用」（螢幕與匯出一致）。
+   原本填的值留在 thermal_specs 不刪（選錯 None 不會把資料洗掉）；改選其他 TIM 類型時照
+   onTimTypeChange 依該類型重新帶入。IC 距離 HSK 不在此列（沒有 TIM 也仍有距離）。 */
+const TIM_NA_TEXT = '不適用';
+const TIM_NA_LABELS = { bossSize: '凸台大小', bossSurface: '凸台表面處理', timThickness: 'TIM 厚度', timSize: 'TIM Size' };
+function timNaFor(spec) { return !!spec && spec.timType === 'None'; }
+function timNaKept(spec, key) {
+  if (key === 'bossSize' && spec.bossSizeType === '無凸台，刻花定位') return spec.bossSizeType;
+  return String(spec[key] || '');
+}
+function timNaTd(spec, colCls, key) {
+  const kept = timNaKept(spec, key);
+  const tip = 'TIM Type 選 None（不使用介面材料）→ ' + TIM_NA_LABELS[key] + '不適用。' +
+    (kept ? '\n原本的值「' + kept + '」沒有刪除，只是不顯示、不匯出；改選其他 TIM 類型時依該類型重新帶入。' : '');
+  return `<td class="editable-cell ${colCls} tim-na-cell" title="${escapeAttr(tip)}"><span class="tim-na-val">${TIM_NA_TEXT}</span></td>`;
+}
+
 async function initDatabase() {
   // SharePoint 模式：切換 header 按鈕顯示
   if (DB_MODE === 'sharepoint') {
@@ -7603,11 +7625,11 @@ function th2SpecCell(comp, catKey, idx) {
   const list = sgSpecList(comp);
   const n = list.length;
   const names = list.map((s, k) => (k + 1) + '. ' + sgSpecName(s) +
-    (s._from ? '（參照自「' + s._from + '」）' : '')).join('\n');
+    (s._from ? '（參照自「' + sgSpecFromName(comp, s) + '」）' : '')).join('\n');
   const tip = n === 0
     ? '尚未上傳規格書（請到「EE/RF/PWR-專案元件清單」的規格書欄上傳）'
     : (n === 1 ? ('線上瀏覽：' + sgSpecName(list[0]) +
-                  (list[0]._from ? '（參照自專案「' + list[0]._from + '」）' : '') + '（不必下載）')
+                  (list[0]._from ? '（參照自專案「' + sgSpecFromName(comp, list[0]) + '」）' : '') + '（不必下載）')
                : ('線上瀏覽（共 ' + n + ' 份，視窗上方可切換要看哪一份）：\n' + names));
   return `<button class="sg-spec-btn sg-spec-view sg-spec-ro${n ? ' has-file' : ''}" ${n ? '' : 'disabled'} ` +
          `title="${escapeAttr(tip)}" onclick="sgSpecView('${catKey}',${idx},0,'tab2')">👁` +
@@ -7705,6 +7727,19 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
       ? `<span class="tim-locked-val">${escapeHtml(icToHSK || '\u2014')}</span>${unlockBtn('icToHSK')}`
       : `<select class="cell-select" data-comp="${escapeAttr(specKey)}" data-field="icToHSK" onchange="onIcToHskChange(this)"><option value="">\u2014</option>${IC_TO_HSK_OPTIONS.map(o=>`<option value="${o}" ${icHskSelVal===o?'selected':''}>${o}</option>`).join('')}</select><input class="cell-input" type="text" style="width:60px;margin-top:2px;display:${icHskIsCustom ? '' : 'none'};" data-comp="${escapeAttr(specKey)}" data-field="icToHSK_custom" value="${escapeAttr(icHskIsCustom ? icToHSK : '')}" placeholder="\u8f38\u5165\u503c" onchange="onIcToHskCustomInput(this)">`;
 
+    // TIM Type = None（不使用介面材料）→ 凸台大小／表面處理／TIM 厚度／TIM Size 不適用：四格反灰顯示「不適用」，
+    // 不給輸入。原本填的值留在 thermal_specs 不刪；匯出同樣寫「不適用」（collectExportDataByCategory）。
+    let bossSizeTd    = `<td class="editable-cell boss-size-col">${bossSizeCell}</td>`;
+    let bossSurfaceTd = `<td class="editable-cell boss-surface-col${lockSurface ? ' lock-cell' : ''}">${bossSurfaceInner}</td>`;
+    let timThickTd    = `<td class="editable-cell tim-thickness-col${lockThick ? ' lock-cell' : ''}">${timThickInner}</td>`;
+    let timSizeTd     = `<td class="editable-cell tim-size-col${lockTimSize ? ' lock-cell' : ''}">${timSizeInner}</td>`;
+    if (timNaFor(spec)) {
+      bossSizeTd    = timNaTd(spec, 'boss-size-col', 'bossSize');
+      bossSurfaceTd = timNaTd(spec, 'boss-surface-col', 'bossSurface');
+      timThickTd    = timNaTd(spec, 'tim-thickness-col', 'timThickness');
+      timSizeTd     = timNaTd(spec, 'tim-size-col', 'timSize');
+    }
+
     const isHidden = !!hiddenComponents[specKey];
 
     let rowHtml = `
@@ -7747,10 +7782,10 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
               </select>
               ${timLibModelCell(specKey, timType, timModel, timModelGone)}
             </td>
-            <td class="editable-cell boss-size-col">${bossSizeCell}</td>
-            <td class="editable-cell boss-surface-col${lockSurface ? ' lock-cell' : ''}">${bossSurfaceInner}</td>
-            <td class="editable-cell tim-thickness-col${lockThick ? ' lock-cell' : ''}">${timThickInner}</td>
-            <td class="editable-cell tim-size-col${lockTimSize ? ' lock-cell' : ''}">${timSizeInner}</td>
+            ${bossSizeTd}
+            ${bossSurfaceTd}
+            ${timThickTd}
+            ${timSizeTd}
             <td class="editable-cell heat-dir-col${heatDirLegacy ? ' heat-dir-legacy' : ''}">
               <select class="cell-select"
                 data-comp="${escapeAttr(specKey)}" data-field="heatDirection"
@@ -8008,6 +8043,8 @@ function collectExportDataByCategory() {
       } else if ((bossSizeType === '自訂' || bossSizeType === '自動帶入') && spec.bossSize) {
         bossSizeDisplay = spec.bossSize;
       }
+      // TIM Type = None → 四欄不適用（與畫面一致，不輸出保留在資料裡的舊值）
+      const timNa = timNaFor(spec);
       catRows.push({
         index: idx + 1,
         component: displayName,
@@ -8017,11 +8054,11 @@ function collectExportDataByCategory() {
         // E-PAD 大小只在主散熱路徑 = Thermal Via 時有意義，其餘情況不輸出殘值
         epadSize: (spec.heatDirection === 'Thermal Via' && spec.epadSize) ? spec.epadSize : '-',
         heatSourceHeight: spec.heatSourceHeight || '-',
-        bossSize: bossSizeDisplay,
-        bossSurface: spec.bossSurface || '-',
+        bossSize: timNa ? TIM_NA_TEXT : bossSizeDisplay,
+        bossSurface: timNa ? TIM_NA_TEXT : (spec.bossSurface || '-'),
         timType: spec.timType || '-',
-        timThickness: spec.timThickness || '-',
-        timSize: spec.timSize || '-',
+        timThickness: timNa ? TIM_NA_TEXT : (spec.timThickness || '-'),
+        timSize: timNa ? TIM_NA_TEXT : (spec.timSize || '-'),
         // 舊值 IC bot/雙向 在新選項無對應，畫面顯示為待重選 → 匯出也不輸出該值
         heatDirection: (spec.heatDirection && !HEAT_PATH_LEGACY.includes(spec.heatDirection))
           ? spec.heatDirection : '-',
@@ -8411,6 +8448,7 @@ async function sgLoadProjects(opts) {
     if (!opts.noRefresh) await dbAdapter.refresh();
 
     const projectList = await dbAdapter.getProjectsSorted();
+    sgProjNamesFrom(projectList);   // 參照來源顯示目前名稱（sgRefOriginName）
     const select = document.getElementById('sg-project-select');
     const prevSelected = ('want' in opts) ? (opts.want || '') : select.value;
     select.innerHTML = '<option value="">-- 請選擇專案 --</option>';
@@ -8693,7 +8731,11 @@ function sgRenderProjectComponents() {
       const customVal = (!isPredefined && typeVal) ? typeVal : '';
       const customVisible = selectVal === '其他' ? ' visible' : '';
       const refLocked = !!comp._ref_locked;
-      const refOrigin = comp._ref_origin_project || '';
+      // 來源專案的「目前」名稱（用 id 查；來源改名後跟著變），快選當時的名稱放 tooltip 供追溯
+      const refOrigin = sgRefOriginName(comp);
+      const refOld = comp._ref_origin_project || '';
+      const refTip = '來源專案：' + refOrigin +
+        ((refOld && refOld !== refOrigin) ? '\n（快選當時名稱：' + refOld + '；來源之後改名，下次存檔時一併更新）' : '');
       // 規格書（SPEC）：檢視／上傳／下載／刪除／清單五顆 icon（數量不變），皆有 tooltip。
       // 一顆元件可以有多份規格書 → 一律用 sgSpecList() 正規化；多份時 👁 帶數量徽章，
       // ↓／🗑 改開「規格書清單」讓使用者挑哪一份。未上傳時 👁／↓／🗑 停用；
@@ -8703,9 +8745,9 @@ function sgRenderProjectComponents() {
       const spec = specs[0] || null;
       const specName = spec ? sgSpecName(spec) : '';
       const specAt = (spec && spec.at) ? new Date(spec.at).toLocaleString('zh-TW') : '';
-      const specRef = (spec && spec._from) ? ('（參照自專案「' + spec._from + '」）') : '';
+      const specRef = (spec && spec._from) ? ('（參照自專案「' + sgSpecFromName(comp, spec) + '」）') : '';
       const specLines = specs.map((s, k) => (k + 1) + '. ' + sgSpecName(s) +
-        (s._from ? '（參照自「' + s._from + '」）' : '')).join('\n');
+        (s._from ? '（參照自「' + sgSpecFromName(comp, s) + '」）' : '')).join('\n');
       const specBadge = specN > 1 ? ('<span class="sg-spec-n">' + specN + '</span>') : '';
       const specTipView = specN === 0 ? '尚未上傳規格書'
         : (specN === 1 ? ('線上瀏覽：' + specName + specRef + '（不必下載）')
@@ -8757,8 +8799,8 @@ function sgRenderProjectComponents() {
         `<button class="sg-spec-btn sg-spec-ro" title="${escapeAttr(specTipList)}" onclick="sgSpecInfo('${c}',${i})">🕘</button>` +
         `</div>`;
       const refBadge = refLocked
-        ? `<div class="sg-ref-badge locked">↩ 參照自 ${escapeHtml(refOrigin)}<button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button>${sgRefSyncBadge(comp, c, i)}</div>`
-        : (refOrigin ? `<div class="sg-ref-badge faded">曾參照自 ${escapeHtml(refOrigin)}${sgRefSyncBadge(comp, c, i)}</div>` : '');
+        ? `<div class="sg-ref-badge locked"><span class="sg-ref-origin" title="${escapeAttr(refTip)}">↩ 參照自 ${escapeHtml(refOrigin)}</span><button class="sg-ref-detach-btn" onclick="sgDetachRef('${c}',${i})" title="解除後可自行修改瓦數">🔓 解除參照</button>${sgRefSyncBadge(comp, c, i)}</div>`
+        : (refOrigin ? `<div class="sg-ref-badge faded"><span class="sg-ref-origin" title="${escapeAttr(refTip)}">曾參照自 ${escapeHtml(refOrigin)}</span>${sgRefSyncBadge(comp, c, i)}</div>` : '');
       const pwCell = (fieldName, val) => refLocked
         ? `<span class="sg-locked-val" title="瓦數已鎖定，請先按「解除參照」">${escapeHtml(String(val ?? ''))}</span>`
         : `<input class="sg-cell-input" type="number" step="any" value="${escapeAttr(val ?? '')}" data-cat="${c}" data-idx="${i}" data-field="${fieldName}" onchange="sgOnCompEdit(this)">`;
@@ -9117,6 +9159,54 @@ const SG_VARIANT_CARRY = [
   'Height(mm)', 'Thick(mm)', 'Limit(C)', 'Limit_Ref',
 ];
 
+/* ── 參照來源的專案名稱：一律用專案 id 查「目前的名稱」 ──
+   快選時元件上抄的是當時的名稱（_ref_origin_project、規格書的 _from、_pd_meas_from），
+   來源專案之後改名（本工具或 5G-RRU 改都一樣：改名只動 project_name、id 不變）就會過時。
+   → 顯示時用 _ref_origin_id 查 sgProjNames（sgRefOriginName／sgSpecFromName）；
+     存檔時把存著的名稱換成目前的名稱（sgRefreshRefNames：5G-RRU 也顯示 _ref_origin_project，
+     來源被刪掉之後「曾參照自」顯示的也才是最後的名稱）。
+   sgProjNames 在載入專案列表、讀快選快取、存檔前、改名時更新；查不到（來源已刪）→ 用存著的名稱。 */
+let sgProjNames = {};   // { 專案 id: 目前名稱 }
+function sgProjNamesFrom(projects) {
+  const m = {};
+  const add = (id, p) => {
+    const nm = String((p && p.project_name) || '').trim();
+    if (id) m[id] = nm || id;
+  };
+  if (Array.isArray(projects)) projects.forEach(p => add(p && p.id, p));
+  else Object.entries(projects || {}).forEach(([id, p]) => add(id, p));
+  sgProjNames = m;
+}
+function sgRefOriginName(comp) {
+  if (!comp) return '';
+  const id = comp._ref_origin_id;
+  return (id && sgProjNames[id]) || comp._ref_origin_project || '';
+}
+/* 規格書的 _from 只存名稱（沒有 id）：等於元件快選當時的來源名稱 → 換成來源目前的名稱 */
+function sgSpecFromName(comp, s) {
+  const f = s && s._from;
+  if (!f) return '';
+  if (comp && comp._ref_origin_id && f === comp._ref_origin_project) return sgRefOriginName(comp);
+  return f;
+}
+/* 存檔時：元件上存著的來源名稱換成目前的名稱（doc＝要寫入的那份，已是複本）。回傳換了幾顆。 */
+function sgRefreshRefNames(doc) {
+  let n = 0;
+  ['rf_data', 'digital_data', 'pwr_data'].forEach(k => {
+    (doc && Array.isArray(doc[k]) ? doc[k] : []).forEach(c => {
+      if (!c || !c._ref_origin_id) return;
+      const now = sgProjNames[c._ref_origin_id];
+      const old = c._ref_origin_project;
+      if (!now || now === old) return;
+      c._ref_origin_project = now;
+      if (old && c._pd_meas_from === old) c._pd_meas_from = now;
+      sgSpecList(c).forEach(s => { if (old && s._from === old) s._from = now; });
+      n++;
+    });
+  });
+  return n;
+}
+
 /* 把（可能有多份的）規格書逐份標上來源專案：本專案只是參照，刪除時不可刪來源檔。
    容器物件可以是元件本身，也可以是快選組出來的 overrides。 */
 function sgSpecMarkFrom(holder, projName) {
@@ -9248,6 +9338,7 @@ async function sgLoadVariantsCache() {
     sgProjectTreeCache = { RF: [], Digital: [], PWR: [] };
     return sgVariantsCache;
   }
+  sgProjNamesFrom(projects);   // 參照來源的名稱用這份（別的工具改名後重新讀過就跟上）
   sgVariantsCache = {
     RF:      sgAggregateVariants(projects, 'RF'),
     Digital: sgAggregateVariants(projects, 'Digital'),
@@ -10801,7 +10892,7 @@ async function sgSpecDeleteAt(cat, idx, k) {
     ? '\n（這顆元件共有 ' + list.length + ' 份規格書，只會刪掉這一份）' : '';
   // 快選帶進來的規格書是「參照」，實體檔在來源專案底下 → 只解除參照，不可刪檔
   if (spec._from) {
-    if (!confirm('元件「' + (comp.Component || '') + '」的這份規格書是從專案「' + spec._from +
+    if (!confirm('元件「' + (comp.Component || '') + '」的這份規格書是從專案「' + sgSpecFromName(comp, spec) +
                  '」快選帶入的參照。\n檔案：' + sgSpecName(spec) + many +
                  '\n\n將只移除本專案的參照，不會刪除來源專案的原始檔。要繼續嗎？')) return;
     list.splice(k, 1);
@@ -10868,7 +10959,7 @@ function sgSpecListRender() {
           const at = s.at ? new Date(s.at).toLocaleString('zh-TW') : '（無紀錄）';
           const ref = s._from
             ? '<div class="sg-speclist-ref" title="檔案存放在來源專案的 SPEC 資料夾，這裡只是參照；刪除只會解除參照">↩ 參照自專案「' +
-              escapeHtml(s._from) + '」</div>' : '';
+              escapeHtml(sgSpecFromName(comp, s)) + '」</div>' : '';
           return '<tr><td>' + (k + 1) + '</td>' +
             '<td class="fname" title="' + escapeAttr(nm) + '">' + escapeHtml(nm) + ref + '</td>' +
             '<td>' + escapeHtml(at) + '</td>' +
@@ -11009,7 +11100,7 @@ async function sgSpecView(cat, idx, k, src) {
     sub.textContent = '元件：' + (comp.Component || '(未命名)')
       + (list.length > 1 ? '　·　第 ' + (kk + 1) + ' / ' + list.length + ' 份' : '')
       + (spec.at ? '　·　上傳於 ' + new Date(spec.at).toLocaleString('zh-TW') : '')
-      + (spec._from ? '　·　參照自專案「' + spec._from + '」' : '');
+      + (spec._from ? '　·　參照自專案「' + sgSpecFromName(comp, spec) + '」' : '');
   }
   // 多份規格書 → 標題底下給一排檔案頁籤，點一下就換看哪一份（單份時整列不出現）
   const tabs = document.getElementById('sg-specview-tabs');
@@ -11019,7 +11110,7 @@ async function sgSpecView(cat, idx, k, src) {
       const sq = ",'" + (src || '') + "'";
       tabs.innerHTML = list.map((s, j) =>
         '<button class="sg-sv-tab' + (j === kk ? ' active' : '') + '" title="' +
-        escapeAttr(sgSpecName(s) + (s._from ? '（參照自專案「' + s._from + '」）' : '')) +
+        escapeAttr(sgSpecName(s) + (s._from ? '（參照自專案「' + sgSpecFromName(comp, s) + '」）' : '')) +
         '" onclick="sgSpecView(' + q + ',' + j + sq + ')">📄 ' + escapeHtml(sgSpecName(s)) + '</button>').join('');
       tabs.style.display = 'flex';
     } else {
@@ -11571,7 +11662,7 @@ function sgRefSyncOpen(cat, idx) {
   const applyBtn = document.getElementById('sg-refsync-apply');
   if (who) {
     who.textContent = '元件：' + (comp.Component || '(未命名)')
-      + '　·　來源專案：' + (comp._ref_origin_project || comp._ref_origin_id || '');
+      + '　·　來源專案：' + (sgRefOriginName(comp) || comp._ref_origin_id || '');
   }
   if (body) {
     let h = '<div class="sg-refsync-scroll"><table class="sg-refsync-table"><thead><tr>' +
@@ -11617,7 +11708,7 @@ function sgRefSyncApply() {
   if (!t) return;
   const comp = sgProjectData?.[SG_CAT_MAP[t.cat]?.field]?.[t.idx];
   if (!comp) { sgRefSyncClose(); return; }
-  const origin = comp._ref_origin_project || '';
+  const origin = sgRefOriginName(comp);   // 來源目前的名稱（改名後也對）
   let n = 0;
   let spec2Touched = false;
   t.diff.forEach((d, i) => {
@@ -13714,15 +13805,22 @@ async function saveAllTabs() {
     const sgMine = hasSg ? { rf_data: sgProjectData.rf_data || [], digital_data: sgProjectData.digital_data || [],
                              pwr_data: sgProjectData.pwr_data || [] } : null;
     const sgBase = sgProjectBase, clBase = clProjectBase;
+    // 參照來源的專案名稱：存檔前讀一次目前的專案名稱（別的工具剛改名也跟得上），合併完在要寫的那份上更新
+    try {
+      const projs = await dbAdapter.getCollection('projects');
+      if (projs && Object.keys(projs).length) sgProjNamesFrom(projs);
+    } catch (e) { /* 讀不到 → 沿用手上的名稱表 */ }
     const mergeInto = (f, base, mine, cur, resolutions) => {
       if (base && cur) {
         const m = CompMerge.mergeProject(base, mine, cur, { resolutions, derivedKeys: SG_MERGE_DERIVED });
         if (m.unresolved.length) throw CompMerge.MergePending(m.unresolved);
         Object.assign(f, m.fields);
+        sgRefreshRefNames(f);   // 合併後才換（f 是複本）：不算「我改過」、不會因此跳衝突
         return m;
       }
       // 新專案／沒有載入時快照 → 以畫面為準（型別整理照做：共用欄位空值不寫 key）
       CompMerge.CATS.forEach(k => { if (mine[k]) f[k] = mine[k].map(CompMerge.normalizeComp); });
+      sgRefreshRefNames(f);
       return null;
     };
     // 元件改名 → 以名稱當 key 的資料（TH/ME 頁、Tab3、標註）一起搬（見 sgCollectRenames／sgApplyRenames）。
@@ -14228,6 +14326,15 @@ function _sgApplyRenameToUI(projId, newName) {
     const opt = sel.querySelector('option[value="' + CSS.escape(projId) + '"]');
     if (opt) opt.textContent = newName;
   });
+  // 參照這個專案的元件：顯示用 id 查名稱 → 換掉名稱表即可（存檔時再把元件上存的名稱更新）；
+  // 快選面板的群組名稱、之後快選帶入的名稱也要是新的
+  sgProjNames[projId] = newName;
+  Object.values(sgProjectTreeCache || {}).forEach(groups => (groups || []).forEach(g => {
+    if (g && g.projId === projId) g.projName = newName;
+  }));
+  Object.values(sgVariantsCache || {}).forEach(list => (list || []).forEach(v => {
+    if (v && v.originProjectId === projId) v.originProjectName = newName;
+  }));
   if (sgProjectId === projId && sgProjectData) sgProjectData.project_name = newName;
   if (typeof currentProjectId !== 'undefined' && currentProjectId === projId && currentProjectData) {
     currentProjectData.project_name = newName;

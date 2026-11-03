@@ -282,6 +282,26 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 > `SpecFile` 套用後要重標 `_from`；改到 `Rth` 就呼叫 `sgSyncRjc(comp)` 讓 `R_jc` 跟著重算。
 > 來源專案或同名元件不見了 → 顯示「來源已不存在」，不給更新鈕也不報錯。
 
+#### 快選參照的「來源專案名稱」用 id 查，來源改名會跟著變 ⚠️
+
+快選時元件上抄的是來源專案**當時的名稱**：`_ref_origin_project`、規格書每一份的 `SpecFile._from`、`_pd_meas_from`。
+專案改名只動 `project_name`、id 不變（兩個工具都一樣），所以這些名稱會過時 —— 使用者回報「參照自 FDD 4T4R 60W」
+在來源改名後還是舊名稱。
+
+- **顯示一律用 `_ref_origin_id` 查目前名稱**：`sgRefOriginName(comp)`（`sgProjNames[id]`，查不到＝來源已刪除 → 用存著的名稱）。
+  規格書的 `_from` 只存名稱、沒有 id → `sgSpecFromName(comp, s)`：`_from` 等於元件存著的 `_ref_origin_project` 時換成目前名稱，
+  否則照原字。所有顯示點（參照標記、`sgRefSyncOpen` 標題、規格書 👁／清單／預覽／刪除確認、TH/ME 頁的 👁）都走這兩個函式，
+  **不要再直接印 `_ref_origin_project`／`s._from`**。參照標記的 tooltip 另外寫出「快選當時名稱」（追溯用）。
+- `sgProjNames`（專案 id → 目前名稱）在 `sgLoadProjects`、`sgLoadVariantsCache`、存檔前（讀 `getCollection('projects')`）更新；
+  本工具改名（`_sgApplyRenameToUI`）就地換掉它、快選面板群組名稱（`sgProjectTreeCache`）與 `sgVariantsCache` 的來源名稱。
+- **存檔時把存著的名稱換成目前名稱**（`sgRefreshRefNames`，在 `saveAllTabs` 的 `mergeInto` **合併之後**、對要寫的那份複本做）：
+  `_ref_origin_project`、`_pd_meas_from`（等於舊名稱時）、`SpecFile._from`（等於舊名稱時）。合併後才換 → 不算「我改過」、不會跳衝突；
+  5G-RRU 在我們載入後才改名也拿得到最新名稱。**規格書路徑不動**（實體檔沒有搬，同上方「專案改名」）。
+  `_ref_origin_id`、`_ref_locked` 不動；來源已刪除（id 查不到）的不動。只是載入、沒有存檔 → 資料不變、不算未存變更。
+- ⚠ **5G-RRU 端目前仍直接顯示 `_ref_origin_project`**（它的元件表「↩ 參照自／曾參照自」），所以它要等本工具存過參照它的專案
+  才會看到新名稱；它若也改成用 `_ref_origin_id` 查它手上的專案列表，就能即時跟上（跨 repo，待 5G-RRU 同步）。
+- 契約測試：`tests/ref-origin-name.test.js`。
+
 #### ⚠ 參照也涵蓋 Tab2 的「元件大小／元件高度」（值不在元件物件上）
 
 `heatSourceSize`（元件大小 L×W）與 `heatSourceHeight`（元件高度 max）是**這顆料的封裝規格**，
@@ -412,6 +432,19 @@ Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` �
 
 取消選型一律 `delete comp.TIM_Model`，不可寫 `''`。
 
+#### TIM Type 選 `None` → 凸台大小／凸台表面處理／TIM 厚度／TIM Size 反灰「不適用」
+
+使用者要求：不使用介面材料時這四欄沒有意義，直接屏蔽反灰（`timNaFor`／`timNaTd`，`td.tim-na-cell`）。
+
+- 四格顯示灰底「不適用」，**沒有任何輸入框／下拉／✂**（參照文字，不是停用的輸入框；同 FR2 的「Backoff／Duplex 不適用」）。
+  灰底要 `!important`：主題樣式的 `.comp-table tr:hover td` 帶 `!important`，否則滑過那一列就不灰了。
+- **原值留在 `thermal_specs` 不刪**（選錯 None 不會把資料洗掉）；tooltip 寫出保留的原值。改選其他 TIM 類型時照
+  `onTimTypeChange` 依該類型重新帶入（`None` 分支原本的行為不變：刪 `timSize`、凸台「自動帶入」→「自訂」）。
+- 只有 `None` 才屏蔽；還沒選（「—」）照舊。**IC 距離 HSK 不在此列**（沒有 TIM 也仍有距離）。
+- 匯出（Excel／PDF 共用 `collectExportDataByCategory`）這四欄寫「不適用」，與畫面一致、不輸出保留的舊值。
+- 這四個值只有本工具在用（5G-RRU 3D 頁打包了 `bossSize` 但沒有使用），所以只改顯示、不改資料。
+- 契約測試：`tests/tim-none-na.test.js`。
+
 > 5G-RRU 端對舊資料仍保有讀取相容（`TIM_LEGACY_PARAM`）：`TIM_Type: 'Pad2'` 的元件繼續
 > 以該專案殘留的 `K_Pad2`/`t_Pad2` 計算，並在畫面上提示改用「`Pad` ＋型號」；
 > 它的參數控制台已不再有 `K_Pad2` / `t_Pad2` 欄位（也不再寫入這兩個 key，但既有專案的值保留）。
@@ -431,6 +464,8 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
   撞名會讓兩個專案共用同一個資料夾。
 - ⚠ **既有規格書檔案不會跟著搬**：每顆元件的 `SpecFile.path` 存的是完整路徑，所以下載
   照常；只有改名後「新上傳」的檔案會進新資料夾。這點在彈窗說明裡有明講，不要拿掉。
+- 別的專案從這個專案快選過的元件：「參照自」用 id 查名稱，改名後立刻顯示新名稱；元件上存的名稱等那個專案下次存檔時更新
+  （見上方「快選參照的來源專案名稱用 id 查」）。改名本身**不去寫別的專案**。
 
 #### 元件改名 → 以元件名稱當 key 的資料一起搬（兩個工具都能改名）⚠️
 
