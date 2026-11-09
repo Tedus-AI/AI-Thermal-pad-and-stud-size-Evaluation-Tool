@@ -183,7 +183,7 @@ const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8B
   console.log('\n[D] 關閉／Esc／失敗處理');
   const d1 = await page.evaluate(async () => {
     await sgSpecView('RF', 0);
-    const src = document.querySelector('#sg-specview-body iframe').getAttribute('src');
+    const src = document.querySelector('#sg-specview-body iframe').getAttribute('src').split('#')[0];
     sgSpecViewClose();
     let revoked = false;
     try { const r = await fetch(src); revoked = !r.ok; } catch (e) { revoked = true; }
@@ -193,7 +193,7 @@ const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8B
   ok('關閉後視窗隱藏且內容清空', d1.display === 'none' && d1.emptied, d1);
   ok('關閉後 blob URL 已 revoke（不留記憶體）', d1.revoked === true, d1);
 
-  await page.evaluate(async () => { await sgSpecView('RF', 1); });
+  await page.evaluate(async () => { await sgSpecView('RF', 1); document.getElementById('sg-specview-dl').focus(); });
   await page.keyboard.press('Escape');
   ok('Esc 關得掉', await page.evaluate(() => document.getElementById('sg-specview-modal').style.display === 'none'));
 
@@ -237,6 +237,41 @@ const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8B
     return { alerts: window.__alerts, open: document.getElementById('sg-specview-modal').style.display };
   });
   ok('沒上傳規格書 → 告知，不開視窗', e2.alerts.length === 1 && /尚未上傳/.test(e2.alerts[0]) && e2.open === 'none', e2);
+
+  console.log('\n[F] 浮動視窗：不鎖頁面、可拖曳／縮放／全螢幕、PDF 縮圖開關');
+  await page.evaluate(async () => { await sgSpecView('RF', 0); });
+  const f0 = await page.evaluate(() => {
+    const box = document.getElementById('sg-specview-box').getBoundingClientRect();
+    const c = document.getElementById('sg-specview-modal');
+    // 視窗以外的位置要點得到底下的頁面（容器不可吃滑鼠事件）
+    const below = document.elementFromPoint(5, 400);
+    return { pe: getComputedStyle(c).pointerEvents, belowIsModal: !!(below && below.closest('#sg-specview-modal')),
+             overlayBg: getComputedStyle(c).backgroundColor, box: { x: box.x, y: box.y, w: box.width, h: box.height },
+             navShown: document.getElementById('sg-specview-nav').style.display !== 'none',
+             src: document.querySelector('#sg-specview-body iframe').getAttribute('src') };
+  });
+  ok('容器不吃滑鼠事件、無遮罩（可繼續編輯底下頁面）', f0.pe === 'none' && !f0.belowIsModal && f0.overlayBg === 'rgba(0, 0, 0, 0)', f0);
+  ok('PDF 顯示縮圖開關，預設縮圖開', f0.navShown && /navpanes=1/.test(f0.src), f0);
+  await page.evaluate(() => sgSpecViewToggleNav());
+  ok('關縮圖 → navpanes=0', await page.evaluate(() => /navpanes=0/.test(document.querySelector('#sg-specview-body iframe').getAttribute('src'))));
+  await page.evaluate(() => sgSpecViewToggleNav());
+  ok('再開縮圖 → navpanes=1', await page.evaluate(() => /navpanes=1/.test(document.querySelector('#sg-specview-body iframe').getAttribute('src'))));
+  await page.mouse.move(f0.box.x + 200, f0.box.y + 20);
+  await page.mouse.down(); await page.mouse.move(f0.box.x + 100, f0.box.y + 80, { steps: 4 }); await page.mouse.up();
+  const f1 = await page.evaluate(() => { const r = document.getElementById('sg-specview-box').getBoundingClientRect(); return { x: r.x, y: r.y }; });
+  ok('拖曳標題列可移動視窗', Math.abs(f1.x - (f0.box.x - 100)) < 3 && Math.abs(f1.y - (f0.box.y + 60)) < 3, [f0.box, f1]);
+  await page.mouse.move(f1.x + f0.box.w - 8, f1.y + f0.box.h - 8);
+  await page.mouse.down(); await page.mouse.move(f1.x + f0.box.w - 88, f1.y + f0.box.h - 68, { steps: 4 }); await page.mouse.up();
+  const f2 = await page.evaluate(() => { const r = document.getElementById('sg-specview-box').getBoundingClientRect(); return { w: r.width, h: r.height }; });
+  ok('拖右下角可縮放', Math.abs(f2.w - (f0.box.w - 80)) < 4 && Math.abs(f2.h - (f0.box.h - 60)) < 4, [f0.box, f2]);
+  await page.evaluate(() => sgSpecViewToggleMax());
+  const f3 = await page.evaluate(() => { const r = document.getElementById('sg-specview-box').getBoundingClientRect();
+    return { w: r.width, h: r.height, vw: innerWidth, vh: innerHeight }; });
+  ok('全螢幕鈕 → 滿版', f3.w === f3.vw && f3.h === f3.vh, f3);
+  await page.evaluate(() => sgSpecViewToggleMax());
+  const f4 = await page.evaluate(() => { const r = document.getElementById('sg-specview-box').getBoundingClientRect(); return { w: r.width, h: r.height }; });
+  ok('縮回 → 回到先前大小', Math.abs(f4.w - f2.w) < 1 && Math.abs(f4.h - f2.h) < 1, [f2, f4]);
+  await page.evaluate(() => sgSpecViewClose());
 
   ok('頁面無 JS 例外', errors.length === 0, errors.slice(0, 3));
 
