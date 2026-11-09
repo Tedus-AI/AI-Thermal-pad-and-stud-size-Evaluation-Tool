@@ -344,6 +344,14 @@ AI-Thermal 原本有一份 `SG_DEFAULTS`，與 5G-RRU 的 `RF_DEFAULT`/`DIG_DEFA
 > 並以序號讓仍在飛的非同步結果失效。`graphDb.getSpecSrc` 現在是 `getSpecMeta` 的薄包裝
 > （單一事實來源）。
 
+> **規格書預覽是「浮動視窗」，不是 modal**（`#sg-specview-modal` 容器 `pointer-events:none`、無遮罩，只有 `.sg-specview-box` 吃事件）：
+> 開著規格書照樣能編輯底下的 Tab1／Tab2。標題列可拖曳移動、八個邊／角可縮放（`.sv-rz`，圓角會裁掉角落 → 角落把手 22px）、
+> 雙擊標題列或 ⛶ 鈕切全螢幕（`sv-max`）再按縮回原位置大小；位置大小記在 localStorage `sgThermal.specViewGeom`（開啟時夾回畫面內）。
+> 拖曳／縮放中加 `.sv-dragging` 關掉 iframe 的 pointer-events，並用 pointer capture。PDF 左側縮圖欄靠網址參數
+> （`#navpanes=0|1&pagemode=none|thumbs`）控制，「☰ 縮圖」鈕切換時重建 iframe（回到第一頁），偏好記在 `sgThermal.specViewNav`；非 PDF 不顯示該鈕。
+> Esc 只有焦點在視窗內才關閉（非 modal，不可攔截編輯頁面的 Esc），z-index 1300（在快選面板之上、各 modal 之下）。
+> 測試：`tests/spec-viewer.test.js` [F]。
+
 > `R_jc` 由 AI-Thermal 的熱阻表自動推導（見下節），不是使用者在 AI-Thermal 直接填的。
 
 #### `R_jc` 的單一事實來源：AI-Thermal 的 `comp.Rth`

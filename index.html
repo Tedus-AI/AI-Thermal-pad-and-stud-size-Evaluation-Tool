@@ -1587,11 +1587,34 @@
   .sg-speclist-table td.acts .sg-spec-btn { margin-left: 3px; }
   .sg-speclist-ref { font-size: 0.7rem; font-weight: 500; color: #b45309; margin-top: 2px; }
   /* 規格書線上預覽視窗：大面積內容區，PDF/圖片直接看，不必下載 */
+  /* 浮動視窗（非 modal）：容器不吃滑鼠事件，只有視窗本身吃 → 開著規格書照樣能編輯底下的頁面 */
+  #sg-specview-modal { position: fixed; inset: 0; z-index: 1300; pointer-events: none; }
   .sg-specview-box {
-    background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(15,23,42,0.32);
-    width: min(1120px, 94vw); height: min(90vh, 940px); display: flex; flex-direction: column;
+    position: absolute; pointer-events: auto;
+    background: #fff; border-radius: 12px; box-shadow: 0 18px 50px rgba(15,23,42,0.38), 0 0 0 1px rgba(15,23,42,0.18);
+    min-width: 360px; min-height: 240px; display: flex; flex-direction: column;
     overflow: hidden;
   }
+  .sg-specview-box.sv-max { left: 0 !important; top: 0 !important; width: 100vw !important; height: 100vh !important;
+    border-radius: 0; }
+  /* 拖曳／縮放中：iframe 會吃掉滑鼠事件，暫時關掉 */
+  .sg-specview-box.sv-dragging iframe { pointer-events: none; }
+  .sg-specview-box.sv-dragging { user-select: none; }
+  .sg-specview-head { cursor: move; user-select: none; }
+  .sg-specview-box.sv-max .sg-specview-head { cursor: default; }
+  .sg-specview-head button, .sg-specview-head a { cursor: pointer; }
+  .sg-specview-btn.sv-icon { padding: 7px 10px; }
+  .sg-specview-btn.sv-on { background: #e0ecff; border-color: #0b5ed7; color: #0b5ed7; }
+  .sv-rz { position: absolute; z-index: 5; }
+  .sv-rz.n  { top: -3px; left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+  .sv-rz.s  { bottom: -3px; left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+  .sv-rz.w  { left: -3px; top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+  .sv-rz.e  { right: -3px; top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+  .sv-rz.nw { left: -3px; top: -3px; width: 22px; height: 22px; cursor: nwse-resize; }
+  .sv-rz.se { right: -3px; bottom: -3px; width: 22px; height: 22px; cursor: nwse-resize; }
+  .sv-rz.ne { right: -3px; top: -3px; width: 22px; height: 22px; cursor: nesw-resize; }
+  .sv-rz.sw { left: -3px; bottom: -3px; width: 22px; height: 22px; cursor: nesw-resize; }
+  .sg-specview-box.sv-max .sv-rz { display: none; }
   .sg-specview-head {
     display: flex; align-items: center; gap: 10px; padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0; background: #f8fafc; flex: 0 0 auto;
@@ -5355,19 +5378,26 @@
 
 <!-- 規格書線上預覽：PDF／圖片／純文字直接在視窗裡看，Office 檔給 Office Online 連結。
      只讀不寫 → 未解鎖（唯讀）時也能用。 -->
-<div id="sg-specview-modal" class="lock-modal-overlay" style="display:none"
-     onclick="if(event.target===this)sgSpecViewClose()">
-  <div class="sg-specview-box">
-    <div class="sg-specview-head">
+<div id="sg-specview-modal" style="display:none">
+  <div class="sg-specview-box" id="sg-specview-box">
+    <i class="sv-rz n" data-rz="n"></i><i class="sv-rz s" data-rz="s"></i>
+    <i class="sv-rz w" data-rz="w"></i><i class="sv-rz e" data-rz="e"></i>
+    <i class="sv-rz nw" data-rz="nw"></i><i class="sv-rz ne" data-rz="ne"></i>
+    <i class="sv-rz sw" data-rz="sw"></i><i class="sv-rz se" data-rz="se"></i>
+    <div class="sg-specview-head" id="sg-specview-head" title="拖曳標題列可移動視窗；雙擊切換全螢幕">
       <div style="min-width:0;">
         <div class="sv-title" id="sg-specview-title">規格書</div>
         <div class="sv-sub" id="sg-specview-sub"></div>
       </div>
       <div class="sv-spacer"></div>
+      <button class="sg-specview-btn sv-icon" id="sg-specview-nav" style="display:none" onclick="sgSpecViewToggleNav()"
+              title="顯示／隱藏 PDF 左側的頁面縮圖">☰ 縮圖</button>
       <button class="sg-specview-btn" id="sg-specview-newtab" onclick="sgSpecViewNewTab()"
               title="在瀏覽器新分頁開啟（不下載）">↗ 新分頁</button>
       <button class="sg-specview-btn" id="sg-specview-dl" onclick="sgSpecViewDownload()"
               title="下載到電腦">⬇ 下載</button>
+      <button class="sg-specview-btn sv-icon" id="sg-specview-max" onclick="sgSpecViewToggleMax()"
+              title="放大到全螢幕／縮回">⛶</button>
       <button class="sg-specview-btn primary" onclick="sgSpecViewClose()">關閉</button>
     </div>
     <!-- 多份規格書時的檔案切換列（單份時整列隱藏） -->
@@ -10696,10 +10726,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); timCatClose(); }
     return;
   }
-  const sv = document.getElementById('sg-specview-modal');
-  if (sv && sv.style.display !== 'none' && sv.style.display !== '') {
-    if (e.key === 'Escape') { e.preventDefault(); sgSpecViewClose(); }
-    return;
+  const sv = document.getElementById('sg-specview-box');   // 非 modal：只在焦點位於規格書視窗內才用 Esc 關閉
+  if (sv && sv.offsetParent !== null && e.key === 'Escape' && sv.contains(document.activeElement)) {
+    e.preventDefault(); sgSpecViewClose(); return;
   }
   const rs = document.getElementById('sg-refsync-modal');
   if (rs && rs.style.display !== 'none' && rs.style.display !== '') {
@@ -11122,6 +11151,9 @@ async function sgSpecView(cat, idx, k, src) {
     }
   }
   if (modal) modal.style.display = 'flex';
+  sgSpecViewInitWin();
+  const navBtn = document.getElementById('sg-specview-nav');
+  if (navBtn) navBtn.style.display = 'none';
   _sgSpecViewBody('<div class="sg-specview-msg"><span class="sv-ico">⏳</span>讀取中…</div>');
 
   try {
@@ -11161,7 +11193,8 @@ async function sgSpecView(cat, idx, k, src) {
     if (info.kind === 'image') {
       _sgSpecViewBody('<img src="' + url + '" alt="' + escapeAttr(name) + '">');
     } else {
-      _sgSpecViewBody('<iframe src="' + url + '" title="' + escapeAttr(name) + '"></iframe>');
+      _sgSpecViewState.isPdf = (info.kind === 'pdf') || /\.pdf$/i.test(name);
+      _sgSpecViewRenderFrame();
     }
   } catch (e) {
     if (seq !== _sgSpecViewSeq) return;
@@ -11170,6 +11203,98 @@ async function sgSpecView(cat, idx, k, src) {
       '無法線上預覽：<b>' + escapeHtml(e.message || String(e)) + '</b><br>' +
       '可以改用上方的「⬇ 下載」開啟這份規格書。</div>');
   }
+}
+
+
+/* ===== 浮動視窗：移動／縮放／全螢幕／PDF 縮圖開關 ===== */
+let _sgSvGeom = null;                 // { x, y, w, h }（視窗模式的位置與大小）
+let _sgSvMax = false;
+let _sgSvNav = true;                  // PDF 左側縮圖預設打開（與瀏覽器內建檢視器一致）
+try {
+  const g = JSON.parse(localStorage.getItem('sgThermal.specViewGeom') || 'null');
+  if (g && [g.x, g.y, g.w, g.h].every(Number.isFinite)) _sgSvGeom = g;
+  if (localStorage.getItem('sgThermal.specViewNav') === '0') _sgSvNav = false;
+} catch (e) {}
+
+function _sgSvClamp(g) {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(Math.max(360, g.w), vw), h = Math.min(Math.max(240, g.h), vh);
+  const x = Math.min(Math.max(-(w - 120), g.x), vw - 120);   // 標題列至少留 120px 在畫面內，才拖得回來
+  const y = Math.min(Math.max(0, g.y), vh - 48);
+  return { x, y, w, h };
+}
+function _sgSvApply() {
+  const box = document.getElementById('sg-specview-box');
+  if (!box) return;
+  if (!_sgSvGeom) {
+    const w = Math.min(920, Math.round(window.innerWidth * 0.62)), h = Math.round(window.innerHeight * 0.86);
+    _sgSvGeom = { x: window.innerWidth - w - 16, y: Math.round(window.innerHeight * 0.07), w, h };
+  }
+  _sgSvGeom = _sgSvClamp(_sgSvGeom);
+  box.style.left = _sgSvGeom.x + 'px'; box.style.top = _sgSvGeom.y + 'px';
+  box.style.width = _sgSvGeom.w + 'px'; box.style.height = _sgSvGeom.h + 'px';
+  box.classList.toggle('sv-max', _sgSvMax);
+  const mb = document.getElementById('sg-specview-max');
+  if (mb) { mb.textContent = _sgSvMax ? '❐' : '⛶'; mb.classList.toggle('sv-on', _sgSvMax);
+    mb.title = _sgSvMax ? '縮回視窗' : '放大到全螢幕'; }
+}
+function _sgSvSave() {
+  try { localStorage.setItem('sgThermal.specViewGeom', JSON.stringify(_sgSvGeom)); } catch (e) {}
+}
+function sgSpecViewInitWin() {
+  const box = document.getElementById('sg-specview-box');
+  if (box && !box._svBound) {
+    box._svBound = true;
+    const head = document.getElementById('sg-specview-head');
+    const begin = (ev, mode) => {
+      if (_sgSvMax || ev.button > 0) return;
+      ev.preventDefault();
+      const g0 = { ..._sgSvGeom }, sx = ev.clientX, sy = ev.clientY;
+      const el = ev.currentTarget;
+      try { el.setPointerCapture(ev.pointerId); } catch (e) {}
+      box.classList.add('sv-dragging');
+      const move = (e) => {
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        let { x, y, w, h } = g0;
+        if (mode === 'move') { x += dx; y += dy; }
+        else {
+          if (mode.includes('e')) w = g0.w + dx;
+          if (mode.includes('s')) h = g0.h + dy;
+          if (mode.includes('w')) { w = g0.w - dx; x = g0.x + dx; if (w < 360) { x -= 360 - w; w = 360; } }
+          if (mode.includes('n')) { h = g0.h - dy; y = g0.y + dy; if (h < 240) { y -= 240 - h; h = 240; } }
+        }
+        _sgSvGeom = { x, y, w, h }; _sgSvApply();
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        box.classList.remove('sv-dragging'); _sgSvSave();
+      };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    };
+    head.addEventListener('pointerdown', (ev) => { if (!ev.target.closest('button,a')) begin(ev, 'move'); });
+    head.addEventListener('dblclick', (ev) => { if (!ev.target.closest('button,a')) sgSpecViewToggleMax(); });
+    box.querySelectorAll('.sv-rz').forEach(h => h.addEventListener('pointerdown', (ev) => begin(ev, h.dataset.rz)));
+    window.addEventListener('resize', () => { if (box.offsetParent !== null) _sgSvApply(); });
+  }
+  _sgSvApply();
+}
+function sgSpecViewToggleMax() { _sgSvMax = !_sgSvMax; _sgSvApply(); }
+
+/* PDF：用瀏覽器內建檢視器；縮圖欄由網址參數控制，切換時重建 iframe（會回到第一頁） */
+function _sgSpecViewRenderFrame() {
+  const st = _sgSpecViewState;
+  if (!st || !st.blobUrl) return;
+  const frag = st.isPdf ? '#toolbar=1&navpanes=' + (_sgSvNav ? 1 : 0) + '&pagemode=' + (_sgSvNav ? 'thumbs' : 'none') : '';
+  _sgSpecViewBody('<iframe src="' + st.blobUrl + frag + '" title="' + escapeAttr(st.name) + '"></iframe>');
+  const nb = document.getElementById('sg-specview-nav');
+  if (nb) { nb.style.display = st.isPdf ? '' : 'none'; nb.classList.toggle('sv-on', _sgSvNav); }
+}
+function sgSpecViewToggleNav() {
+  _sgSvNav = !_sgSvNav;
+  try { localStorage.setItem('sgThermal.specViewNav', _sgSvNav ? '1' : '0'); } catch (e) {}
+  _sgSpecViewRenderFrame();
 }
 
 function _sgSpecViewFallback(kind, name, webUrl) {
