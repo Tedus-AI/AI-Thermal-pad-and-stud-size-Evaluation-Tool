@@ -5136,6 +5136,695 @@
   .via-rules-body { padding: 0 18px 14px; font-size: 0.82rem; color: var(--gm-text-2); line-height: 1.7; }
   .via-rules-body > div { padding: 3px 0; }
   .via-rules-body code { background: #f3f1ea; border-radius: 4px; padding: 0 5px; font-size: 0.78rem; }
+  /* ▣V4-BEGIN */
+
+  /* ======================================================================
+     ▣ V4「儀表」視覺層（最後一層，蓋過前面的 Gamma／Claude 暖色層）
+     ────────────────────────────────────────────────────────────────────
+     設計原則（工程資料工具）：
+       · 內容優先：頂端只留一條 52px 固定工具列（專案／儲存／編輯鎖／帳號），分頁列改底線式
+       · 中性冷灰底＋白色表面＋細框線，不用漸層、立體按鈕、襯線標題
+       · 一個強調色（藍）只給「可以按的主要動作」；狀態色：綠＝成功、琥珀＝提醒、紅＝錯誤／刪除（只有這兩種）
+       · 分類色（RF 藍／Digital 紫／PWR 洋紅）只當識別用的色條與標籤，不整條塗滿 —— 避開紅色與狀態色
+       · 數字一律等寬數字（tabular-nums），欄位密度以 17 吋筆電（1536×730）一屏看得到 10 列以上為準
+     色票集中在下面的 :root；之後要調色只改這裡。
+  ====================================================================== */
+  :root {
+    --gm-bg:        #f1f3f6;
+    --gm-bg-soft:   #f7f9fb;
+    --gm-surface:   #ffffff;
+    --gm-primary:   #0f5fb8;
+    --gm-primary-2: #0b4f9c;
+    --gm-primary-3: #083f7e;
+    --gm-tint:      #e7f0fb;
+    --gm-tint-2:    #f3f8fd;
+    --gm-text:      #15202e;
+    --gm-text-2:    #42526a;
+    --gm-text-3:    #6b7a8d;
+    --gm-border:    #d7dee7;
+    --gm-border-2:  #e7ecf1;
+    --gm-warn:      #b45309;
+    --gm-danger:    #c62828;
+    --gm-success:   #1a7f4b;
+    --gm-shadow-sm: 0 1px 2px rgba(16, 24, 40, .05);
+    --gm-shadow:    0 1px 2px rgba(16, 24, 40, .04), 0 2px 8px -4px rgba(16, 24, 40, .08);
+    --gm-shadow-lg: 0 18px 44px -14px rgba(16, 24, 40, .28);
+    --btn-3d-primary: none; --btn-3d-primary-hover: none; --btn-3d-primary-active: none;
+    --btn-3d-neutral: none; --btn-3d-neutral-hover: none; --btn-3d-neutral-active: none;
+    /* 分類色（識別用）：RF／Digital 與 5G-RRU 視覺化報告同色；PWR 取較深的洋紅（當文字、色條對白底 ≥ 4.5:1） */
+    --cat-rf: #2a78d6;  --cat-rf-ink: #1b5fb0;  --cat-rf-tint: #eaf2fc;
+    --cat-digital: #4a3aa7; --cat-digital-ink: #4a3aa7; --cat-digital-tint: #efedfa;
+    --cat-pwr: #c2477f; --cat-pwr-ink: #a83468; --cat-pwr-tint: #fbedf3;
+    /* 狀態色 */
+    --st-ok-fg: #17663d;  --st-ok-bg: #e8f6ee;  --st-ok-bd: #b7dfc7;
+    --st-warn-fg: #8a4b06; --st-warn-bg: #fff6e0; --st-warn-bd: #f1d38c;
+    --st-err-fg: #a61b1b;  --st-err-bg: #fdecec;  --st-err-bd: #f3c1c1;
+    --ab-h: 52px;
+    --ui-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'PingFang TC',
+               'Microsoft JhengHei UI', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+    --ctl-h: 30px;       /* 一般控制項高度 */
+    --r: 8px;            /* 表面圓角 */
+    --r-s: 6px;          /* 控制項圓角 */
+  }
+
+  /* ── 基底 ── */
+  html { scroll-padding-top: calc(var(--ab-h) + 12px); }
+  body {
+    background: var(--gm-bg) !important;
+    color: var(--gm-text);
+    padding: 0 0 72px !important;
+    font-family: var(--ui-font) !important;
+    letter-spacing: 0 !important;
+    font-size: 14px;
+  }
+  .container { max-width: 1760px !important; padding: 0 20px; margin: 0 auto; }
+  .header h1, .card-header, .sg-panel-header, .rules-header, .modal-box h3, .fb-modal-hd h3,
+  .fb-page-header h2, .lock-modal-title, #modal-title, #fb-form-title {
+    font-family: var(--ui-font) !important;
+    letter-spacing: 0 !important;
+  }
+  input, select, textarea, button { font-family: inherit; }
+  .comp-table, .sg-comp-table, .vd-table, .tim-lib-table, .via-wrap, .sg-power-grid { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid var(--gm-primary); outline-offset: 1px; }
+
+  /* ── 頂端固定工具列 ── */
+  .appbar {
+    position: sticky; top: 0; z-index: 1000;
+    height: var(--ab-h); box-sizing: border-box;
+    margin: 0 -20px; padding: 0 20px;
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255, 255, 255, .97);
+    border-bottom: 1px solid var(--gm-border);
+    box-shadow: 0 1px 0 rgba(16, 24, 40, .02), 0 4px 10px -8px rgba(16, 24, 40, .18);
+  }
+  .ab-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--gm-text); flex: none; }
+  .ab-logo {
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    display: grid; place-items: center; color: #fff;
+    background: linear-gradient(160deg, #1d73cf, #0b4f9c);
+  }
+  .ab-logo svg { width: 18px; height: 18px; }
+  .ab-name { display: flex; flex-direction: column; line-height: 1.1; }
+  .ab-name b { font-size: .95rem; font-weight: 700; letter-spacing: .01em; }
+  .ab-name i { font-style: normal; font-size: .68rem; color: var(--gm-text-3); margin-top: 2px; white-space: nowrap; }
+  .ab-proj {
+    display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0;
+    margin-left: 10px; padding-left: 14px; border-left: 1px solid var(--gm-border-2);
+  }
+  .ab-lab { font-size: .74rem; font-weight: 600; color: var(--gm-text-3); white-space: nowrap; }
+  .ab-proj select {
+    height: 32px; width: 280px; min-width: 120px; flex: 0 1 280px;
+    padding: 0 30px 0 10px; border: 1px solid var(--gm-border); border-radius: var(--r-s);
+    background-color: #fff; color: var(--gm-text); font-size: .9rem; font-weight: 600;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2342526a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+    background-repeat: no-repeat; background-position: right 9px center; background-size: 14px;
+    text-overflow: ellipsis;
+  }
+  .ab-proj select:hover { border-color: #b3bfcd; }
+  .ab-proj select:disabled { opacity: .6; cursor: progress; }
+  .ab-sep { width: 1px; height: 18px; background: var(--gm-border); margin: 0 2px; flex: none; }
+  .ab-grow { flex: 1 1 0; min-width: 0; }
+  .ab-btn, .ab-ibtn, .ab-acct {
+    height: 32px; box-sizing: border-box; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: 1px solid var(--gm-border); border-radius: var(--r-s);
+    background: #fff; color: var(--gm-text-2);
+    font-size: .8rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  .ab-btn { padding: 0 11px; }
+  .ab-ibtn { width: 32px; padding: 0; }
+  .ab-ibtn svg, .ab-acct svg { width: 16px; height: 16px; flex: none; }
+  .ab-btn:hover:not(:disabled), .ab-ibtn:hover:not(:disabled), .ab-acct:hover { background: var(--gm-bg-soft); border-color: #b3bfcd; color: var(--gm-text); }
+  .ab-btn:disabled, .ab-ibtn:disabled { opacity: .42; cursor: not-allowed; }
+  .ab-ibtn.ab-danger:hover:not(:disabled) { background: var(--st-err-bg); border-color: var(--st-err-bd); color: var(--st-err-fg); }
+  .ab-btn .loading-spinner { width: 12px; height: 12px; }
+  /* 儲存：整個工具唯一的實心主要按鈕 */
+  .ab-save {
+    position: relative; height: 32px; padding: 0 16px; flex: none;
+    border: 1px solid var(--gm-primary-2); border-radius: var(--r-s);
+    background: var(--gm-primary); color: #fff;
+    font-size: .84rem; font-weight: 700; white-space: nowrap; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ab-save:hover:not(:disabled) { background: var(--gm-primary-2); }
+  .ab-save:disabled { background: #e9edf2; border-color: var(--gm-border); color: #8c98a8; cursor: not-allowed; }
+  .ab-save.ab-dirty::after {       /* 有未儲存的修改 */
+    content: ''; position: absolute; top: -4px; right: -4px; width: 10px; height: 10px; border-radius: 50%;
+    background: #f59e0b; border: 2px solid #fff;
+  }
+  .appbar .save-status {
+    max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: .76rem; padding: 3px 10px !important; margin: 0 !important;
+  }
+  .appbar .save-status:empty { display: none; }
+  /* 資料庫／帳號 */
+  .appbar .header-db-bar {
+    position: relative !important; inset: auto !important; margin: 0 !important; padding: 0 !important;
+    display: flex; align-items: center; gap: 6px; flex: none;
+    background: none !important; border: none !important; box-shadow: none !important;
+  }
+  .ab-acct { padding: 0 8px 0 11px; max-width: 250px; }
+  .ab-acct #db-status-text {
+    font-size: .78rem !important; font-style: normal !important; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 !important; padding: 0 !important;
+  }
+  .ab-acct svg { color: var(--gm-text-3); width: 14px; height: 14px; }
+  .appbar .ab-login {
+    background: var(--gm-tint) !important; border: 1px solid #b9d3f1 !important; color: var(--gm-primary-2) !important;
+    box-shadow: none !important; border-radius: var(--r-s) !important; height: 32px; padding: 0 12px !important;
+    font-size: .8rem !important; font-weight: 700 !important; transform: none !important;
+  }
+  .appbar .ab-login:hover { background: #d9e8fa !important; }
+  .ab-pop {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 1001;
+    min-width: 230px; padding: 6px;
+    background: #fff; border: 1px solid var(--gm-border); border-radius: 10px; box-shadow: var(--gm-shadow-lg);
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .ab-pop[hidden] { display: none; }
+  .appbar .ab-pop > button {
+    width: 100%; height: 34px; padding: 0 10px !important; text-align: left;
+    border: none !important; border-radius: 6px !important; background: none !important; box-shadow: none !important;
+    color: var(--gm-text) !important; font-size: .82rem !important; font-weight: 500 !important;
+    cursor: pointer; white-space: nowrap; transform: none !important;
+  }
+  .appbar .ab-pop > button:hover { background: var(--gm-bg) !important; }
+  .appbar .ab-pop > button:disabled { opacity: .5; cursor: progress; }
+  .ab-pop-info {
+    padding: 6px 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--gm-border-2);
+    font-size: .76rem; color: var(--gm-text-3); word-break: break-all;
+  }
+
+  /* ── 編輯鎖（在頂端工具列裡）── */
+  .lk {
+    position: relative; height: 32px; box-sizing: border-box; flex: none;
+    padding: 0 4px 0 10px !important; gap: 6px !important;
+    border-radius: var(--r-s) !important; font-size: .8rem !important;
+  }
+  .lk.locked   { background: var(--st-warn-bg) !important; border: 1px solid var(--st-warn-bd) !important; color: var(--st-warn-fg) !important; }
+  .lk.unlocked { background: var(--st-ok-bg) !important;   border: 1px solid var(--st-ok-bd) !important;   color: var(--st-ok-fg) !important; }
+  .lk .lk-btn {
+    height: 24px; padding: 0 10px !important; border-radius: 4px !important;
+    font-size: .76rem !important; font-weight: 700 !important; box-shadow: none !important;
+  }
+  .lk.locked .lk-btn   { background: #b45309 !important; color: #fff !important; border: none !important; }
+  .lk.locked .lk-btn:hover { background: #92400e !important; filter: none !important; }
+  .lk.unlocked .lk-btn { background: #fff !important; color: var(--gm-text-2) !important; border: 1px solid var(--st-ok-bd) !important; }
+  .lk input { height: 24px !important; border-radius: 4px !important; }
+  .lk input:focus { border-color: var(--gm-primary) !important; box-shadow: 0 0 0 2px rgba(15, 95, 184, .18) !important; }
+  .lk-tip { top: calc(100% + 8px) !important; }
+
+  /* ── 分頁列：底線式 ── */
+  .tabnav-row {
+    display: flex !important; align-items: stretch !important; flex-wrap: nowrap !important; gap: 12px !important;
+    margin: 0 -20px 14px !important; padding: 0 20px !important;
+    background: #fff; border-bottom: 1px solid var(--gm-border);
+  }
+  .tab-nav {
+    display: flex !important; gap: 0 !important; padding: 0 !important; margin: 0 !important;
+    background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important;
+    min-width: 0;
+  }
+  .tab-btn, .tabnav-row .tab-btn {
+    position: relative; height: 40px; padding: 0 14px !important; margin: 0 !important;
+    background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important;
+    color: var(--gm-text-2) !important; font-size: .86rem !important; font-weight: 600 !important;
+    white-space: nowrap; cursor: pointer; transform: none !important;
+  }
+  .tab-btn::after {
+    content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px 2px 0 0;
+    background: transparent;
+  }
+  .tab-btn:hover { color: var(--gm-text) !important; background: var(--gm-bg-soft) !important; }
+  .tab-btn.active { color: var(--gm-primary) !important; background: none !important; }
+  .tab-btn.active::after { background: var(--gm-primary); }
+  .tabnav-side { margin-left: auto; align-self: center; flex-direction: row !important; align-items: center !important; }
+  #version-badge { padding: 0 !important; background: none !important; border: none !important; color: var(--gm-text-3) !important; font-size: .7rem !important; }
+
+  /* 原本為了讓出右側浮動工具列而留的右側空間：工具列已移除 */
+  #tab-complist, #tab-calc, #tab-via, #tab-validation, #tab-specgen .sg-proj-toolbar, .tabnav-row { padding-right: 0; }
+  .tabnav-row { padding-right: 20px !important; }
+
+  /* ── 狀態訊息（成功載入…／錯誤）：改成頂端工具列下方的浮動提示，不再把內容往下推 ── */
+  .comp-status {
+    position: fixed !important; bottom: 22px; left: 50%; transform: translateX(-50%);
+    z-index: 990; margin: 0 !important; max-width: min(720px, 92vw); width: max-content;
+    padding: 8px 16px !important; border-radius: 8px !important;
+    background: #fff !important; color: var(--gm-text) !important;
+    border: 1px solid var(--gm-border) !important; box-shadow: var(--gm-shadow-lg) !important;
+    font-size: .84rem !important; font-weight: 600;
+  }
+  .comp-status.success { background: var(--st-ok-bg) !important; color: var(--st-ok-fg) !important; border-color: var(--st-ok-bd) !important; }
+  .comp-status.error   { background: var(--st-err-bg) !important; color: var(--st-err-fg) !important; border-color: var(--st-err-bd) !important; }
+  .tab-content:not(.active) .comp-status { display: none !important; }
+
+  /* ── 各頁標題列（原本的「專案卡片」）：專案選單、載入、儲存已移到頂端工具列 → 只留頁名＋匯出 ── */
+  .sg-proj-toolbar .sg-proj-field, .sg-proj-toolbar .sg-proj-actions { display: none !important; }
+  .card.proj-card {
+    display: flex; align-items: center; gap: 14px; min-height: 34px;
+    background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important;
+    margin: 0 0 10px !important; overflow: visible !important;
+  }
+  .card.proj-card > .card-header {
+    padding: 0 !important; background: none !important; border: none !important;
+    font-size: 1.02rem !important; font-weight: 700 !important; color: var(--gm-text) !important; white-space: nowrap;
+  }
+  .card.proj-card > .card-body { flex: 1; padding: 0 !important; min-width: 0; }
+  .card.proj-card .sg-proj-toolbar, .page-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 0 !important; flex-wrap: wrap; }
+  .page-bar { justify-content: space-between; margin-bottom: 10px !important; min-height: 34px; }
+  .page-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .page-title h2 { margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--gm-text); white-space: nowrap; }
+  .page-sub, .via-hd-sub { font-size: .76rem !important; font-weight: 400 !important; color: var(--gm-text-3) !important; white-space: nowrap; }
+  #tab-specgen > .sg-panel {
+    background: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; overflow: visible !important;
+  }
+  #tab-specgen > .sg-panel > .sg-panel-body { padding: 0 !important; }
+  .sg-proj-exports { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+
+  /* 匯出／次要工具鈕：同一種外框鈕（原本每顆一個顏色、半高） */
+  .btn-export, .btn-export.pdf, .btn-export.excel, .btn-export.ee-export, .btn-export.ee-import, .btn-export.tim-lib {
+    height: var(--ctl-h) !important; padding: 0 11px !important; box-sizing: border-box;
+    display: inline-flex !important; align-items: center; gap: 5px;
+    background: #fff !important; color: var(--gm-text-2) !important;
+    border: 1px solid var(--gm-border) !important; border-radius: var(--r-s) !important; box-shadow: none !important;
+    font-size: .78rem !important; font-weight: 600 !important; line-height: 1 !important; transform: none !important;
+  }
+  .btn-export:hover:not(:disabled) { background: var(--gm-bg-soft) !important; border-color: #b3bfcd !important; color: var(--gm-text) !important; transform: none !important; }
+  .btn-export:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ══ EE/RF/PWR 頁 ══ */
+  /* 條件列：頻段｜高溫／常溫條件｜各分類 Pd —— 一張白色卡片，欄位是淺色標籤＋值，不再是深色膠囊 */
+  #sg-power-summary-container { margin-bottom: 10px !important; }
+  .sg-power-grid {
+    background: #fff !important; border: 1px solid var(--gm-border) !important; border-radius: var(--r) !important;
+    padding: 8px 12px !important; box-shadow: none !important; gap: 6px 8px !important; align-items: center;
+  }
+  .sg-power-grid .sg-power-group-label {
+    background: none !important; color: var(--gm-text-2) !important; font-size: .78rem !important; font-weight: 700 !important;
+    padding: 0 4px 0 0 !important; box-shadow: none !important; border: none !important;
+  }
+  .sg-band-cell {
+    background: var(--gm-bg-soft) !important; color: var(--gm-text-2) !important; border: 1px solid var(--gm-border-2) !important;
+    border-radius: var(--r-s) !important; box-shadow: none !important; padding: 4px 10px !important;
+    font-size: .74rem !important; font-weight: 700 !important;
+  }
+  .sg-band-cell select {
+    background: #fff !important; color: var(--gm-text) !important; border: 1px solid var(--gm-border) !important;
+    border-radius: 4px !important; height: 24px; font-weight: 700;
+  }
+  .sg-power-grid .sg-param-chip {
+    background: var(--gm-bg-soft) !important; color: var(--gm-text-2) !important;
+    border: 1px solid var(--gm-border-2) !important; border-radius: var(--r-s) !important; box-shadow: none !important;
+    height: 28px !important; padding: 0 8px !important; font-size: .76rem !important; font-weight: 600 !important; gap: 6px;
+  }
+  .sg-power-grid .sg-param-chip select, .sg-power-grid .sg-param-chip input {
+    background: #fff !important; color: var(--gm-text) !important; border: 1px solid var(--gm-border) !important;
+    border-radius: 4px !important; height: 22px !important; font-weight: 600 !important; opacity: 1 !important;
+  }
+  .sg-power-grid .sg-param-chip select:disabled, .sg-power-grid .sg-param-chip input:disabled {
+    background: transparent !important; border-color: transparent !important; color: var(--gm-text) !important; -webkit-text-fill-color: var(--gm-text);
+  }
+  .sg-power-grid .sg-param-chip.sg-na-chip { background: none !important; border-style: dashed !important; color: var(--gm-text-3) !important; }
+  .sg-power-grid .sg-power-chip {
+    height: 28px !important; padding: 0 10px !important; border-radius: var(--r-s) !important; box-shadow: none !important;
+    font-size: .78rem !important; font-weight: 700 !important; border: 1px solid transparent !important;
+    justify-content: flex-start !important; gap: 6px;
+  }
+  .sg-power-grid .sg-power-chip::before { content: ''; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+  .sg-power-chip.rf, .sg-power-chip.rt-rf           { background: var(--cat-rf-tint) !important;      color: var(--cat-rf-ink) !important; }
+  .sg-power-chip.digital, .sg-power-chip.rt-digital { background: var(--cat-digital-tint) !important; color: var(--cat-digital-ink) !important; }
+  .sg-power-chip.pwr, .sg-power-chip.rt-pwr         { background: var(--cat-pwr-tint) !important;     color: var(--cat-pwr-ink) !important; }
+  .sg-power-chip.rf::before, .sg-power-chip.rt-rf::before { background: var(--cat-rf); }
+  .sg-power-chip.digital::before, .sg-power-chip.rt-digital::before { background: var(--cat-digital); }
+  .sg-power-chip.pwr::before, .sg-power-chip.rt-pwr::before { background: var(--cat-pwr); }
+  .sg-power-chip.total, .sg-power-chip.rt-total { background: #fff !important; color: var(--gm-text) !important; border-color: var(--gm-text) !important; }
+  .sg-power-chip.total::before, .sg-power-chip.rt-total::before { display: none; }
+
+  /* 提醒橫幅（琥珀）：收斂成一條細的 */
+  .sg-lim-sus-banner {
+    background: var(--st-warn-bg) !important; border: 1px solid var(--st-warn-bd) !important; border-left: 3px solid #d97706 !important;
+    border-radius: var(--r) !important; color: var(--st-warn-fg) !important; padding: 8px 12px !important; margin-bottom: 10px !important;
+    font-size: .8rem !important; box-shadow: none !important;
+  }
+  .sg-lim-sus-banner ul { margin: 4px 0 0 !important; }
+
+  /* 分類區塊：白色卡片；標題列白底＋左側分類色條（不再整條塗滿紅／藍／橘） */
+  .sg-comp-category, .comp-category, .vd-category {
+    background: #fff; border: 1px solid var(--gm-border) !important; border-radius: var(--r) !important;
+    box-shadow: none !important; overflow: hidden; margin-bottom: 14px !important;
+  }
+  .sg-comp-category-header, .category-header {
+    position: relative;
+    background: #fff !important; color: var(--gm-text) !important;
+    padding: 0 12px 0 16px !important; min-height: 40px; border-radius: 0 !important; box-shadow: none !important;
+    border-bottom: 1px solid var(--gm-border-2) !important;
+    font-size: .9rem !important; font-weight: 700 !important; text-shadow: none !important;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .sg-comp-category-header::before, .category-header::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--gm-text-3);
+  }
+  .sg-comp-category-header.rf::before, .category-header.rf::before { background: var(--cat-rf); }
+  .sg-comp-category-header.digital::before, .category-header.digital::before { background: var(--cat-digital); }
+  .sg-comp-category-header.pwr::before, .category-header.pwr::before { background: var(--cat-pwr); }
+  .sg-pcbt {
+    background: var(--gm-bg-soft) !important; border: 1px solid var(--gm-border-2) !important; color: var(--gm-text-2) !important;
+    border-radius: var(--r-s) !important; padding: 2px 4px 2px 9px !important; box-shadow: none !important;
+    font-size: .74rem !important; font-weight: 600 !important;
+  }
+  .sg-pcbt label { color: var(--gm-text-2) !important; }
+  .sg-pcbt select, .sg-pcbt input {
+    background: #fff !important; color: var(--gm-text) !important; border: 1px solid var(--gm-border) !important;
+    border-radius: 4px !important; height: 24px !important; font-weight: 600; box-shadow: none !important;
+  }
+
+  /* 元件表：試算表式的密度（列高 36px），框線只留橫線 */
+  .sg-comp-list-table { border-collapse: collapse !important; width: 100%; }
+  .sg-comp-list-table thead th {
+    background: var(--gm-bg-soft) !important; color: var(--gm-text-2) !important;
+    font-size: .72rem !important; font-weight: 700 !important; letter-spacing: .01em;
+    padding: 6px 6px !important; border: none !important; border-bottom: 1px solid var(--gm-border) !important;
+    line-height: 1.25; vertical-align: middle;
+  }
+  .sg-comp-list-table tbody td {
+    padding: 3px 4px !important; border: none !important; border-bottom: 1px solid var(--gm-border-2) !important;
+    background: #fff !important; vertical-align: middle !important;
+  }
+  .sg-comp-list-table tbody tr:last-child td { border-bottom: none !important; }
+  .sg-comp-list-table tbody tr:hover td { background: var(--gm-tint-2) !important; }
+  .sg-comp-list-table input, .sg-comp-list-table select {
+    height: 28px !important; box-sizing: border-box; padding: 0 7px !important;
+    border: 1px solid var(--gm-border-2) !important; border-radius: 5px !important;
+    background: #fff !important; color: var(--gm-text) !important; font-size: .82rem !important; box-shadow: none !important;
+  }
+  .sg-comp-list-table input:hover:not(:disabled), .sg-comp-list-table select:hover:not(:disabled) { border-color: #b3bfcd !important; }
+  .sg-comp-list-table input:focus, .sg-comp-list-table select:focus {
+    border-color: var(--gm-primary) !important; box-shadow: 0 0 0 2px rgba(15, 95, 184, .16) !important; outline: none;
+  }
+  /* 唯讀（未解鎖）：欄位看起來是文字，不是一排反灰的輸入框 */
+  .sg-comp-list-table input:disabled, .sg-comp-list-table select:disabled {
+    background: transparent !important; border-color: transparent !important; color: var(--gm-text) !important;
+    -webkit-text-fill-color: var(--gm-text); opacity: 1 !important; cursor: default;
+  }
+  .sg-comp-list-table select:disabled { appearance: none; -webkit-appearance: none; background-image: none !important; }
+  .sg-comp-list-table input.comp-name { font-weight: 700 !important; color: var(--gm-text) !important; }
+  .sg-comp-list-table input[type=number] { text-align: right; }
+  .sg-comp-list-table .sg-qty-col input { text-align: center; }
+  /* 限溫＋限溫對象：並排（原本上下疊，把每一列撐到 55px） */
+  .sg-comp-list-table td.sg-limit-col { white-space: nowrap; }
+  .sg-comp-list-table td.sg-limit-col > input.sg-cell-input { width: 58px !important; display: inline-block; vertical-align: middle; }
+  .sg-comp-list-table td.sg-limit-col .sg-lim-extra { display: inline-flex !important; flex-wrap: wrap; align-items: center; gap: 2px 4px; vertical-align: middle; margin: 0 0 0 3px !important; max-width: 112px; }
+  .sg-comp-list-table .sg-lim-ref select { height: 24px !important; font-size: .72rem !important; padding: 0 3px !important; color: var(--gm-text-2) !important; }
+  .sg-comp-list-table .sg-lim-ref select:disabled { color: var(--gm-text-3) !important; -webkit-text-fill-color: var(--gm-text-3); }
+  /* TH Via：下拉＋數字並排 */
+  .sg-tv-cell { display: flex !important; flex-direction: row !important; gap: 4px !important; align-items: center; }
+  .sg-tv-cell select { flex: 1 1 auto; min-width: 0; }
+  .sg-tv-cell .sg-tv-input { flex: 0 0 52px; width: 52px !important; margin: 0 !important; }
+  /* 選了「自行輸入」→ 數字才是內容，下拉縮成一顆小箭頭（要改回 N/A 點它） */
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) select { flex: 0 0 26px; width: 26px !important; padding: 0 !important; color: transparent !important; -webkit-text-fill-color: transparent; }
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) select option { color: var(--gm-text); }
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) select:disabled { display: none; }
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) .sg-tv-input { flex: 1 1 auto; width: auto !important; }
+  .sg-ts-cell { display: flex !important; flex-direction: row !important; align-items: center; gap: 4px !important; }
+  .sg-ts-cell > select { flex: 0 0 52px; width: 52px !important; }
+  .sg-ts-qtys.visible { flex-direction: row !important; gap: 4px !important; margin: 0 !important; }
+  .sg-ts-qtys label { font-size: .68rem !important; color: var(--gm-text-3) !important; gap: 2px !important; display: inline-flex !important; align-items: center; }
+  .sg-ts-qtys label input { width: 36px !important; padding: 0 3px !important; }
+  /* 欄寬固定：三個分類的表格欄位上下對齊；多出來的寬度全部給元件名稱 */
+  .sg-comp-list-table { table-layout: fixed; min-width: 1330px; }
+  .sg-comp-list-table th:nth-child(2)  { width: 128px; }
+  .sg-comp-list-table th:nth-child(3)  { width: 52px; }
+  .sg-comp-list-table th:nth-child(4)  { width: 168px; }
+  .sg-comp-list-table th:nth-child(5), .sg-comp-list-table th:nth-child(6) { width: 92px; }
+  .sg-comp-list-table th:nth-child(7)  { width: 108px; }
+  .sg-comp-list-table th:nth-child(8), .sg-comp-list-table th:nth-child(9) { width: 108px; }
+  .sg-comp-list-table th:nth-child(10) { width: 150px; }
+  .sg-comp-list-table th:nth-child(11) { width: 134px; }
+  .sg-comp-list-table th:nth-child(12) { width: 40px; }
+  .sg-comp-list-table th:nth-child(13) { width: 86px; }
+  .sg-comp-list-table td input.sg-cell-input, .sg-comp-list-table td .sg-type-cell select { width: 100% !important; }
+  .sg-comp-category { overflow-x: auto; }
+  .sg-comp-list-table thead th:first-child, .sg-comp-list-table tbody td:first-child { padding-left: 14px !important; text-align: left; }
+  /* 表格下方的動作列 */
+  .sg-comp-actionbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 12px !important; margin: 0 !important; background: var(--gm-bg-soft); border-top: 1px solid var(--gm-border-2);
+    font-size: .8rem;
+  }
+  .sg-add-label, .sg-lib-label { color: var(--gm-text-2) !important; font-weight: 600 !important; font-size: .78rem !important; }
+  .sg-add-or { color: var(--gm-text-3) !important; font-size: .74rem !important; }
+  .sg-actionbar-right { margin-left: auto; display: flex; gap: 6px; }
+  .sg-picker-trigger, .tcp-placement-btn, .tcp-view-btn {
+    height: var(--ctl-h) !important; padding: 0 11px !important; box-sizing: border-box;
+    background: #fff !important; color: var(--gm-text-2) !important; border: 1px solid var(--gm-border) !important;
+    border-radius: var(--r-s) !important; box-shadow: none !important; font-size: .78rem !important; font-weight: 600 !important;
+    transform: none !important; opacity: 1 !important;
+  }
+  .sg-picker-trigger:hover:not(:disabled), .tcp-placement-btn:hover:not(:disabled), .tcp-view-btn:hover { background: var(--gm-bg) !important; color: var(--gm-text) !important; border-color: #b3bfcd !important; }
+  .sg-picker-trigger:disabled, .tcp-placement-btn:disabled { opacity: .45 !important; cursor: not-allowed; }
+  /* 熱阻按鈕 */
+  .sg-rth-btn {
+    height: 24px; padding: 0 8px !important; border-radius: 5px !important; box-shadow: none !important;
+    background: #fff !important; border: 1px solid var(--gm-border) !important; color: var(--gm-text-3) !important;
+    font-size: .74rem !important; font-weight: 700 !important;
+  }
+  .sg-rth-btn.has-rth { background: var(--gm-tint) !important; border-color: #b9d3f1 !important; color: var(--gm-primary-2) !important; }
+  /* 列尾的小圖示鈕：同一種安靜的外觀，有檔案／有備註才上色 */
+  .sg-spec-btn, .sg-note-btn, .sg-move-btn, .sg-comp-del-btn {
+    width: 24px; height: 24px; padding: 0 !important; box-sizing: border-box;
+    display: inline-grid !important; place-items: center;
+    background: transparent !important; border: 1px solid transparent !important; border-radius: 5px !important; box-shadow: none !important;
+    color: var(--gm-text-3) !important; font-size: .8rem !important; line-height: 1 !important; cursor: pointer;
+  }
+  .sg-spec-btn:hover:not(:disabled), .sg-note-btn:hover:not(:disabled), .sg-move-btn:hover:not(:disabled) { background: var(--gm-bg) !important; border-color: var(--gm-border) !important; color: var(--gm-text) !important; }
+  .sg-spec-btn:disabled, .sg-move-btn:disabled, .sg-comp-del-btn:disabled { opacity: .3 !important; cursor: not-allowed; }
+  .sg-spec-btn.has-file { background: var(--gm-tint) !important; border-color: #b9d3f1 !important; color: var(--gm-primary-2) !important; opacity: 1 !important; }
+  .sg-spec-btns { gap: 1px !important; }
+  .sg-comp-del-btn { color: var(--gm-text-3) !important; filter: grayscale(1); }
+  .sg-comp-del-btn:hover:not(:disabled) { background: var(--st-err-bg) !important; border-color: var(--st-err-bd) !important; filter: none; }
+  /* 新增列 */
+  .sg-comp-add-btn {
+    height: var(--ctl-h); padding: 0 12px !important; border-radius: var(--r-s) !important; box-shadow: none !important;
+    background: #fff !important; border: 1px dashed #9db3cc !important; color: var(--gm-primary-2) !important;
+    font-size: .8rem !important; font-weight: 700 !important; transform: none !important;
+  }
+  .sg-comp-add-btn:hover:not(:disabled) { background: var(--gm-tint) !important; border-style: solid !important; }
+  .sg-comp-add-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .sg-comp-list-table th:nth-child(4)  { width: 176px; }
+  .sg-comp-list-table .sg-lim-ref select { min-width: 78px; }
+  #btn-sp-login { background: var(--gm-tint) !important; border: 1px solid #b9d3f1 !important; color: var(--gm-primary-2) !important; box-shadow: none !important; transform: none !important; }
+  #btn-sp-login:hover { background: #d9e8fa !important; }
+
+  /* ══ TH/ME 頁、模擬與實測驗證頁：分類區塊與表格（同 EE 頁的語彙）══ */
+  .category-section, .vd-comp-category {
+    background: #fff; border: 1px solid var(--gm-border) !important; border-radius: var(--r) !important;
+    box-shadow: none !important; overflow: hidden; margin-bottom: 14px !important;
+  }
+  .category-title, .vd-comp-category-header {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    background: #fff !important; color: var(--gm-text) !important;
+    padding: 0 12px 0 16px !important; min-height: 40px; margin: 0 !important;
+    border: none !important; border-bottom: 1px solid var(--gm-border-2) !important; border-radius: 0 !important; box-shadow: none !important;
+    font-size: .9rem !important; font-weight: 700 !important; text-shadow: none !important;
+  }
+  .category-title::before, .vd-comp-category-header::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--gm-text-3);
+  }
+  .category-title.rf::before, .vd-comp-category-header.rf::before { background: var(--cat-rf); }
+  .category-title.digital::before, .vd-comp-category-header.digital::before { background: var(--cat-digital); }
+  .category-title.pwr::before, .vd-comp-category-header.pwr::before { background: var(--cat-pwr); }
+  .comp-table-wrap { border: none !important; border-radius: 0 !important; box-shadow: none !important; background: #fff !important; margin: 0 !important; }
+  .comp-table, .vd-table { border-collapse: collapse !important; }
+  .comp-table th, .vd-table th {
+    background: var(--gm-bg-soft) !important; color: var(--gm-text-2) !important;
+    font-size: .72rem !important; font-weight: 700 !important; line-height: 1.25;
+    border: none !important; border-bottom: 1px solid var(--gm-border) !important;
+    padding-top: 6px !important; padding-bottom: 6px !important;
+  }
+  /* 可填寫的欄位（TH/ME 自己的資料）：表頭一條強調色底線區分，不再整塊塗黃 */
+  .comp-table th.editable-col { background: var(--gm-tint-2) !important; color: var(--gm-primary-3) !important; box-shadow: inset 0 -2px 0 #9cc3ee; }
+  .comp-table td, .vd-table td {
+    border: none !important; border-bottom: 1px solid var(--gm-border-2) !important;
+    padding-top: 3px !important; padding-bottom: 3px !important; background: #fff !important;
+    font-size: .82rem; color: var(--gm-text);
+  }
+  .comp-table tbody tr:last-child td, .vd-table tbody tr:last-child td { border-bottom: none !important; }
+  .comp-table tr:hover td, .vd-table tbody tr:hover td { background: var(--gm-tint-2) !important; }
+  .comp-table td.readonly-cell, .vd-table td.readonly-cell { color: var(--gm-text-2); }
+  .comp-table td.name-cell, .vd-table td.comp-name-cell { color: var(--gm-text) !important; font-weight: 700 !important; text-align: left; }
+  .comp-table td.tim-na-cell, .comp-table tr:hover td.tim-na-cell { background: var(--gm-bg) !important; color: var(--gm-text-3) !important; }
+  .cell-input, .cell-select, .vd-table input:not([type=checkbox]), .vd-table select {
+    height: 28px !important; box-sizing: border-box; padding: 0 7px !important;
+    border: 1px solid var(--gm-border-2) !important; border-radius: 5px !important;
+    background: #fff !important; color: var(--gm-text) !important; font-size: .82rem !important; box-shadow: none !important;
+  }
+  .cell-input:hover:not(:disabled), .cell-select:hover:not(:disabled),
+  .vd-table input:hover:not(:disabled), .vd-table select:hover:not(:disabled) { border-color: #b3bfcd !important; }
+  .cell-input:focus, .cell-select:focus, .vd-table input:focus, .vd-table select:focus {
+    border-color: var(--gm-primary) !important; box-shadow: 0 0 0 2px rgba(15, 95, 184, .16) !important; outline: none;
+  }
+  .cell-input:disabled, .cell-select:disabled, .vd-table input:not([type=checkbox]):disabled, .vd-table select:disabled {
+    background: transparent !important; border-color: transparent !important; color: var(--gm-text) !important;
+    -webkit-text-fill-color: var(--gm-text); opacity: 1 !important; cursor: default;
+  }
+  .cell-select:disabled, .vd-table select:disabled { appearance: none; -webkit-appearance: none; background-image: none !important; }
+  .cell-input:disabled::placeholder, .vd-table input:disabled::placeholder { color: #b6c0cc; -webkit-text-fill-color: #b6c0cc; }
+  /* 被隱藏的元件：收合區 */
+  .hidden-comp-zone, .sg-hidden-comp-zone {
+    margin: 0 !important; border: none !important; border-top: 1px solid var(--gm-border-2) !important; border-radius: 0 !important;
+    background: var(--gm-bg-soft) !important; box-shadow: none !important;
+  }
+  .hidden-comp-zone > summary, .sg-hidden-comp-zone > summary {
+    padding: 7px 14px !important; font-size: .78rem !important; font-weight: 600 !important; color: var(--gm-text-2) !important;
+    background: none !important; cursor: pointer;
+  }
+  /* 驗證頁判定規則 */
+  .vd-rules {
+    background: #fff !important; border: 1px solid var(--gm-border) !important; border-radius: var(--r) !important; box-shadow: none !important;
+    margin-bottom: 12px !important;
+  }
+  /* 空狀態 */
+  .empty-state { background: #fff; border: 1px dashed var(--gm-border); border-radius: var(--r); padding: 44px 20px !important; }
+  .empty-state p { font-style: normal !important; color: var(--gm-text-3) !important; }
+
+  /* 分類標籤（小色塊＋字）：全工具同一組分類色 */
+  .via-cat-tag, .tcp-cat { border-radius: 4px !important; font-weight: 700 !important; }
+  .via-cat-tag.rf, .tcp-cat.rf { background: var(--cat-rf-ink) !important; }
+  .via-cat-tag.digital, .tcp-cat.digital { background: var(--cat-digital-ink) !important; }
+  .via-cat-tag.pwr, .tcp-cat.pwr { background: var(--cat-pwr-ink) !important; }
+  .via-tab-badge { background: #b45309 !important; color: #fff !important; border-radius: 999px; min-width: 18px; padding: 0 5px; }
+  .tab-btn.active .via-tab-badge { background: #b45309 !important; color: #fff !important; }
+
+  /* ══ 通用元件：卡片、按鈕、表單、對話框 ══ */
+  .ab-acct #db-status-text { color: var(--gm-text-2) !important; }
+  .card, .rules-card, .fb-list-card, .fb-form-card, .fb-stat-card, .fb-quick-card, .sg-panel {
+    border-radius: var(--r) !important; border: 1px solid var(--gm-border) !important; box-shadow: none !important;
+  }
+  .card-header, .rules-header, .sg-panel-header, .card-header.blue, .card-header.green {
+    background: #fff !important; color: var(--gm-text) !important;
+    border-bottom: 1px solid var(--gm-border-2) !important;
+    padding: 10px 16px !important; font-size: .92rem !important; font-weight: 700 !important;
+  }
+  .card-body, .sg-panel-body, .rules-body { padding: 14px 16px !important; }
+  .rule-row { padding: 6px 16px !important; font-size: .84rem !important; }
+  .rule-row:nth-child(odd) { background: #fff !important; }
+  .field label, .fb-f label, .modal-field label { font-size: .78rem !important; color: var(--gm-text-2) !important; font-weight: 600 !important; }
+  .field input, .field select, .fb-f input, .fb-f select, .fb-f textarea, .modal-field input, .modal-field select {
+    border: 1px solid var(--gm-border) !important; border-radius: var(--r-s) !important; box-shadow: none !important;
+    background-color: #fff !important; color: var(--gm-text) !important; font-size: .88rem !important;
+  }
+  .field input, .field select, .fb-f input, .fb-f select { height: 34px !important; padding: 0 10px !important; box-sizing: border-box; }
+  .field input:focus, .field select:focus, .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus {
+    border-color: var(--gm-primary) !important; box-shadow: 0 0 0 3px rgba(15, 95, 184, .14) !important; outline: none;
+  }
+  .field input:disabled { background: var(--gm-bg) !important; color: var(--gm-text-3) !important; }
+  .field { margin-bottom: 12px !important; }
+  /* 按鈕：主要＝實心藍、其餘＝外框；不再有立體陰影與位移動畫 */
+  .btn, .btn-primary, .btn-save, .fb-btn-submit, .fb-btn-clear, .lock-modal-btn, .lock-modal-teams-btn, .fb-del-btn, .fb-cancel-btn2 {
+    height: 32px; padding: 0 14px !important; box-sizing: border-box; border-radius: var(--r-s) !important;
+    box-shadow: none !important; transform: none !important; font-size: .82rem !important; font-weight: 600 !important;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; text-decoration: none;
+  }
+  .btn-primary, .fb-btn-submit, .lock-modal-teams-btn {
+    background: var(--gm-primary) !important; border: 1px solid var(--gm-primary-2) !important; color: #fff !important;
+  }
+  .btn-primary:hover:not(:disabled), .fb-btn-submit:hover:not(:disabled), .lock-modal-teams-btn:hover { background: var(--gm-primary-2) !important; }
+  .btn-primary:disabled, .fb-btn-submit:disabled { background: #e9edf2 !important; border-color: var(--gm-border) !important; color: #8c98a8 !important; cursor: not-allowed; }
+  .lock-modal-btn:not(.lock-modal-teams-btn), .fb-btn-clear, .fb-cancel-btn2 {
+    background: #fff !important; border: 1px solid var(--gm-border) !important; color: var(--gm-text-2) !important;
+  }
+  .lock-modal-btn:not(.lock-modal-teams-btn):hover, .fb-btn-clear:hover { background: var(--gm-bg-soft) !important; border-color: #b3bfcd !important; color: var(--gm-text) !important; }
+  .fb-del-btn { background: var(--gm-danger) !important; border: 1px solid #a61b1b !important; color: #fff !important; }
+  /* 對話框 */
+  .lock-modal-overlay, .fb-overlay, .unsaved-lock-overlay, .tc-overlay { background: rgba(16, 24, 40, .45) !important; backdrop-filter: none !important; }
+  .lock-modal-box, .fb-modal-box, .fb-confirm-box, .unsaved-lock-box, .tc-modal {
+    border-radius: 12px !important; border: 1px solid var(--gm-border) !important; box-shadow: var(--gm-shadow-lg) !important; background: #fff !important;
+  }
+  .lock-modal-title { color: var(--gm-text) !important; font-size: 1.02rem !important; }
+  .lock-modal-info { background: var(--gm-bg-soft) !important; border: 1px solid var(--gm-border-2) !important; border-radius: var(--r) !important; }
+  .lock-modal-hint { color: var(--gm-text-2) !important; }
+  .unsaved-lock-title { color: var(--st-warn-fg) !important; }
+  .unsaved-lock-actions button { border-radius: var(--r-s) !important; height: 32px; padding: 0 14px !important; }
+  .unsaved-lock-actions .ul-save { background: var(--gm-primary) !important; }
+  .unsaved-lock-actions .ul-discard { background: #fff !important; color: var(--st-err-fg) !important; border: 1px solid var(--st-err-bd) !important; }
+  .unsaved-lock-actions .ul-cancel { background: #fff !important; color: var(--gm-text-2) !important; border: 1px solid var(--gm-border) !important; }
+  /* 狀態膠囊 */
+  .save-status { border-radius: var(--r-s) !important; }
+  .save-status.saving { background: var(--st-warn-bg) !important; color: var(--st-warn-fg) !important; }
+  .save-status.saved  { background: var(--st-ok-bg) !important;   color: var(--st-ok-fg) !important; }
+  .save-status.err    { background: var(--st-err-bg) !important;  color: var(--st-err-fg) !important; }
+  ::-webkit-scrollbar-thumb { background: #c3ccd7 !important; border-color: var(--gm-bg) !important; }
+  ::-webkit-scrollbar-thumb:hover { background: #a3afbd !important; }
+  /* 置頂橫幅（別人持鎖／資料庫損毀）*/
+  #lock-status-bar, #db-corrupt-bar { border-radius: var(--r) !important; margin: 10px 0 0 !important; box-shadow: none !important; }
+
+  /* ══ 凸台&TIM 尺寸速算 ══ */
+  #tab-calc .main-grid { gap: 14px !important; margin-bottom: 14px !important; }
+  #tab-calc .field input { height: 36px !important; font-size: .95rem !important; }
+  .result-value { color: var(--gm-primary) !important; font-variant-numeric: tabular-nums; }
+  .note-box { background: var(--gm-bg-soft) !important; border: 1px solid var(--gm-border-2) !important; border-radius: var(--r-s) !important; }
+  .power-badge { border-radius: var(--r-s) !important; }
+  .power-badge.low  { background: var(--st-ok-bg) !important; color: var(--st-ok-fg) !important; }
+  .power-badge.high { background: var(--st-warn-bg) !important; color: var(--st-warn-fg) !important; }
+
+  /* ══ 使用者建議與改善 ══ */
+  .fb-page-icon { background: var(--gm-tint) !important; box-shadow: none !important; border-radius: 10px !important; width: 40px !important; height: 40px !important; font-size: 1.2rem !important; }
+  .fb-page-header h2 { font-size: 1.1rem !important; }
+  .fb-quick-card { background: #fff !important; padding: 10px 14px !important; }
+  .fb-quick-card:hover { border-color: #9cc3ee !important; background: var(--gm-tint-2) !important; transform: none !important; }
+
+  /* ══ Thermal Via 頁：沿用它自己的版面，只把暖色改成中性／強調藍 ══ */
+  .via-tile.hero { background: var(--gm-tint) !important; border-color: #b9d3f1 !important; }
+  .via-ed-head { background: #fff !important; border-bottom: 1px solid var(--gm-border-2) !important; }
+  .via-item.sel { background: var(--gm-tint) !important; border-color: #9cc3ee !important; }
+  .via-list, .via-ed, .via-rules, .via-viz, .via-sec, .via-tile { border-radius: var(--r) !important; box-shadow: none !important; }
+
+  /* 新增專案：從頂端工具列的「＋」展開的浮動面板（不再把整頁內容往下推） */
+  .sg-new-project-form.active {
+    position: fixed; top: calc(var(--ab-h) + 8px); left: max(20px, min(190px, 100vw - 500px)); z-index: 1001;
+    width: min(460px, calc(100vw - 40px)); box-sizing: border-box; margin: 0 !important;
+    padding: 16px !important; background: #fff !important;
+    border: 1px solid var(--gm-border) !important; border-radius: 12px !important; box-shadow: var(--gm-shadow-lg) !important;
+  }
+  .sg-new-project-form .btn:not(.btn-primary) { background: #fff !important; border: 1px solid var(--gm-border) !important; color: var(--gm-text-2) !important; }
+  .sg-comp-category-header .sg-pcbt { margin-left: 0 !important; }
+
+  /* 分類標題：整條塗滿分類色＋白字（使用者要求：只有左側色條太單調，照原本整條上色的風格）。
+     色值用 --cat-*-ink（白字對比 ≥ 4.5:1）；RF 不用紅色（紅色保留給錯誤）。 */
+  .sg-comp-category-header, .category-title, .vd-comp-category-header, .category-header {
+    color: #fff !important; border-bottom: none !important; background: var(--gm-text-2) !important;
+  }
+  .sg-comp-category-header::before, .category-title::before, .vd-comp-category-header::before, .category-header::before { display: none; }
+  .sg-comp-category-header.rf, .category-title.rf, .vd-comp-category-header.rf, .category-header.rf { background: var(--cat-rf-ink) !important; }
+  .sg-comp-category-header.digital, .category-title.digital, .vd-comp-category-header.digital, .category-header.digital { background: var(--cat-digital-ink) !important; }
+  .sg-comp-category-header.pwr, .category-title.pwr, .vd-comp-category-header.pwr, .category-header.pwr { background: var(--cat-pwr-ink) !important; }
+  .sg-comp-category-header .sg-pcbt { background: rgba(255, 255, 255, .16) !important; border-color: rgba(255, 255, 255, .35) !important; color: #fff !important; }
+  .sg-comp-category-header .sg-pcbt label { color: #fff !important; }
+  .sg-comp-category-header .sg-pcbt select:disabled, .sg-comp-category-header .sg-pcbt input:disabled { opacity: 1; background: rgba(255,255,255,.92) !important; }
+  .sg-tv-cell { min-width: 0; }
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) .sg-tv-input { flex: 1 1 0; min-width: 0; width: 100% !important; text-align: center; }
+  .sg-ts-cell { flex-wrap: wrap; row-gap: 2px !important; }
+  .sg-ts-qtys.visible { flex: 1 1 100%; }
+  .sg-ts-qtys label input { text-align: center; }
+  .comp-table td.tim-na-cell, .comp-table tr:hover td.tim-na-cell { background: #eef0f3 !important; }
+  .comp-table .cell-select, .comp-table .cell-input { padding: 0 4px !important; }
+  .sg-comp-actionbar { padding: 6px 12px !important; }
+  .sg-comp-list-table th:nth-child(2) { width: 142px; }
+  .sg-tv-cell:has(.sg-tv-input:not(.hidden)) select:not(:disabled) {
+    appearance: none; -webkit-appearance: none; flex: 0 0 22px; width: 22px !important;
+    background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7a8d' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>") center / 12px no-repeat !important;
+  }
+  .cat-ico { width: 17px; height: 17px; flex: none; vertical-align: -3px; margin-right: 4px; }
+  .comp-table .cell-select[data-field="timThickness"] { padding: 0 2px !important; }
+  /* 頂端工具列在窄螢幕的讓位順序：存檔訊息先縮 → 帳號名稱截斷 → 品牌副標收掉；專案下拉至少 160px */
+  .ab-proj select { min-width: 160px; }
+  .appbar .save-status { flex: 0 1 auto; min-width: 0; }
+  .ab-grow { flex: 1 1 0; min-width: 4px; }
+  @media (max-width: 1500px) { .ab-acct { max-width: 170px; } .ab-name i { display: none; } .ab-proj { margin-left: 4px; padding-left: 10px; } }
+  @media (max-width: 1280px) { .ab-acct #db-status-text { max-width: 90px; } .ab-lab { display: none; } }
+  /* ▣V4-END */
 </style>
 </head>
 <body>
@@ -5434,19 +6123,61 @@
 
 <div class="container">
 
-  <div class="header">
-    <h1>Thermal & Component Spec Management Tool</h1>
-    <p>散熱與元件規格管理工具</p>
-    <div class="header-db-bar">
-      <span id="db-status-text">未選擇資料庫</span>
-      <button id="btn-pick-db" onclick="handlePickDb()">&#128194; 資料庫目錄</button>
-      <button id="btn-backup" onclick="handleExportBackup()" title="匯出單一自包含 JSON（含元件位置標註圖片）">&#128190; 備份資料庫</button>
-      <button id="btn-sp-login" onclick="handleSpLogin()" style="display:none">&#128273; 登入 SharePoint</button>
-      <button id="btn-sp-logout" onclick="handleSpLogout()" style="display:none">&#128682; 登出</button>
-      <span id="sp-user-info" style="display:none"></span>
-      <button id="btn-admin" onclick="adminOpen()" title="系統管理員：強制請離佔用編輯鎖的人員（需密碼）" style="font-size:0.72rem; padding:3px 9px;">&#128737; 管理</button>
+  <!-- ==================== 頂端固定工具列（App bar）====================
+       專案選單、儲存、編輯鎖、資料庫／帳號集中在這一條，捲動時固定在頂端：
+       原本四個功能頁各有一份「選擇專案／載入／儲存」，加上右側浮動工具列（會蓋住表格右緣）→ 全部收到這裡。
+       四頁同步開同一個專案（PROJ_SELECTS）：這裡的 #sg-project-select 是使用者操作的那一個，其餘三個是隱藏的鏡像。 -->
+  <header class="appbar" id="appbar">
+    <a class="ab-brand" href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;"
+       title="Thermal &amp; Component Spec Management Tool｜散熱與元件規格管理工具（點一下回到頂端）">
+      <span class="ab-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v10.5"/><path d="M12 21a4 4 0 0 0 2.6-7V5.6a2.6 2.6 0 0 0-5.2 0V14A4 4 0 0 0 12 21z"/></svg></span>
+      <span class="ab-name"><b>AI-Thermal</b><i>元件規格管理</i></span>
+    </a>
+    <div class="ab-proj" id="ab-proj">
+      <label class="ab-lab" for="sg-project-select">專案</label>
+      <select id="sg-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案；有未存變更會先問">
+        <option value="">-- 請先載入專案列表 --</option>
+      </select>
+      <button type="button" class="ab-btn" id="sg-load-btn" onclick="projLoadClick()" title="重讀資料庫並重新載入目前的專案（放棄畫面上還沒儲存的修改前會先問）">重新載入</button>
+      <span class="ab-sep" aria-hidden="true"></span>
+      <button type="button" class="ab-ibtn" id="sg-new-project-btn" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案" aria-label="新增專案"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="ab-ibtn" id="sg-rename-project-btn" onclick="sgAskRenameProject()" disabled title="需先解鎖密碼保護才能修改專案名稱" aria-label="重新命名專案"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
+      <button type="button" class="ab-ibtn ab-danger" id="sg-del-project-btn" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）" aria-label="刪除專案"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/><path d="M10 11v5M14 11v5"/></svg></button>
     </div>
-  </div>
+    <div class="ab-grow"></div>
+    <span id="sg-comp-save-status" class="save-status"></span>
+    <button type="button" class="ab-save" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" disabled
+            title="儲存全部分頁（EE/RF/PWR、TH/ME、驗證、Thermal Via）的修改">儲存</button>
+    <!-- 編輯鎖（原本每頁一條「密碼保護」橫幅，收成這一顆，放在頂端固定的工具列）：依目前分頁決定範圍 ——
+         「使用者建議與改善」走開發者密碼（fbToggleProtection），其他分頁走資料庫密碼（toggleProtection） -->
+    <span id="lock-pill" class="lk locked">
+      <span class="lk-ico" id="lock-pill-ico">&#128274;</span>
+      <span class="lk-txt" id="lock-pill-text">唯讀</span>
+      <span class="lk-i" id="lock-pill-info" title="">i</span>
+      <input type="password" id="lock-pill-pwd" class="lk-open-only" placeholder="輸入密碼" autocomplete="off"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();lockPillSubmit();}else if(event.key==='Escape'){lockPillCollapse();}">
+      <button type="button" class="lk-btn" id="lock-pill-btn" onclick="lockPillAction()">解鎖編輯</button>
+      <button type="button" class="lk-x lk-open-only" id="lock-pill-x" onclick="lockPillCollapse()" title="取消" aria-label="取消">&#10005;</button>
+      <span class="lk-tip lk-open-only" id="lock-pill-tip"></span>
+    </span>
+    <button id="tc-fab" class="ab-ibtn ab-teams" type="button" aria-label="快速聯絡專案成員" title="用 Teams 聯絡專案成員"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg></button>
+    <!-- 資料庫／帳號：狀態＋登入鈕常駐，其餘（備份、離線資料庫、管理、登出）收進選單 -->
+    <div class="header-db-bar ab-db" id="ab-db">
+      <button id="btn-sp-login" class="ab-btn ab-login" onclick="handleSpLogin()" style="display:none">登入 SharePoint</button>
+      <button type="button" class="ab-acct" id="ab-acct-btn" onclick="abMenuToggle(event)" aria-haspopup="true" aria-expanded="false" title="資料庫與帳號">
+        <span id="db-status-text">未選擇資料庫</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="ab-pop" id="ab-acct-pop" role="menu" hidden>
+        <span id="sp-user-info" class="ab-pop-info" style="display:none"></span>
+        <button id="btn-pick-db" role="menuitem" onclick="abMenuClose();handlePickDb()">&#128194; 資料庫目錄</button>
+        <button id="btn-backup" role="menuitem" onclick="abMenuClose();handleExportBackup()" title="匯出單一自包含 JSON（含元件位置標註圖片）">&#128190; 備份資料庫</button>
+        <button id="btn-offline-db" role="menuitem" onclick="abMenuClose();handleLoadOfflineDb()" title="不在公司／連不到 SharePoint 時，改讀寫一份本機的資料庫 JSON（例如備份檔）">&#128187; 載入離線資料庫 (.json)</button>
+        <button id="btn-admin" role="menuitem" onclick="abMenuClose();adminOpen()" title="系統管理員：強制請離佔用編輯鎖的人員（需密碼）">&#128737; 系統管理</button>
+        <button id="btn-sp-logout" role="menuitem" onclick="abMenuClose();handleSpLogout()" style="display:none">&#128682; 登出</button>
+      </div>
+    </div>
+  </header>
 
   <!-- Lock status bar (shows when another user holds the edit lock) -->
   <div id="lock-status-bar">
@@ -5483,18 +6214,6 @@
     <span id="version-badge" title="軟體版本">
       <span class="vb-ver" id="vb-ver">—</span>
       <span class="vb-latest">&#10003;<span class="vb-latest-txt">最新</span></span>
-    </span>
-    <!-- 編輯鎖（原本每頁一條「密碼保護」橫幅，收成這一顆）：依目前分頁決定範圍 ——
-         「使用者建議與改善」走開發者密碼（fbToggleProtection），其他分頁走資料庫密碼（toggleProtection） -->
-    <span id="lock-pill" class="lk locked">
-      <span class="lk-ico" id="lock-pill-ico">&#128274;</span>
-      <span class="lk-txt" id="lock-pill-text">唯讀</span>
-      <span class="lk-i" id="lock-pill-info" title="">i</span>
-      <input type="password" id="lock-pill-pwd" class="lk-open-only" placeholder="輸入密碼" autocomplete="off"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();lockPillSubmit();}else if(event.key==='Escape'){lockPillCollapse();}">
-      <button type="button" class="lk-btn" id="lock-pill-btn" onclick="lockPillAction()">解鎖編輯</button>
-      <button type="button" class="lk-x lk-open-only" id="lock-pill-x" onclick="lockPillCollapse()" title="取消" aria-label="取消">&#10005;</button>
-      <span class="lk-tip lk-open-only" id="lock-pill-tip"></span>
     </span>
     </div>
   </div>
@@ -5679,25 +6398,9 @@
 
     <!-- Panel 1: Select Project -->
     <div class="sg-panel">
-      <div class="sg-panel-header">
-        專案元件電子清單
-      </div>
       <div class="sg-panel-body">
-        <div class="comp-toolbar sg-proj-toolbar">
-          <div class="field sg-proj-field">
-            <label>選擇專案</label>
-            <select id="sg-project-select" onchange="projSelectChange(this)" title="四個功能頁（EE/RF/PWR、TH/ME、模擬與實測驗證、Thermal Via）同步開同一個專案：在任何一頁換專案，其他三頁跟著換；有未存變更會先問">
-              <option value="">-- 請先載入專案列表 --</option>
-            </select>
-          </div>
-          <div class="sg-proj-actions">
-            <button class="btn btn-primary" id="sg-load-btn" onclick="projLoadClick()">載入專案</button>
-            <button class="btn btn-primary" id="sg-new-project-btn" onclick="sgToggleNewProject()" disabled title="需先解鎖密碼保護才能新增專案">+ 新增專案</button>
-            <button class="btn" id="sg-rename-project-btn" style="background:#e8f0fe;color:#1a3a6b;border:1px solid #b6cdf0;" onclick="sgAskRenameProject()" disabled title="需先解鎖密碼保護才能修改專案名稱">✏️ 重新命名</button>
-            <button class="btn" id="sg-del-project-btn" style="background:#fde2e2;color:#b91c1c;border:1px solid #f5b5b5;" onclick="sgAskDeleteProject()" title="刪除目前選擇的專案（需先解鎖；含其元件與標註圖片）">🗑 刪除專案</button>
-            <button class="btn btn-primary" onclick="sgSaveProjectComponents()" id="sg-comp-save-btn" disabled>儲存元件變更</button>
-            <span id="sg-comp-save-status" class="save-status"></span>
-          </div>
+        <div class="comp-toolbar sg-proj-toolbar page-bar">
+          <div class="page-title"><h2>EE／RF／PWR 元件清單</h2><span class="page-sub">功耗・限溫・熱阻・Thermal Via・規格書</span></div>
           <div class="sg-proj-exports">
             <button class="btn-export excel" onclick="sgExportExcel()" id="sg-export-excel-btn" disabled>&#128202; 匯出 Excel</button>
             <button class="btn-export pdf" onclick="sgExportPdf()" id="sg-export-pdf-btn" disabled>&#128196; 匯出 PDF</button>
@@ -6184,7 +6887,6 @@ async function lockPillAction() {
 }
 
 function lockPillOpen() {
-  if (typeof railHideLockPopover === 'function') railHideLockPopover();   // 兩個密碼框不同時開
   _lockPillOpen = true;
   _lockPillOpenFb = railIsFeedbackActive();
   lockPillSync();
@@ -6470,10 +7172,11 @@ async function fbToggleProtection(pwdArg) {
   }
 }
 
-/* ── 側邊小工具列：浮動解鎖密碼框（不必捲到最上方）──
- * 依目前作用中的分頁決定解鎖範圍:
- *   Tab5「使用者建議與改善」→ 走開發者密碼(fbToggleProtection / 0420)
- *   其他分頁              → 走資料庫密碼(toggleProtection / 0000)
+/* ── 編輯鎖的範圍跟著目前分頁 ──
+ *   「使用者建議與改善」→ 開發者密碼(fbToggleProtection / 0420)
+ *   其他分頁              → 資料庫密碼(toggleProtection / 0000)
+ * （原本另有一條右側浮動工具列也放了解鎖／儲存：它會蓋住表格右緣，解鎖與儲存已固定在頂端工具列，
+ *   浮動工具列與它的密碼框整個移除。函式名稱沿用 rail*，呼叫端不必改。）
  */
 function railIsFeedbackActive() {
   return !!document.getElementById('tab-feedback')?.classList.contains('active');
@@ -6481,195 +7184,44 @@ function railIsFeedbackActive() {
 function railCurrentLocked() {
   return railIsFeedbackActive() ? fbIsProtected : isProtected;
 }
-function railSyncLockIcon() {
-  lockPillSync();      // 分頁列右邊的編輯鎖與工具列🔒同一個狀態來源
-  const btn = document.getElementById('rail-lock-btn');
-  if (!btn) return;
-  const locked = railCurrentLocked();
-  const onFb = railIsFeedbackActive();
-  btn.setAttribute('data-tip',
-    locked ? (onFb ? '解鎖回饋管理（開發者）' : '解鎖資料庫')
-           : (onFb ? '鎖定回饋管理' : '鎖定資料庫'));
-  btn.classList.toggle('rail-unlocked', !locked);
-  // 鎖頭圖示反映狀態:鎖定=閉合掛鎖、已解鎖=開啟掛鎖
-  const shackle = locked ? 'M7 11V7a5 5 0 0 1 10 0v4' : 'M7 11V7a5 5 0 0 1 9.9-1';
-  btn.innerHTML =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-    '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
-    '<path d="' + shackle + '"/></svg>';
-}
-function railLockOutsideClose(e) {
-  const pop = document.getElementById('rail-lock-popover');
-  const btn = document.getElementById('rail-lock-btn');
-  if (!pop) return;
-  if (pop.contains(e.target) || (btn && btn.contains(e.target))) return;
-  railHideLockPopover();
-}
-function railHideLockPopover() {
-  const pop = document.getElementById('rail-lock-popover');
-  if (pop) pop.style.display = 'none';
-  const inp = document.getElementById('rail-lock-pwd');
-  if (inp) inp.value = '';
-  document.removeEventListener('mousedown', railLockOutsideClose);
-}
-/* ── 浮動工具列：可收合 + 可拖曳 ──
-   收合後只剩展開鈕＋常駐的解鎖／儲存兩顆（再按展開）；展開時用左上把手拖曳，收合時整條可拖（移動 4px 以上才算拖曳，點按鈕照常）。
-   位置／收合狀態記憶在 localStorage（讀寫皆 try/catch：隱私視窗可能丟例外）；
-   未曾拖曳過就沿用 CSS 預設位置（右側垂直置中）。拖曳一律 clamp 在 viewport 內。 */
-const RAIL_POS_KEY = 'gmRailPos';
-const RAIL_COLLAPSED_KEY = 'gmRailCollapsed';
+function railSyncLockIcon() { lockPillSync(); }
 
-function railToggleCollapse() {
-  const rail = document.getElementById('gm-rail');
-  if (!rail) return;
-  const collapsed = rail.classList.toggle('gm-collapsed');
-  try { localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch (e) {}
-  railSyncCollapseUi();
+/* ── 頂端工具列：資料庫／帳號選單 ── */
+function abMenuClose() {
+  const pop = document.getElementById('ab-acct-pop'), btn = document.getElementById('ab-acct-btn');
+  if (pop) pop.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('mousedown', abMenuOutside, true);
+  document.removeEventListener('keydown', abMenuKey, true);
 }
-
-function railSyncCollapseUi() {
-  const rail = document.getElementById('gm-rail');
-  const btn = document.getElementById('gm-rail-toggle');
-  if (!rail || !btn) return;
-  const collapsed = rail.classList.contains('gm-collapsed');
-  const tip = collapsed ? '展開工具列（可拖曳移動）' : '收合工具列';
-  btn.setAttribute('data-tip', tip);
-  btn.setAttribute('aria-label', tip);
-  btn.classList.toggle('gm-ai', collapsed);   // 收合時用強調色，維持明顯可見
-}
-
-/* 被拖曳的是外層 .tc-rail-wrapper（position:fixed），不是 rail 本身：
-   rail 被 CSS 設成 position:static，static 元素會忽略 left/top，設了也不會動。 */
-function railMovable() {
-  return document.getElementById('tc-rail-wrapper')
-      || (document.getElementById('gm-rail') && document.getElementById('gm-rail').closest('.tc-rail-wrapper'))
-      || document.getElementById('gm-rail');
-}
-
-function railApplyPos(left, top) {
-  const el = railMovable();
-  if (!el) return;
-  const w = el.offsetWidth, h = el.offsetHeight;
-  const maxL = Math.max(4, window.innerWidth - w - 4);
-  const maxT = Math.max(4, window.innerHeight - h - 4);
-  el.classList.add('gm-moved');
-  el.style.left = Math.min(Math.max(4, left), maxL) + 'px';
-  el.style.top = Math.min(Math.max(4, top), maxT) + 'px';
-}
-
-function railResetPos() {
-  const el = railMovable();
-  if (!el) return;
-  el.classList.remove('gm-moved');
-  el.style.left = ''; el.style.top = '';
-  try { localStorage.removeItem(RAIL_POS_KEY); } catch (e) {}
-}
-
-function railInitFloating() {
-  const rail = document.getElementById('gm-rail');
-  if (!rail) return;
-  try { if (localStorage.getItem(RAIL_COLLAPSED_KEY) === '1') rail.classList.add('gm-collapsed'); } catch (e) {}
-  railSyncCollapseUi();
-  try {
-    const raw = localStorage.getItem(RAIL_POS_KEY);
-    if (raw) {
-      const p = JSON.parse(raw);
-      if (p && isFinite(p.left) && isFinite(p.top)) railApplyPos(p.left, p.top);
-    }
-  } catch (e) {}
-
-  let st = null;
-  rail.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const viaGrip = !!e.target.closest('#gm-rail-grip');
-    // 展開時只有把手可拖；收合時整條（展開鈕＋常駐的解鎖／儲存）都可拖 —— 沒移動超過門檻就是一般點擊
-    if (!viaGrip && !rail.classList.contains('gm-collapsed')) return;
-    const el = railMovable();
-    if (!el) return;
-    const r = el.getBoundingClientRect();   // 以「會被移動的 wrapper」為基準算偏移
-    st = { dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, moved: false };
-    e.preventDefault();
-  });
-  window.addEventListener('mousemove', (e) => {
-    if (!st) return;
-    if (!st.moved && Math.hypot(e.clientX - st.sx, e.clientY - st.sy) < 4) return;  // 門檻：區分點擊與拖曳
-    st.moved = true;
-    rail.classList.add('gm-dragging');
-    railApplyPos(e.clientX - st.dx, e.clientY - st.dy);
-  });
-  window.addEventListener('mouseup', () => {
-    if (!st) return;
-    const moved = st.moved;
-    st = null;
-    rail.classList.remove('gm-dragging');
-    if (!moved) return;
-    const el = railMovable();
-    const r = (el || rail).getBoundingClientRect();
-    try { localStorage.setItem(RAIL_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
-    // 拖曳結束後抑制「這一次」click，避免放開滑鼠時誤觸收合鈕（收合時整顆就是那顆鈕）。
-    // 加逾時自動解除：萬一這次拖曳後沒有 click 事件，才不會把使用者下一次點擊吃掉。
-    const suppress = (ev) => { ev.stopPropagation(); ev.preventDefault(); cleanup(); };
-    const cleanup = () => { window.removeEventListener('click', suppress, true); clearTimeout(timer); };
-    const timer = setTimeout(cleanup, 350);
-    window.addEventListener('click', suppress, true);
-  });
-  // 視窗縮放 → 夾回可視範圍，避免浮動列跑出畫面
-  window.addEventListener('resize', () => {
-    const el = railMovable();
-    if (!el || !el.classList.contains('gm-moved')) return;
-    const r = el.getBoundingClientRect();
-    railApplyPos(r.left, r.top);
-  });
-  const grip = document.getElementById('gm-rail-grip');
-  if (grip) grip.addEventListener('dblclick', railResetPos);
-}
-
-async function railToggleLock() {
-  // 已解鎖 → 直接重新鎖定(不需密碼)
-  if (!railCurrentLocked()) {
-    railHideLockPopover();
-    if (railIsFeedbackActive()) await fbToggleProtection();
-    else await toggleProtection();
-    railSyncLockIcon();
-    return;
-  }
-  // 鎖定中 → 切換顯示浮動密碼框，並定位在解鎖鈕左側
-  const pop = document.getElementById('rail-lock-popover');
-  const btn = document.getElementById('rail-lock-btn');
+function abMenuOutside(e) { if (!e.target.closest('#ab-db')) abMenuClose(); }
+function abMenuKey(e) { if (e.key === 'Escape') { abMenuClose(); const b = document.getElementById('ab-acct-btn'); if (b) b.focus(); } }
+function abMenuToggle(ev) {
+  if (ev) ev.stopPropagation();
+  const pop = document.getElementById('ab-acct-pop'), btn = document.getElementById('ab-acct-btn');
   if (!pop || !btn) return;
-  if (pop.style.display === 'flex') { railHideLockPopover(); return; }
-  lockPillCollapse();   // 兩個密碼框不同時開
-  const hint = document.getElementById('rail-lock-hint');
-  if (hint) hint.textContent = railIsFeedbackActive() ? '開發者密碼（Tab5 管理）' : '資料庫密碼';
-  const r = btn.getBoundingClientRect();
-  pop.style.top  = (r.top + r.height / 2) + 'px';
-  pop.style.left = (r.left - 10) + 'px';
-  pop.style.display = 'flex';
-  const inp = document.getElementById('rail-lock-pwd');
-  if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 0); }
-  setTimeout(() => document.addEventListener('mousedown', railLockOutsideClose), 0);
+  if (!pop.hidden) { abMenuClose(); return; }
+  pop.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  document.addEventListener('mousedown', abMenuOutside, true);
+  document.addEventListener('keydown', abMenuKey, true);
 }
-async function railConfirmUnlock() {
-  const inp = document.getElementById('rail-lock-pwd');
-  if (!inp || inp.disabled) return;   // 防止解鎖過程中重複送出
-  const pwd = inp.value;
-  inp.disabled = true;
-  try {
-    // 密碼直接傳給對應範圍的解鎖流程(含 SharePoint 取鎖)，與分頁列的編輯鎖同一套
-    if (railIsFeedbackActive()) await fbToggleProtection(pwd);
-    else await toggleProtection(pwd);
-  } finally {
-    inp.disabled = false;
-  }
-  // 解鎖成功 → 收起；失敗(仍鎖定)→ 清空讓使用者重打
-  if (!railCurrentLocked()) {
-    railHideLockPopover();
-  } else {
-    inp.value = '';
-    inp.focus();
-  }
-  railSyncLockIcon();
+
+/* ── 儲存鈕的「有未儲存修改」提示 ──
+   畫面上任何輸入／點擊之後（合併 250ms）比對一次 hasUnsavedEdits()：有 → 儲存鈕加圓點、title 寫明。
+   只是提示，不改存檔流程；存檔、載入、放棄之後下一次比對自然歸零。 */
+let _abDirtyTimer = null;
+function abDirtySync() {
+  const btn = document.getElementById('sg-comp-save-btn');
+  if (!btn) return;
+  let dirty = false;
+  try { dirty = hasUnsavedEdits(); } catch (e) {}
+  btn.classList.toggle('ab-dirty', dirty);
+  btn.title = dirty ? '有還沒儲存的修改 —— 按這裡儲存全部分頁' + (isProtected ? '（要先解鎖編輯）' : '')
+                    : '儲存全部分頁（EE/RF/PWR、TH/ME、驗證、Thermal Via）的修改';
 }
+function abDirtySoon() { clearTimeout(_abDirtyTimer); _abDirtyTimer = setTimeout(abDirtySync, 250); }
+['input', 'change', 'click', 'keyup'].forEach(ev => document.addEventListener(ev, abDirtySoon, true));
 
 /* ── 未儲存變更偵測 + 上鎖前攔截（Tab1/Tab2/Tab3 行為一致）──
  * 以「載入/儲存當下的快照」與目前狀態比對來判斷是否有未儲存編輯。
@@ -6820,11 +7372,20 @@ async function projLoadClick() {
   if (typeof viaShowStatus === 'function' && dbAdapter.isReady()) viaShowStatus(n > 0 ? `成功載入 ${n} 個專案。` : '資料庫中尚無專案。', n > 0 ? 'success' : '');
 }
 
+/* 分類圖示（單一事實來源，三頁共用）：同一套線條圖示，不用 emoji（各作業系統長得不一樣；原本 Digital 用的是 💲 錢的符號）。
+   RF＝天線發射訊號、Digital＝晶片（IC 與接腳）、PWR＝閃電。currentColor → 跟著標題文字的顏色。 */
+const _catSvg = (d) => '<svg class="cat-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const CAT_ICONS = {
+  rf:      _catSvg('<path d="M12 12v9"/><circle cx="12" cy="10" r="2"/><path d="M7.8 14.2a6 6 0 0 1 0-8.4"/><path d="M16.2 5.8a6 6 0 0 1 0 8.4"/><path d="M4.9 17.1a10 10 0 0 1 0-14.2"/><path d="M19.1 2.9a10 10 0 0 1 0 14.2"/>'),
+  digital: _catSvg('<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".5"/><path d="M9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/>'),
+  pwr:     _catSvg('<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'),
+};
+
 /* 三大分類對應 */
 const CATEGORIES = {
-  RF:      { field: 'rf_data',      label: 'RF 射頻元件',    icon: '&#128225;', css: 'rf' },
-  Digital: { field: 'digital_data', label: 'Digital 數位元件', icon: '&#128178;', css: 'digital' },
-  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',   icon: '&#9889;',   css: 'pwr' }
+  RF:      { field: 'rf_data',      label: 'RF 射頻元件',    icon: CAT_ICONS.rf, css: 'rf' },
+  Digital: { field: 'digital_data', label: 'Digital 數位元件', icon: CAT_ICONS.digital, css: 'digital' },
+  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',   icon: CAT_ICONS.pwr,   css: 'pwr' }
 };
 
 /* 主散熱路徑選項（原「散熱方向」）。
@@ -7033,16 +7594,6 @@ initDatabase();
 
 // 啟動時同步工具列鎖頭圖示（預設為鎖定 = 閉合掛鎖）
 if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
-// 浮動工具列：還原收合狀態與位置，並啟用拖曳。
-// 注意：此段 script 的位置在 <aside id="gm-rail"> 之前，直接呼叫會拿不到元素
-// （getElementById 回 null → 監聽掛不上 → 拖曳失效），故一律等 DOM 解析完再初始化。
-if (typeof railInitFloating === 'function') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', railInitFloating, { once: true });
-  } else {
-    railInitFloating();
-  }
-}
 
 // ── 編輯鎖生命週期：活動追蹤 + 自動續約 + 逾時/遺失偵測（H-4）──
 let _lastActivityTs = Date.now();
@@ -7260,7 +7811,6 @@ function switchTab(tab) {
   // Thermal Via：EE/RF/PWR 頁或 TH/ME 頁可能剛改過 TH Via 內徑／Qty／主散熱路徑 → 切進來時重算一次
   if (tab === 'via' && typeof viaRender === 'function') viaRender();
   // 切換分頁時，工具列鎖頭圖示要反映該頁的鎖定範圍，並收起浮動密碼框
-  if (typeof railHideLockPopover === 'function') railHideLockPopover();
   if (typeof railSyncLockIcon === 'function') railSyncLockIcon();
 }
 
@@ -8286,7 +8836,7 @@ function eeImportExcel(fileInput) {
 
 /* ---- 建立 PDF 用的 HTML 內容（分三大區塊，與工具畫面一致） ---- */
 function buildPdfHtml(categories) {
-  const CAT_COLORS = { rf: '#c0392b', digital: '#2e6bb5', pwr: '#e67e22' };
+  const CAT_COLORS = { rf: '#1b5fb0', digital: '#4a3aa7', pwr: '#a83468' };   // 與畫面的分類色（--cat-*-ink）同一組；紅色保留給錯誤
 
   let html = `
     <div style="font-family:'Segoe UI','Microsoft JhengHei','PingFang TC','Noto Sans TC',sans-serif;
@@ -8473,7 +9023,7 @@ async function sgLoadProjects(opts) {
 
   const btn = document.getElementById('sg-load-btn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="loading-spinner"></span>載入中...';
+  btn.innerHTML = '<span class="loading-spinner"></span>載入中…';
 
   try {
     // Re-read from disk to discard any unsaved in-memory changes（projLoadAll 已先讀過一次 → noRefresh）
@@ -8515,7 +9065,7 @@ async function sgLoadProjects(opts) {
   }
 
   btn.disabled = false;
-  btn.textContent = '載入專案';
+  btn.textContent = '重新載入';
 }
 
 /* ---- Project selection change ---- */
@@ -8552,9 +9102,9 @@ async function sgOnProjectChange() {
 const SG_TYPE_OPTIONS = ['Final PA','Driver','Pre-driver','CR','filter','DC-DC','LDO','Power Modules','HOTSWAP','Power MOSFET','CLK IC','eMMC','DDR','CPU','Baseband Processor','CLK buffer','Ethernet Transceiver','retimer','SFP','GPS module','其他'];
 
 const SG_CAT_MAP = {
-  RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;', collection: 'rf_library' },
-  Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: '&#128178;', collection: 'digital_library' },
-  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: '&#9889;',   collection: 'pwr_library' }
+  RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: CAT_ICONS.rf, collection: 'rf_library' },
+  Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: CAT_ICONS.digital, collection: 'digital_library' },
+  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: CAT_ICONS.pwr,   collection: 'pwr_library' }
 };
 
 
@@ -8605,7 +9155,7 @@ function sgPcbTHtml(cat) {
   const tip = unknown
     ? `資料庫裡的 ${label} PCB 板厚是「${raw}」，本工具不認得。請改選一個板厚。`
     : `${label} 那片板子的 PCB 厚度。熱網路工具匯入這個專案時，會拿它當「板級導熱孔」元件的板厚。` +
-      `Thermal Via 頁與 5G-RRU 的 Thermal Via 元件也以這裡為準（沒設定才用 5G-RRU 的 t_PCB）。改了要按「儲存元件變更」才寫回。`;
+      `Thermal Via 頁與 5G-RRU 的 Thermal Via 元件也以這裡為準（沒設定才用 5G-RRU 的 t_PCB）。改了要按「儲存」才寫回。`;
   const input = custom
     ? `<input type="number" class="sg-pcbt-input${v === null ? ' miss' : ''}" id="sg-pcbt-${cat}-v" step="0.01" min="0.1" max="${SG_PCB_T_MAX}" ` +
       `inputmode="decimal" value="${v !== null ? v : ''}" placeholder="必填" aria-label="${escapeAttr(label)} PCB 板厚（mm）" ` +
@@ -8669,7 +9219,7 @@ function sgBandCellHtml() {
     (known ? '' : `<option value="${escapeAttr(String(raw))}" selected>${escapeHtml(String(raw))}（未知值）</option>`);
   const tip = known
     ? `專案頻段：${cur} ${SG_BANDS[cur].range}` + (raw ? '' : '（舊專案沒有指定頻段，視為 FR1）') +
-      '。FR2 不填 Backoff 與 Duplex Mode；改了要按「儲存元件變更」才寫回。'
+      '。FR2 不填 Backoff 與 Duplex Mode；改了要按「儲存」才寫回。'
     : `資料庫裡的頻段是「${raw}」，本工具不認得，暫時照 FR1 顯示 Backoff／Duplex。請改選 FR1 或 FR2。`;
   return `<span>頻段</span><select id="sg-sel-band" onchange="sgOnBandChange(this)" aria-label="專案頻段" title="${escapeAttr(tip)}">${opts}</select>`;
 }
@@ -9109,7 +9659,7 @@ function sgConfirmLimitOk(cat, idx) {
   if (!comp) return;
   const sus = CompMerge.limitSuspect(comp);
   if (!sus) return;
-  if (!confirm(`確認「${comp.Component || '(未命名)'}」的限溫 ${sus.value} °C 是實際規格？\n\n提醒原因：${sus.note}。\n\n確認後不再提醒（限溫之後改成別的值會再提醒）。記得按「儲存元件變更」寫回資料庫。`)) return;
+  if (!confirm(`確認「${comp.Component || '(未命名)'}」的限溫 ${sus.value} °C 是實際規格？\n\n提醒原因：${sus.note}。\n\n確認後不再提醒（限溫之後改成別的值會再提醒）。記得按「儲存」寫回資料庫。`)) return;
   comp._limit_ok = sus.value;
   sgRefreshLimitCell(cat, idx);
 }
@@ -10849,7 +11399,7 @@ async function sgSpecOnFilePicked(inputEl) {
       const entry = { path, name: file.name, at: new Date().toISOString(), by };
       // 取代舊檔：新檔上傳成功後才處理舊檔（路徑相同＝同檔名覆蓋就不刪，免得刪掉剛寫上去的）；
       // 舊檔若是快選帶入的參照，實體檔屬於來源專案 → 只換參照不刪檔。
-      // 舊檔不立刻刪：排進 sgPendingSpecDeletes，按「儲存元件變更」成功後才刪（沒存就不刪，
+      // 舊檔不立刻刪：排進 sgPendingSpecDeletes，按「儲存」成功後才刪（沒存就不刪，
       // 資料庫才不會指著一個已經不存在的檔案）。
       const dropOld = async (old) => {
         if (old && old.path && old.path !== path && !old._from) sgQueueSpecDelete(old.path);
@@ -10875,7 +11425,7 @@ async function sgSpecOnFilePicked(inputEl) {
   if (done) {
     sgSpecStore(comp, list);
     _sgSpecRefresh();
-    roToast('✅ 規格書已' + (t.mode === 'replace' ? '取代' : '上傳') + '（' + done + ' 份），請記得按「儲存元件變更」');
+    roToast('✅ 規格書已' + (t.mode === 'replace' ? '取代' : '上傳') + '（' + done + ' 份），請記得按「儲存」');
   }
 }
 
@@ -10932,18 +11482,18 @@ async function sgSpecDeleteAt(cat, idx, k) {
     list.splice(k, 1);
     sgSpecStore(comp, list);
     _sgSpecRefresh();
-    roToast('🔗 已移除規格書參照（來源檔案保留），請記得按「儲存元件變更」');
+    roToast('🔗 已移除規格書參照（來源檔案保留），請記得按「儲存」');
     return;
   }
-  // 破壞性操作：重複確認。檔案要等「儲存元件變更」成功後才真的從 SharePoint 刪除（沒存就不刪）。
+  // 破壞性操作：重複確認。檔案要等「儲存」成功後才真的從 SharePoint 刪除（沒存就不刪）。
   if (!confirm('確定要刪除元件「' + (comp.Component || '') + '」的規格書嗎？\n檔案：' +
-               sgSpecName(spec) + many + '\n\n按「儲存元件變更」後會從 SharePoint 移除該檔案（沒儲存就不會刪）。')) return;
+               sgSpecName(spec) + many + '\n\n按「儲存」後會從 SharePoint 移除該檔案（沒儲存就不會刪）。')) return;
   if (!confirm('再次確認：儲存後就無法復原，仍要刪除嗎？')) return;
   sgQueueSpecDelete(spec.path);
   list.splice(k, 1);
   sgSpecStore(comp, list);
   _sgSpecRefresh();
-  roToast('🗑 已移除規格書；按「儲存元件變更」後才會從 SharePoint 刪除檔案');
+  roToast('🗑 已移除規格書；按「儲存」後才會從 SharePoint 刪除檔案');
 }
 
 /* 🕘：規格書清單（也是原本「上傳時間」那顆的去處 —— 清單裡每一份都列出上傳時間／上傳者） */
@@ -11615,7 +12165,7 @@ function sgLoadRenames(doc, stores, projId) {
 }
 
 /* ── 規格書的「刪除／取代舊檔」延到存檔成功後才刪 SharePoint 上的檔案 ────────
-   畫面上移除參照要按「儲存元件變更」才會寫進資料庫。原本按 🗑 就立刻刪檔 → 沒存就離開
+   畫面上移除參照要按「儲存」才會寫進資料庫。原本按 🗑 就立刻刪檔 → 沒存就離開
    （切專案、放棄修改）時，資料庫還指著一個已經不存在的檔案。
    真正刪之前再確認一次：任何專案的任何元件都沒有再指著這個路徑（同名重新上傳會是同一個路徑、
    別的專案可能用快選參照它）才刪。 */
@@ -11877,7 +12427,7 @@ function sgRefSyncApply() {
   const y = window.scrollY;
   sgRenderProjectComponents();
   window.scrollTo(0, y);
-  roToast('↻ 已套用 ' + n + ' 個欄位，請記得按「儲存元件變更」');
+  roToast('↻ 已套用 ' + n + ' 個欄位，請記得按「儲存」');
 }
 
 /* 解除參照：解鎖瓦數使其可編輯；保留 _ref_origin_* 以淡灰「曾參照自 X」追溯。 */
@@ -12384,7 +12934,7 @@ function tcpCloseModal() {
   tcpUI.space = false;
   let dirty = false;
   try { dirty = _cleanSnap.sg !== null && _safeStr(_sgDirtyView()) !== _cleanSnap.sg; } catch (_) {}
-  if (tcpUI.edited && dirty && !tcpUI.viewOnly) roToast('標註修改已保留在畫面上，記得按「儲存元件變更」寫入資料庫');
+  if (tcpUI.edited && dirty && !tcpUI.viewOnly) roToast('標註修改已保留在畫面上，記得按「儲存」寫入資料庫');
 }
 
 /* 依鎖定狀態切換「元件位置標註」編輯鈕的可用性（眼睛檢視鈕永遠可用）；
@@ -12475,7 +13025,7 @@ function tcpRenderEditor() {
       ${ro ? '' : `<button type="button" class="tcp-mini" id="tcp-title-reset" ${p.isCustomTitle ? '' : 'hidden'} title="恢復預設標題（跟著案名＋分類）">↺ 預設標題</button>`}
       <span class="tcp-sp"></span>
       ${ro ? `<span class="tcp-ro-badge">👁 唯讀檢視</span>${isProtected ? '<span class="tcp-ro-note">解鎖後才能編輯</span>' : '<button type="button" class="tcp-mini" id="tcp-to-edit">✏️ 切換為編輯</button>'}`
-           : `<span class="tcp-unsaved" id="tcp-unsaved" ${tcpUI.edited ? '' : 'hidden'}>● 有未儲存的修改</span><button type="button" class="tcp-save-btn" id="tcp-save-btn" title="儲存全部分頁（與「儲存元件變更」相同）">💾 儲存</button>`}
+           : `<span class="tcp-unsaved" id="tcp-unsaved" ${tcpUI.edited ? '' : 'hidden'}>● 有未儲存的修改</span><button type="button" class="tcp-save-btn" id="tcp-save-btn" title="儲存全部分頁（與「儲存」相同）">💾 儲存</button>`}
       <button type="button" class="tcp-modal-close" id="tcp-close-btn" title="關閉（Esc）" aria-label="關閉">✕</button>
     </div>
     <div class="tcp-toolbar" id="tcp-toolbar">
@@ -13886,7 +14436,8 @@ async function saveAllTabs() {
   };
   [saveBtn, sgBtn, vdBtn, viaBtn].forEach(b => { if (b) b.disabled = true; });
   const spinner = '<span class="loading-spinner"></span>儲存中...';
-  [sgBtn, vdBtn, viaBtn].forEach(b => { if (b) b.innerHTML = spinner; });
+  [vdBtn, viaBtn].forEach(b => { if (b) b.innerHTML = spinner; });
+  if (sgBtn) sgBtn.innerHTML = '<span class="loading-spinner"></span>儲存中…';
   setStatus('正在儲存全部…', 'saving');
 
   try {
@@ -14164,7 +14715,7 @@ async function saveAllTabs() {
 
   // 還原按鈕文字與啟用狀態
   if (saveBtn) { saveBtn.disabled = isProtected; saveBtn.textContent = '儲存熱設計資料'; }
-  if (sgBtn)   { sgBtn.disabled   = isProtected; sgBtn.textContent   = '儲存元件變更'; }
+  if (sgBtn)   { sgBtn.disabled   = isProtected; sgBtn.textContent   = '儲存'; }
   if (vdBtn)   { vdBtn.disabled   = isProtected; vdBtn.textContent   = '儲存驗證資料'; }
   if (viaBtn)  { viaBtn.disabled  = isProtected || !currentProjectId; viaBtn.textContent = '儲存 Via 設計'; }
 }
@@ -14901,9 +15452,9 @@ let vdHiddenComps = {};
 let vdTaManual = null;       // 比對環溫 Ta（°C）：使用者手動指定才有值；null＝取專案環溫（存成 projects[id].vd_ta）
 
 const VD_CAT_MAP = {
-  RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: '&#128225;' },
-  Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: '&#128178;' },
-  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: '&#9889;' }
+  RF:      { field: 'rf_data',      label: 'RF 射頻元件',     css: 'rf',      icon: CAT_ICONS.rf },
+  Digital: { field: 'digital_data', label: 'Digital 數位元件', css: 'digital', icon: CAT_ICONS.digital },
+  PWR:     { field: 'pwr_data',     label: 'PWR 電源元件',    css: 'pwr',     icon: CAT_ICONS.pwr }
 };
 
 function vdShowStatus(msg, type) {
@@ -17056,124 +17607,6 @@ function fbShowShadowReadReport() {
 }
 </script>
 
-<div class="tc-rail-wrapper" id="tc-rail-wrapper">
-
-<!-- Teams Quick Contact FAB (above rail) -->
-<button id="tc-fab" class="tc-fab" type="button" aria-label="快速聯絡專案成員">
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="1.5" y="1.5" width="14" height="14" rx="3.5" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
-    <path d="M4.5 5h8v2H9.5v7.5h-2.5V7H4.5z" fill="white"/>
-    <circle cx="18.5" cy="9" r="3" fill="white" opacity="0.92"/>
-    <path d="M13.5 21v-.5c0-2.5 2.3-4.5 5-4.5s5 2 5 4.5v.5H13.5z" fill="white" opacity="0.92"/>
-  </svg>
-</button>
-
-<!-- ✦ GAMMA-STYLE FLOATING ACTION RAIL ✦ -->
-<aside class="gm-action-rail" id="gm-rail" aria-label="快速動作">
-  <div class="gm-rail-head">
-    <button type="button" class="gm-rail-grip" id="gm-rail-grip" data-tip="拖曳移動工具列（雙擊還原預設位置）" aria-label="拖曳移動工具列">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-        <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
-        <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
-        <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
-      </svg>
-    </button>
-    <button type="button" class="gm-rail-toggle" id="gm-rail-toggle" data-tip="收合工具列" aria-label="收合工具列" onclick="railToggleCollapse()">
-      <svg class="gm-rail-ico-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 6 15 12 9 18"/>
-      </svg>
-      <svg class="gm-rail-ico-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
-      </svg>
-    </button>
-  </div>
-  <div class="gm-rail-body" id="gm-rail-body">
-  <button type="button" class="gm-ai" data-tip="關於此工具" onclick="gmToggleAiPopover()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/>
-      <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/>
-    </svg>
-  </button>
-  <div class="gm-rail-divider"></div>
-  <button type="button" data-tip="備份資料庫（含標註圖片）" onclick="if(typeof handleExportBackup==='function')handleExportBackup()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/>
-      <line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-  </button>
-  <button type="button" data-tip="載入離線資料庫 (.json)" onclick="handleLoadOfflineDb()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3"/>
-      <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
-      <path d="M3 12a9 3 0 0 0 18 0"/>
-      <polyline points="9 14 12 17 15 14"/>
-      <line x1="12" y1="17" x2="12" y2="11"/>
-    </svg>
-  </button>
-  <div class="gm-rail-divider"></div>
-  <button type="button" data-tip="切換到 凸台&TIM 速算" onclick="switchTab('calc')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="4" y="3" width="16" height="18" rx="2"/>
-      <line x1="8" y1="7" x2="16" y2="7"/>
-      <line x1="8" y1="11" x2="10" y2="11"/>
-      <line x1="13" y1="11" x2="16" y2="11"/>
-      <line x1="8" y1="15" x2="10" y2="15"/>
-      <line x1="13" y1="15" x2="16" y2="15"/>
-      <line x1="8" y1="18" x2="10" y2="18"/>
-    </svg>
-  </button>
-  <button type="button" data-tip="切換到 Thermal Via 計算" onclick="switchTab('via')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <circle cx="8" cy="8" r="1.6"/><circle cx="16" cy="8" r="1.6"/>
-      <circle cx="8" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/>
-    </svg>
-  </button>
-  <button type="button" data-tip="切換到 使用者建議" onclick="switchTab('feedback')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-    </svg>
-  </button>
-  <div class="gm-rail-divider"></div>
-  <button type="button" data-tip="回到頂部" onclick="window.scrollTo({top:0,behavior:'smooth'})">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="18 15 12 9 6 15"/>
-    </svg>
-  </button>
-  </div><!-- /.gm-rail-body -->
-  <!-- 解鎖＋儲存：收合時也常駐（.gm-rail-pinned 不跟著 body 收起），最常用的兩顆不必先展開工具列 -->
-  <div class="gm-rail-pinned" id="gm-rail-pinned">
-  <div class="gm-rail-divider"></div>
-  <button type="button" id="rail-lock-btn" data-tip="解鎖資料庫" onclick="railToggleLock()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-    </svg>
-  </button>
-  <button type="button" data-tip="儲存資料" onclick="railSave()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-      <polyline points="17 21 17 13 7 13 7 21"/>
-      <polyline points="7 3 7 8 15 8"/>
-    </svg>
-  </button>
-  </div><!-- /.gm-rail-pinned -->
-</aside>
-
-</div><!-- /.tc-rail-wrapper -->
-
-<!-- 工具列解鎖：浮動密碼框（位置由 JS 依解鎖鈕動態定位）
-     注意：必須放在 .tc-rail-wrapper 之外，否則 wrapper 的 transform 會成為
-     fixed 定位的 containing block，導致用視窗座標定位時跑到畫面外。 -->
-<div id="rail-lock-popover" class="rail-lock-popover" style="display:none;">
-  <div class="rail-lock-hint" id="rail-lock-hint">資料庫密碼</div>
-  <div class="rail-lock-row">
-    <input type="password" id="rail-lock-pwd" placeholder="輸入密碼"
-           onkeydown="if(event.key==='Enter')railConfirmUnlock()">
-    <button type="button" onclick="railConfirmUnlock()">解鎖</button>
-  </div>
-</div>
 
 <!-- 刪除專案：浮動密碼框（位置由 JS 依刪除鈕動態定位） -->
 <div id="sg-rename-popover" class="sg-rename-popover" style="display:none;">
@@ -17234,37 +17667,7 @@ function fbShowShadowReadReport() {
   </div>
 </div>
 
-<div id="gm-ai-popover" class="gm-ai-popover">
-  <div class="gm-ai-popover-title">
-    <span class="gm-sparkle">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/></svg>
-    </span>
-    Claude × Thermal Spec
-  </div>
-  <div class="gm-ai-popover-body">
-    以 Claude 的設計語彙重新打磨的散熱與元件規格管理工具。整合 5 大模組：EE/RF/PWR 清單、TH/ME 熱設計、模擬實測驗證、凸台/TIM 速算、使用者建議。
-  </div>
-  <div class="gm-ai-popover-tip">
-    <strong>提示</strong> &middot; 右側功能列可快速切換 Tab，原本 App 的所有按鈕與資料流程完全保留。
-  </div>
-</div>
 
-<script>
-  function gmToggleAiPopover() {
-    var el = document.getElementById('gm-ai-popover');
-    if (!el) return;
-    el.classList.toggle('open');
-    if (el.classList.contains('open')) {
-      var closeOnClickOutside = function(e) {
-        if (!el.contains(e.target) && !e.target.closest('.gm-action-rail .gm-ai')) {
-          el.classList.remove('open');
-          document.removeEventListener('click', closeOnClickOutside);
-        }
-      };
-      setTimeout(function() { document.addEventListener('click', closeOnClickOutside); }, 0);
-    }
-  }
-</script>
 
 <!-- ── TC Placement Modal ── -->
 <div id="tcp-modal-overlay" class="tcp-modal-overlay">

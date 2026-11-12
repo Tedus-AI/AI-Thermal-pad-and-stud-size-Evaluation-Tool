@@ -51,7 +51,7 @@ const PROJ = {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof projLoadAll === 'function' && document.getElementById('gm-rail'));
+  await page.waitForFunction(() => typeof projLoadAll === 'function' && document.getElementById('appbar'));
   await page.evaluate(async (p) => {
     window.__db = { projects: { X: p }, tim_library: {} };
     dbAdapter.isReady = () => true; dbAdapter.isSharePointMode = () => false; dbAdapter.refresh = async () => {};
@@ -69,7 +69,7 @@ const PROJ = {
     const table = R(document.getElementById('sg-project-components-body'));
     const hot = [...document.querySelectorAll('#sg-power-row-hot > *')].map(R);
     const rt = [...document.querySelectorAll('#sg-power-row-rt > *')].map(R);
-    const lab = R(document.querySelector('#tab-specgen .sg-proj-field label')), sel = R(document.getElementById('sg-project-select'));
+    const lab = R(document.querySelector('#appbar .ab-lab')), sel = R(document.getElementById('sg-project-select'));
     return {
       h: Math.round(table.top - panel.top),
       hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -85,19 +85,19 @@ const PROJ = {
   console.log('\n[A] 結構');
   let m = await M();
   ok('沒有「目前專案元件清單」小標題；高溫／常溫條件在同一個 grid', !m.oldTitle && m.oneGrid, m);
-  ok('「選擇專案」在下拉左邊（同一行）', m.labelLeft, m);
+  ok('頂端工具列：「專案」標籤在下拉左邊（同一行）', m.labelLeft, m);
   ok('高溫、常溫各一列，7 格欄位上下對齊（位置與寬度相同）', m.twoRows && m.aligned, m);
   ok('chip 高度 ≤ 28px', m.chipH <= 28, m);
 
   console.log('\n[B] 高度');
-  ok(`面板頂端到元件表 ${m.h}px ≤ 200px（原本 402px 的一半以下）`, m.h <= 200, m);
+  ok(`頁面頂端到元件表 ${m.h}px ≤ 150px（專案列移到頂端工具列之後；最早是 402px）`, m.h <= 150, m);
 
   console.log('\n[C] 版面');
   for (const w of [1920, 1536, 1366]) {
     await page.setViewportSize({ width: w, height: 900 });
     await page.waitForTimeout(80);
     m = await M();
-    ok(`${w}px：沒有橫向捲軸、條件表兩列對齊、高度 ≤ 200px`, m.hscroll <= 0 && m.twoRows && m.aligned && m.h <= 200, m);
+    ok(`${w}px：沒有橫向捲軸、條件表兩列對齊、高度 ≤ 150px`, m.hscroll <= 0 && m.twoRows && m.aligned && m.h <= 150, m);
   }
   await page.evaluate(() => { _applyUnlockedUI(); const s = document.getElementById('sg-sel-temp'); s.value = 'custom'; sgOnParamChange(); });
   await page.waitForTimeout(50);
@@ -129,29 +129,41 @@ const PROJ = {
       await page.waitForTimeout(60);
       const c = await page.evaluate((sel) => {
         const card = document.querySelector(sel), R = (el) => el.getBoundingClientRect();
-        const btns = [...card.querySelectorAll('.sg-proj-toolbar button')].filter(b => b.offsetParent !== null).map(R);
-        const rail = R(document.getElementById('gm-rail')), fab = R(document.getElementById('tc-fab'));
-        const lab = R(card.querySelector('.sg-proj-field label')), s = R(card.querySelector('.sg-proj-field select'));
+        const vis = (el) => el.offsetParent !== null;
+        const btns = [...card.querySelectorAll('.sg-proj-toolbar button')].filter(vis).map(R);
+        const bar = R(document.getElementById('appbar')), title = R(card.querySelector('.card-header'));
         return { h: Math.round(R(card).height), n: btns.length,
-          oneLine: btns.every(b => Math.abs((b.top + b.bottom) / 2 - (s.top + s.bottom) / 2) < 6),
-          labelLeft: lab.right <= s.left && Math.abs((lab.top + lab.bottom) / 2 - (s.top + s.bottom) / 2) < 6,
-          railClear: btns.every(b => b.right <= rail.left - 2 || b.bottom <= rail.top || b.top >= rail.bottom) && btns.every(b => b.right <= fab.left - 2 || b.bottom <= fab.top || b.top >= fab.bottom),
+          oneLine: btns.every(b => Math.abs((b.top + b.bottom) / 2 - (title.top + title.bottom) / 2) < 8),
+          noDup: [...card.querySelectorAll('.sg-proj-field, .sg-proj-actions')].every(el => !vis(el)),
+          below: btns.every(b => b.top >= bar.bottom) && btns.every(b => b.right <= document.documentElement.clientWidth),
           hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
       }, sel);
-      ok(`${w}px ${t}：卡片 ${c.h}px ≤ 100、工具列一行、「選擇專案」在下拉左邊、按鈕不被右側工具列蓋住、沒有橫向捲軸`, c.h <= 100 && c.oneLine && c.labelLeft && c.railClear && c.hscroll <= 0, c);
+      ok(`${w}px ${t}：頁面標題列 ${c.h}px ≤ 44、匯出鈕與頁名同一行、沒有重複的專案下拉／載入／儲存、沒有橫向捲軸`, c.h <= 44 && c.oneLine && c.noDup && c.below && c.hscroll <= 0, c);
     }
   }
-  for (const w of [1536, 1366]) {
+  // 頂端工具列：最擠的情況（已登入、長姓名、已解鎖、存檔狀態訊息）也要排成一行、不被裁掉
+  for (const w of [1920, 1536, 1366]) {
     await page.setViewportSize({ width: w, height: 900 });
-    await page.evaluate(() => switchTab('specgen'));
+    await page.evaluate(() => {
+      switchTab('specgen');
+      updateDbStatusText('✅ SharePoint ｜ TEDUS.CHEN 陳慶峰 (Thermal Team)', 'success');
+      document.getElementById('btn-sp-login').style.display = 'none';
+      const st = document.getElementById('sg-comp-save-status'); st.textContent = '全部儲存成功！（已合併：併入資料庫最新的 3 項修改）'; st.className = 'save-status saved';
+    });
     await page.waitForTimeout(60);
     const t1 = await page.evaluate(() => {
-      const R = (el) => el.getBoundingClientRect(), rail = R(document.getElementById('gm-rail')), fab = R(document.getElementById('tc-fab'));
-      const btns = [...document.querySelectorAll('#tab-specgen .sg-proj-toolbar button')].filter(b => b.offsetParent !== null).map(R);
-      const clear = (r) => btns.every(b => b.right <= r.left - 2 || b.bottom <= r.top || b.top >= r.bottom);
-      return { n: btns.length, clear: clear(rail) && clear(fab), maxRight: Math.round(Math.max(...btns.map(b => b.right))), railLeft: Math.round(Math.min(rail.left, fab.left)) };
+      const R = (el) => el.getBoundingClientRect(), bar = document.getElementById('appbar'), br = R(bar);
+      const kids = [...bar.querySelectorAll('button, select, #lock-pill, .ab-brand')].filter(e => e.offsetParent !== null && !e.closest('.ab-pop')).map(R);
+      const exp = [...document.querySelectorAll('#tab-specgen .sg-proj-toolbar button')].filter(b => b.offsetParent !== null).map(R);
+      return { barH: Math.round(br.height), sticky: getComputedStyle(bar).position,
+        inside: kids.every(k => k.left >= 0 && k.right <= document.documentElement.clientWidth && k.top >= br.top && k.bottom <= br.bottom),
+        noOverlap: kids.every((a, i) => kids.every((b, j) => i >= j || a.right <= b.left + 1 || b.right <= a.left + 1 || (a.left >= b.left && a.right <= b.right) || (b.left >= a.left && b.right <= a.right))),
+        selW: Math.round(R(document.getElementById('sg-project-select')).width), exports: exp.length,
+        hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
-    ok(`${w}px EE/RF/PWR 頁：專案列按鈕（含匯出 PDF）不被右側工具列蓋住`, t1.n >= 7 && t1.clear, t1);
+    ok(`${w}px 頂端工具列：一行（${t1.barH}px ≤ 56）、固定在頂端、所有按鈕都在畫面內且不互相重疊、專案下拉至少 150px、沒有橫向捲軸`,
+      t1.barH <= 56 && t1.sticky === 'sticky' && t1.inside && t1.noOverlap && t1.selW >= 150 && t1.exports === 2 && t1.hscroll <= 0, t1);
+    await page.evaluate(() => { const st = document.getElementById('sg-comp-save-status'); st.textContent = ''; st.className = 'save-status'; });
   }
   await page.setViewportSize({ width: 1536, height: 900 });
   await page.evaluate(() => switchTab('complist'));
