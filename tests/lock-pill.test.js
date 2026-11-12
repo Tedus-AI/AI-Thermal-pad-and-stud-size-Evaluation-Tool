@@ -99,7 +99,7 @@ async function setupDb(page) {
   });
   ok('各頁的密碼保護橫幅都拿掉了（沒有 .protect-bar、舊 id 都不在）', A.bars === 0 && A.oldIds === 0, A);
   ok('版本徽章在分頁列右邊（不在頂端工具列）、字小（≤ 11.5px）', A.badgeInRow && A.badgeFont <= 11.5, A);
-  ok('編輯鎖在頂端固定工具列裡（捲動時一直看得到）；工具列 ≤ 56px、分頁列一行 ≤ 44px', A.pillInBar && A.barH <= 56 && A.rowH <= 44, A);
+  ok('編輯鎖在頂端固定工具列裡（捲動時一直看得到）；工具列 ≤ 60px、分頁列一行 ≤ 62px', A.pillInBar && A.barH <= 60 && A.rowH <= 62, A);
 
   console.log('\n[B] 資料庫範圍（EE/RF/PWR 頁）');
   let P = await pill();
@@ -275,10 +275,10 @@ async function setupDb(page) {
         const tabs = [...document.querySelectorAll('.tab-nav .tab-btn')].map(R);
         const b = R(document.getElementById('version-badge'));
         return {
-          barOneLine: br.height <= 56 && kids.every(k => k.top >= br.top && k.bottom <= br.bottom && k.left >= 0 && k.right <= vw),
+          barOneLine: br.height <= 60 && kids.every(k => k.top >= br.top && k.bottom <= br.bottom && k.left >= 0 && k.right <= vw),
           noOverlap: kids.every((a, i) => kids.every((c, j) => i >= j || a.right <= c.left + 1 || c.right <= a.left + 1)),
           tipIn: !tr || (tr.left >= 0 && tr.right <= vw),
-          tabsOneLine: tabs.every(t => Math.abs(t.top - tabs[0].top) < 2) && row.height <= 44,
+          tabsOneLine: tabs.every(t => Math.abs(t.top - tabs[0].top) < 2) && row.height <= 62,
           badgeOk: b.width > 40 && b.right <= vw && b.left >= tabs[tabs.length - 1].right && b.top >= row.top && b.bottom <= row.bottom,
           hscroll: document.documentElement.scrollWidth - vw,
           rowH: Math.round(row.height) + Math.round(br.height), pillW: Math.round(p.width),

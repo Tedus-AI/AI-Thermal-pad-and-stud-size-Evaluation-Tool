@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Thermal & Component Spec Management Tool</title>
+<!-- 數字用的等寬字（JetBrains Mono）。載不到（離線、公司網路擋）就退回系統的 Cascadia Mono／Consolas，版面不受影響 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌡️</text></svg>">
 <template id="__bundler_thumbnail" data-bg-color="#eef3fb">
   <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
@@ -5824,6 +5828,109 @@
   .ab-grow { flex: 1 1 0; min-width: 4px; }
   @media (max-width: 1500px) { .ab-acct { max-width: 170px; } .ab-name i { display: none; } .ab-proj { margin-left: 4px; padding-left: 10px; } }
   @media (max-width: 1280px) { .ab-acct #db-status-text { max-width: 90px; } .ab-lab { display: none; } }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     使用者選定的風格：方案 C「Thermal Spectrum」（2026-11，三個方案預覽後選定）
+     亮色、頂端一條熱影像色帶當識別、台達藍主色、膠囊形按鈕、分類標題右端散熱鰭片紋、圓角卡片。
+     這一段接在 V4 基礎規則後面蓋過它；色票在下面的 :root。
+  ══════════════════════════════════════════════════════════════════════ */
+  /* 共用：24 吋用滿畫面、等寬數字、表頭與資料同一個對齊方式、Teams 鈕 */
+
+  .container { max-width: none !important; padding: 0 16px !important; }
+  .appbar, .tabnav-row { margin-left: -16px !important; margin-right: -16px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  /* 數字：等寬字 */
+  .sg-comp-list-table input, .comp-table td, .vd-table td, .sg-power-chip, .sg-param-chip input, .sg-param-chip select, .sg-rth-btn, .cell-input, #version-badge {
+    font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Segoe UI', 'Noto Sans TC', sans-serif !important; }
+  .sg-comp-list-table input.comp-name, .comp-table td.name-cell { font-family: var(--ui-font) !important; }
+  /* 表頭與資料對齊：文字欄靠左、數字欄置中（表頭與內容同一個對齊方式） */
+  .sg-comp-list-table thead th { text-align: center !important; }
+  .sg-comp-list-table thead th:nth-child(1), .sg-comp-list-table thead th:nth-child(2) { text-align: left !important; padding-left: 14px !important; }
+  .sg-comp-list-table tbody td:nth-child(2) { padding-left: 8px !important; }
+  .sg-comp-list-table input[type=number] { text-align: center !important; }
+  .sg-comp-list-table td.sg-limit-col, .sg-comp-list-table td.sg-rth-cell, .sg-comp-list-table td.sg-spec-cell, .sg-comp-list-table td.sg-note-cell { text-align: center !important; }
+  .sg-comp-list-table .sg-tv-cell select, .sg-comp-list-table .sg-ts-cell > select { text-align: center; text-align-last: center; }
+  .sg-spec-btns { justify-content: center; }
+  /* Teams 鈕：Teams 的紫色方塊＋白色 T（一眼認得出是 Teams） */
+  #tc-fab { width: 34px !important; height: 34px !important; border: none !important; border-radius: 8px !important;
+    background: linear-gradient(135deg, #7b83eb, #4b53bc) !important; color: #fff !important; box-shadow: 0 1px 3px rgba(75,83,188,.45) !important; }
+  #tc-fab svg { width: 24px !important; height: 24px !important; }
+  #tc-fab:hover { filter: brightness(1.08); }
+
+  /* ═══ 方案 C「Thermal Spectrum」：亮色、熱影像色帶當識別、KPI 讀值卡、圓潤產品感 ═══ */
+  :root {
+    --gm-bg: #f4f6fa; --gm-bg-soft: #f8fafd; --gm-primary: #0079c8; --gm-primary-2: #0064a8; --gm-primary-3: #004f86;
+    --gm-tint: #e4f2fc; --gm-tint-2: #f2f9fe; --gm-text: #0f1b2d; --gm-text-2: #44546a; --gm-text-3: #76859a;
+    --gm-border: #dfe5ee; --gm-border-2: #ebeff5;
+    --cat-rf-ink: #0f6fc6; --cat-digital-ink: #5b3fc4; --cat-pwr-ink: #c05a12;
+    --cat-rf: #0f6fc6; --cat-digital: #5b3fc4; --cat-pwr: #c05a12;
+    --cat-rf-tint: #e6f1fc; --cat-digital-tint: #efebfb; --cat-pwr-tint: #fdf0e3;
+    --r: 12px; --r-s: 8px; --ab-h: 58px;
+    --heat: linear-gradient(90deg, #1b3fa0 0%, #0079c8 18%, #00b3c4 36%, #35c46a 52%, #f2c230 70%, #f08a24 85%, #e23b2e 100%);
+  }
+  body { background: #f4f6fa !important; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 4px; background: var(--heat); z-index: 1100; }
+  .appbar { height: 58px !important; padding-top: 4px !important; background: #fff !important; border-bottom: 1px solid var(--gm-border) !important; box-shadow: 0 6px 20px -14px rgba(15,27,45,.35) !important; }
+  .ab-logo { width: 34px !important; height: 34px !important; border-radius: 10px !important; background: var(--heat) !important; box-shadow: 0 4px 10px -4px rgba(226,59,46,.5); }
+  .ab-name b { font-size: 1.02rem !important; letter-spacing: 0 !important; }
+  .ab-proj select { border-radius: 999px !important; background-color: #f4f6fa !important; border-color: transparent !important; padding-left: 16px !important; height: 36px !important; }
+  .appbar .ab-btn, .appbar .ab-ibtn, .appbar .ab-acct { border-radius: 999px !important; height: 34px !important; }
+  .appbar .ab-ibtn { width: 34px !important; }
+  .ab-save { border-radius: 999px !important; height: 36px !important; padding: 0 22px !important; background: #0f1b2d !important; border-color: #0f1b2d !important; box-shadow: 0 6px 14px -6px rgba(15,27,45,.6); }
+  .ab-save:disabled { box-shadow: none; background: #e9edf2 !important; border-color: transparent !important; }
+  .lk { border-radius: 999px !important; padding-left: 12px !important; } .lk .lk-btn { border-radius: 999px !important; }
+  /* 分頁：實心膠囊（作用中＝深色） */
+  .tabnav-row { background: transparent !important; border-bottom: none !important; padding-top: 12px !important; margin-bottom: 12px !important; }
+  .tab-nav { gap: 6px !important; background: #fff !important; padding: 5px !important; border-radius: 999px !important; border: 1px solid var(--gm-border) !important; box-shadow: 0 4px 14px -10px rgba(15,27,45,.4) !important; }
+  .tab-btn, .tabnav-row .tab-btn { height: 34px !important; border-radius: 999px !important; padding: 0 18px !important; }
+  .tab-btn::after { display: none !important; }
+  .tab-btn.active { background: #0079c8 !important; color: #fff !important; box-shadow: 0 6px 14px -6px rgba(0,121,200,.7) !important; }
+  /* 卡片：圓角＋柔和陰影 */
+  .sg-power-grid, .sg-comp-category, .category-section, .vd-comp-category, .vd-rules { border: none !important; box-shadow: 0 1px 2px rgba(15,27,45,.06), 0 14px 30px -22px rgba(15,27,45,.45) !important; }
+  .page-title h2, .card.proj-card > .card-header { font-size: 1.15rem !important; }
+  /* 分類標題：整條上色＋右端「散熱鰭片」紋 */
+  .sg-comp-category-header, .category-title, .vd-comp-category-header { min-height: 42px !important; font-size: .95rem !important;
+    background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.26) 0 3px, transparent 3px 9px), linear-gradient(90deg, transparent, rgba(255,255,255,.12)) !important;
+    background-size: 150px 16px, 100% 100% !important; background-position: right 16px center, 0 0 !important; background-repeat: no-repeat !important; }
+  .sg-comp-list-table thead th, .comp-table th, .vd-table th { background: #fff !important; color: var(--gm-text-3) !important; border-bottom: 1px solid var(--gm-border) !important; font-weight: 600 !important; }
+  .comp-table th.editable-col { background: #f2f9fe !important; color: #0064a8 !important; }
+  .sg-comp-list-table input, .sg-comp-list-table select, .cell-input, .cell-select { border-radius: 8px !important; background: #f6f8fb !important; border-color: transparent !important; }
+  .sg-comp-list-table input:disabled, .sg-comp-list-table select:disabled, .cell-input:disabled, .cell-select:disabled { background: transparent !important; }
+  /* 功耗：KPI 讀值卡 */
+  .sg-power-grid { padding: 10px 14px !important; }
+  .sg-power-grid .sg-power-chip { height: 30px !important; border-radius: 999px !important; padding: 0 14px !important; font-size: .82rem !important; }
+  .sg-power-chip.total, .sg-power-chip.rt-total { background: var(--heat) !important; color: #fff !important; border: none !important; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+  .sg-power-grid .sg-param-chip, .sg-band-cell { border-radius: 999px !important; }
+  .btn-export, .sg-picker-trigger, .tcp-placement-btn, .tcp-view-btn, .sg-comp-add-btn { border-radius: 999px !important; }
+  .sg-rth-btn { border-radius: 999px !important; }
+
+
+  /* TH/ME 頁在寬螢幕（24 吋）把上下疊的兩格改成並排：TIM Type｜型號、凸台模式｜尺寸、元件大小｜E-PAD → 每列 72 → 約 40px */
+  @media (min-width: 1700px) {
+    .comp-table td.tim-type-col, .comp-table td.boss-size-col, .comp-table td.heat-source-col { white-space: nowrap; }
+    .comp-table td.tim-type-col > .cell-select { width: 44% !important; display: inline-block; vertical-align: middle; }
+    .comp-table td.tim-type-col > .tim-model-sub { display: inline-block; width: 54%; vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
+    .comp-table td.boss-size-col > .cell-select { width: 52% !important; display: inline-block; vertical-align: middle; }
+    .comp-table td.boss-size-col > .cell-input, .comp-table td.boss-size-col > span, .comp-table td.boss-size-col > div { width: 44% !important; display: inline-block; vertical-align: middle; margin: 0 !important; }
+    .comp-table td.heat-source-col > .cell-input { width: 46% !important; display: inline-block; vertical-align: middle; }
+    .comp-table td.heat-source-col > .epad-sub { display: inline-flex; align-items: center; gap: 3px; width: 52%; vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
+    .comp-table td.heat-source-col > .epad-sub .epad-label { margin: 0 !important; font-size: .62rem !important; }
+    .comp-table td.heat-source-col:not(:has(.epad-sub)) > .cell-input { width: 100% !important; }
+  }
+  @media (min-width: 1700px) {
+    .comp-table th.tim-type-col, .comp-table td.tim-type-col { min-width: 250px !important; width: 250px !important; }
+    .comp-table th.heat-source-col, .comp-table td.heat-source-col { min-width: 190px !important; width: 190px !important; }
+    .comp-table td.tim-type-col > .cell-select { width: 34% !important; }
+    .comp-table td.tim-type-col > .tim-model-sub { width: 64%; }
+    .comp-table td.heat-source-col > .cell-input { width: 42% !important; }
+    .comp-table td.heat-source-col > .epad-sub { width: 56%; }
+    .comp-table td.heat-source-col > .epad-sub .cell-input { min-width: 0; flex: 1; }
+  }
+  .comp-table td select, .vd-table td select, .comp-table td .tim-locked-val { font-family: var(--ui-font) !important; }
+  @media (min-width: 1700px) {
+    .comp-table th.boss-size-col, .comp-table td.boss-size-col { min-width: 270px !important; width: 270px !important; }
+    .comp-table td.boss-size-col > .cell-select { width: 58% !important; }
+    .comp-table td.boss-size-col > .cell-input, .comp-table td.boss-size-col > span, .comp-table td.boss-size-col > div { width: 38% !important; }
+  }
   /* ▣V4-END */
 </style>
 </head>
@@ -6160,7 +6267,7 @@
       <button type="button" class="lk-x lk-open-only" id="lock-pill-x" onclick="lockPillCollapse()" title="取消" aria-label="取消">&#10005;</button>
       <span class="lk-tip lk-open-only" id="lock-pill-tip"></span>
     </span>
-    <button id="tc-fab" class="ab-ibtn ab-teams" type="button" aria-label="快速聯絡專案成員" title="用 Teams 聯絡專案成員"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg></button>
+    <button id="tc-fab" class="ab-ibtn ab-teams" type="button" aria-label="用 Teams 聯絡專案成員" title="用 Teams 聯絡專案成員"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="5" width="12" height="12" rx="2.2" fill="#fff"/><path d="M5 8h6v1.8H9v5.4H7V9.8H5z" fill="#4b53bc"/><circle cx="18" cy="8.2" r="2.4" fill="#fff"/><path d="M15.2 12h5.3c.6 0 1 .4 1 1v3.2a3.3 3.3 0 0 1-6.3 1.3z" fill="#fff" opacity=".92"/></svg></button>
     <!-- 資料庫／帳號：狀態＋登入鈕常駐，其餘（備份、離線資料庫、管理、登出）收進選單 -->
     <div class="header-db-bar ab-db" id="ab-db">
       <button id="btn-sp-login" class="ab-btn ab-login" onclick="handleSpLogin()" style="display:none">登入 SharePoint</button>
@@ -8836,7 +8943,7 @@ function eeImportExcel(fileInput) {
 
 /* ---- 建立 PDF 用的 HTML 內容（分三大區塊，與工具畫面一致） ---- */
 function buildPdfHtml(categories) {
-  const CAT_COLORS = { rf: '#1b5fb0', digital: '#4a3aa7', pwr: '#a83468' };   // 與畫面的分類色（--cat-*-ink）同一組；紅色保留給錯誤
+  const CAT_COLORS = { rf: '#0f6fc6', digital: '#5b3fc4', pwr: '#c05a12' };   // 與畫面的分類色（--cat-*-ink）同一組；紅色保留給錯誤
 
   let html = `
     <div style="font-family:'Segoe UI','Microsoft JhengHei','PingFang TC','Noto Sans TC',sans-serif;

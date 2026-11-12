@@ -87,7 +87,7 @@ const PROJ = {
   ok('沒有「目前專案元件清單」小標題；高溫／常溫條件在同一個 grid', !m.oldTitle && m.oneGrid, m);
   ok('頂端工具列：「專案」標籤在下拉左邊（同一行）', m.labelLeft, m);
   ok('高溫、常溫各一列，7 格欄位上下對齊（位置與寬度相同）', m.twoRows && m.aligned, m);
-  ok('chip 高度 ≤ 28px', m.chipH <= 28, m);
+  ok('chip 高度 ≤ 30px', m.chipH <= 30, m);
 
   console.log('\n[B] 高度');
   ok(`頁面頂端到元件表 ${m.h}px ≤ 150px（專案列移到頂端工具列之後；最早是 402px）`, m.h <= 150, m);
@@ -161,8 +161,8 @@ const PROJ = {
         selW: Math.round(R(document.getElementById('sg-project-select')).width), exports: exp.length,
         hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
     });
-    ok(`${w}px 頂端工具列：一行（${t1.barH}px ≤ 56）、固定在頂端、所有按鈕都在畫面內且不互相重疊、專案下拉至少 150px、沒有橫向捲軸`,
-      t1.barH <= 56 && t1.sticky === 'sticky' && t1.inside && t1.noOverlap && t1.selW >= 150 && t1.exports === 2 && t1.hscroll <= 0, t1);
+    ok(`${w}px 頂端工具列：一行（${t1.barH}px ≤ 60）、固定在頂端、所有按鈕都在畫面內且不互相重疊、專案下拉至少 150px、沒有橫向捲軸`,
+      t1.barH <= 60 && t1.sticky === 'sticky' && t1.inside && t1.noOverlap && t1.selW >= 150 && t1.exports === 2 && t1.hscroll <= 0, t1);
     await page.evaluate(() => { const st = document.getElementById('sg-comp-save-status'); st.textContent = ''; st.className = 'save-status'; });
   }
   await page.setViewportSize({ width: 1536, height: 900 });

@@ -907,7 +907,7 @@ await dbAdapter.updateDoc('projects', docId, {
 ### 結構
 
 ```
-<header class="appbar" id="appbar">   ← position:sticky; top:0; 高 52px（--ab-h）
+<header class="appbar" id="appbar">   ← position:sticky; top:0; 高 58px（--ab-h）
   品牌 ｜ 專案 [#sg-project-select] [重新載入 #sg-load-btn] ｜ [＋新增][✎改名][🗑刪除]   …   [存檔訊息] [儲存 #sg-comp-save-btn] [#lock-pill] [Teams #tc-fab] [登入][帳號選單 ▾]
 <div class="tabnav-row">               ← 底線式分頁，右邊是版本徽章（不固定，會捲走）
 <div id="tab-…">                       ← 各頁只剩「頁名＋匯出鈕」一列（.page-bar／.card.proj-card 被 CSS 攤平）
@@ -930,20 +930,30 @@ await dbAdapter.updateDoc('projects', docId, {
 
 ### 視覺層（`index.html` 的 `/* ▣V4-BEGIN */ … /* ▣V4-END */`，最後一層）
 
-- 色票集中在該區塊開頭的 `:root`（沿用 `--gm-*` 變數名，值換成中性冷灰＋單一強調藍）；狀態色 `--st-ok/warn/err-*`；
-  **紅色只給錯誤／刪除**。控制項高度 `--ctl-h` 30px、圓角 `--r` 8／`--r-s` 6。不用漸層、立體陰影、襯線標題。
-- **分類色（識別用）**：RF 藍 `--cat-rf-ink #1b5fb0`／Digital 紫 `#4a3aa7`／PWR 洋紅 `#a83468`（白字對比 ≥ 4.5:1；
-  RF／Digital 與 5G-RRU 視覺化報告同色相）。**RF 不再用紅色**。分類標題列**整條塗滿分類色＋白字**
-  （使用者要求：只有左側色條太單調，要原本整條上色的風格）。PDF 匯出的 `CAT_COLORS` 用同一組值（三方同步）。
-- **分類圖示是同一套線條 SVG**（`CAT_ICONS`，三頁的 `CATEGORIES.icon` 共用）：RF＝天線訊號、Digital＝**晶片**
-  （使用者指出原本的 💲 是錢的符號，不適合）、PWR＝閃電。不要換回 emoji（各作業系統長得不一樣）。
-- **表格密度**：EE 頁列高 36px（原 55px）—— 限溫＋限溫對象並排、TH Via 的下拉＋數字並排（選了「自行輸入」後下拉縮成一顆小箭頭）、
-  Temp Sensor 的 Local／Remote 並排；`.sg-comp-list-table` 是 `table-layout:fixed`，欄寬寫死在 V4 區塊（`th:nth-child(n)`）
+**風格＝方案 C「Thermal Spectrum」**（使用者看過三個方案的預覽後選定：A 台達藍圖斜切風／B 深色機房風／C；
+第一版的中性灰藍被評為「跟一般 AI 基本款很像」）。區塊前半是 V4 基礎規則，後半「使用者選定的風格：方案 C」蓋過它，色票在後半的 `:root`。
+
+- **識別**：頁面最上方一條 4px 的**熱影像色帶**（`--heat`：深藍→台達藍→青→綠→黃→橘→紅，`body::before`，固定）；品牌方塊與 Total 功耗讀值用同一條漸層。
+  主色台達藍 `#0079c8`（近似值，不是官方色號；使用者提供標準色號時換 `--gm-primary*`）。不放台達商標圖形。
+- **造型**：膠囊形按鈕與下拉（999px）、卡片圓角 12px＋柔和陰影、**作用中的分頁是實心藍色膠囊**（使用者要求：分頁標題像以前一樣整顆上色）、
+  儲存鈕是深色實心膠囊。頂端工具列 58px（`--ab-h`）。
+- **分類色**：RF 藍 `#0f6fc6`／Digital 紫 `#5b3fc4`／PWR 橘 `#c05a12`（白字對比 ≥ 4.5:1；**不用紅色**，紅色只給錯誤／刪除）。
+  分類標題列**整條塗滿分類色＋白字**（使用者要求），右端有「散熱鰭片」直紋。PDF 匯出的 `CAT_COLORS` 用同一組值（三方同步）。
+- **分類圖示是同一套線條 SVG**（`CAT_ICONS`）：RF＝天線訊號、Digital＝**晶片**（使用者指出原本的 💲 是錢的符號）、PWR＝閃電。不要換回 emoji。
+- **Teams 鈕**（`#tc-fab`，頂端工具列）：Teams 紫色方塊＋白色 T 與人像（使用者要求：要一眼認得出是 Teams）。
+- **數字用等寬字** JetBrains Mono（Google Fonts，載不到退回 Cascadia Mono／Consolas）；下拉與文字欄照 UI 字型（等寬字較寬，下拉用了會被截斷）。
+- **表頭與資料同一個對齊方式**（使用者回報沒對齊）：EE 頁文字欄（Component、Type）靠左、數字欄置中，表頭跟著。
+- **24 吋用滿畫面**（使用者常用 17 吋與 24 吋）：`.container` 沒有寬度上限。TH/ME 頁在 ≥1700px 把上下疊的格子改成並排
+  （TIM Type｜型號、凸台模式｜尺寸、元件大小｜E-PAD）→ 列高 72 → 約 35px，StarKcore 整個專案一屏看完；較窄的螢幕維持上下疊（放不下）。
+  **改這三欄的內容或選項長度要跑 `tests/complist-layout.test.js`**（1920 也會量有沒有被截斷）。
+- **表格密度**：EE 頁列高約 35px（原 55px）—— 限溫＋限溫對象並排、TH Via 的下拉＋數字並排（選了「自行輸入」後下拉縮成一顆小箭頭）、
+  Temp Sensor 的 Local／Remote 並排；`.sg-comp-list-table` 是 `table-layout:fixed`，欄寬寫死（`th:nth-child(n)`）
   → 三個分類的欄位上下對齊，多出來的寬度全部給元件名稱。**加欄位／改欄寬要一起改那組 nth-child**。
-- **唯讀（未解鎖）時輸入框顯示成純文字**（透明底、無框線、無下拉箭頭），不是一排反灰的輸入框（UX 慣例 2）；解鎖後才出現框線。
-- 匯出／次要工具鈕統一成外框鈕（原本每顆一個顏色、半高）。
+- **唯讀（未解鎖）時輸入框顯示成純文字**（透明底、無框線、無下拉箭頭），解鎖後才出現底色（UX 慣例 2）。
+- 匯出／次要工具鈕統一成外框膠囊鈕（原本每顆一個顏色、半高）。
 - 前面的 Gamma 層、Claude 暖色層**還留在檔案裡**被 V4 蓋過（很多規則帶 `!important`，V4 因此也得帶）。之後整理 CSS 時可以刪掉被完全蓋過的舊規則，
-  但要逐頁截圖比對；不要再往上疊第五層。
+  但要逐頁截圖比對；不要再往上疊一層。
+- 5G-RRU 用同一套風格（同色票、同分類色、同熱影像色帶）。
 
 ## 四個功能頁同步開同一個專案（`projSelectChange` / `projOpenAll` / `projLoadAll`）⚠️
 
