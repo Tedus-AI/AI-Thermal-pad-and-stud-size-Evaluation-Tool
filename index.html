@@ -7672,8 +7672,10 @@ function renderComponentRow(comp, idx, isCustom, catKey, customIdx) {
     const specKey = compName.replace(/ /g, '_').replace(/\//g, '-');
     const spec = thermalSpecs[specKey] || {};
 
-    const qty = comp.Qty || '\u2014';
-    const power = comp['Power(W)'] || '\u2014';
+    // 0 是有填（0 W、0 顆），照實顯示；沒填才是「—」
+    const _shown = v => (v === undefined || v === null || v === '') ? '\u2014' : v;
+    const qty = _shown(comp.Qty);
+    const power = _shown(comp['Power(W)']);
 
     const heatSrcSize  = spec.heatSourceSize || '';
     const heatSrcHeight = spec.heatSourceHeight || '';
@@ -8078,8 +8080,8 @@ function collectExportDataByCategory() {
       catRows.push({
         index: idx + 1,
         component: displayName,
-        qty: comp.Qty || '—',
-        power: comp['Power(W)'] || '—',
+        qty: (comp.Qty === undefined || comp.Qty === null || comp.Qty === '') ? '—' : comp.Qty,
+        power: (comp['Power(W)'] === undefined || comp['Power(W)'] === null || comp['Power(W)'] === '') ? '—' : comp['Power(W)'],
         heatSourceSize: spec.heatSourceSize || '-',
         // E-PAD 大小只在主散熱路徑 = Thermal Via 時有意義，其餘情況不輸出殘值
         epadSize: (spec.heatDirection === 'Thermal Via' && spec.epadSize) ? spec.epadSize : '-',
@@ -14599,7 +14601,8 @@ function sgShowStatus(msg, type) {
 /* HTML 逸出（& < > " ' 五字元，與 5G-RRU _vEsc 同規格）：
    一律轉成 entity，文字節點與「雙/單引號屬性值」都安全。 */
 function escapeHtml(str) {
-  if (!str) return '';
+  // 數字 0 是一個值（0 W、0 顆）：不可當成空白。只有 null／undefined／false／'' 才是空的
+  if (str === null || str === undefined || str === false || str === '') return '';
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
