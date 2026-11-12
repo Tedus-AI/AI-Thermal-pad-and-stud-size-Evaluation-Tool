@@ -53,7 +53,7 @@ const ODD = { project_name: 'Odd', pcb_thickness: { RF: 'abc', Digital: 2.4 }, .
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof projLoadAll === 'function' && typeof saveAllTabs === 'function' && document.getElementById('gm-rail'));
+  await page.waitForFunction(() => typeof projLoadAll === 'function' && typeof saveAllTabs === 'function' && document.getElementById('appbar'));
   await page.evaluate(([a, b, c]) => {
     window.__db = { projects: { F: a, S: b, O: c }, tim_library: {} };
     dbAdapter.isReady = () => true; dbAdapter.isSharePointMode = () => false; dbAdapter.refresh = async () => {};

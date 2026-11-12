@@ -39,6 +39,7 @@ function _resolveFields(fields, existing) {
 const GET_TIMEOUT_MS = 30000;
 const PUT_TIMEOUT_MS = 90000;
 async function _fetchT(url, init, ms) {
+  if (!ms) ms = GET_TIMEOUT_MS;   // 沒指定 → 讀取類的逾時（圖片／規格書的 metadata、列舉、刪除）
   const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
   try {
@@ -357,12 +358,19 @@ const graphDb = {
   async _withOptimisticWrite(mutateFn, opts) {
     const MAX = 4;
     for (let attempt = 0; ; attempt++) {
-      const decision = mutateFn(dbCache) || {};
+      // 在複本上套用、寫入成功才算數：寫入失敗（權限不足、重試用盡、唯讀保護…）時快取退回寫入前。
+      // ⚠ 原本直接改 dbCache → 存檔失敗後那份「沒存成功」的修改留在快取裡，之後任何一次整檔寫入
+      //   （釋放編輯鎖、登入紀錄、存 TIM 型號庫）會把它一起寫進共用 DB；重新載入專案也會讀到它。
+      const base = dbCache;
+      const draft = _clone(base) || {};
+      const decision = mutateFn(draft) || {};
       if (decision.skipWrite) return decision.value;
+      dbCache = draft;
       try {
         await this._writeFile(opts);
         return decision.value;
       } catch (e) {
+        if (dbCache === draft) dbCache = base;   // 沒寫成功 → 退回（下面的重讀會再換成磁碟上的最新內容）
         // 412：別人改過 → 以磁碟為準重讀後在最新狀態上重算；逾時／斷線／429／5xx：不確定有沒有寫成功 →
         // 一樣重讀再試（帶 If-Match：若其實已寫成功會得到 412 再重讀，不會蓋掉任何人的寫入）
         const retryable = e && (e.status === 412 || e.network || e.status === 429 || e.status >= 500);
@@ -604,7 +612,7 @@ const graphDb = {
   async getTcpImageSrc(spPath) {
     if (!_siteId) await this._resolveDriveItemId();
     const token = await this._getAccessToken(true);
-    const resp = await fetch(
+    const resp = await _fetchT(
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${spPath}`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
@@ -617,7 +625,7 @@ const graphDb = {
     if (!_siteId) await this._resolveDriveItemId();
     const token = await this._getAccessToken(false).catch(() => null);
     if (!token) return;
-    await fetch(
+    await _fetchT(
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${spPath}`,
       { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
     );
@@ -636,7 +644,7 @@ const graphDb = {
     const out = [];
     let url = `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${folder}:/children?$select=name&$top=200`;
     while (url) {
-      const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      const resp = await _fetchT(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!resp.ok) {
         if (resp.status === 404) return [];   // 資料夾尚未建立 → 視為無檔案
         throw new Error('圖片列舉失敗 ' + resp.status);
@@ -685,7 +693,7 @@ const graphDb = {
   async getSpecMeta(path) {
     if (!_siteId) await this._resolveDriveItemId();
     const token = await this._getAccessToken(true);
-    const resp = await fetch(
+    const resp = await _fetchT(
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${path}`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
@@ -730,7 +738,7 @@ const graphDb = {
     if (!_siteId) await this._resolveDriveItemId();
     const token = await this._getAccessToken(false).catch(() => null);
     if (!token) return;
-    await fetch(
+    await _fetchT(
       `https://graph.microsoft.com/v1.0/sites/${_siteId}/drive/root:${path}`,
       { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }
     );
@@ -752,7 +760,7 @@ const graphDb = {
     for (const path of spSet) {
       try {
         const url = await this.getTcpImageSrc(path);
-        const blob = await fetch(url).then(r => r.blob());
+        const blob = await _fetchT(url, {}, GET_TIMEOUT_MS).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); });
         map[path] = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
         ok++;
       } catch (e) { console.warn('[backup] 圖片嵌入失敗，保留 sp: 參照：', path, e); }

@@ -50,7 +50,7 @@ const proj = (name, comp) => ({
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof projSelectChange === 'function' && typeof saveAllTabs === 'function' && document.getElementById('gm-rail'));
+  await page.waitForFunction(() => typeof projSelectChange === 'function' && typeof saveAllTabs === 'function' && document.getElementById('appbar'));
 
   await page.evaluate(([x, y]) => {
     window.__db = { projects: { X: x, Y: y }, tim_library: {} };
@@ -84,7 +84,13 @@ const proj = (name, comp) => ({
   }));
   // 下拉在各自的分頁裡 → 先切到那一頁（使用者也是這樣操作）
   const TAB_OF = { 'sg-project-select': 'specgen', 'project-select': 'complist', 'vd-project-select': 'validation', 'via-project-select': 'via' };
-  const pick = async (selId, val) => { await page.evaluate((t) => switchTab(t), TAB_OF[selId]); await page.selectOption('#' + selId, val); };
+  // 使用者操作的是頂端工具列的 #sg-project-select（任何分頁都看得到）；其餘三個是隱藏的鏡像，仍掛著同一個 onchange →
+  // 鏡像用程式觸發 change，驗證「不管從哪一個下拉進來，四頁都一起換」
+  const pick = async (selId, val) => {
+    await page.evaluate((t) => switchTab(t), TAB_OF[selId]);
+    if (selId === 'sg-project-select') { await page.selectOption('#' + selId, val); return; }
+    await page.evaluate(([id, v]) => { const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, [selId, val]);
+  };
   const same = (s, id) => s.sg === id && s.cl === id && s.vd === id && s.sel.every(v => v === (id || ''));
   const dialog = () => page.evaluate(() => document.getElementById('unsaved-lock-overlay').classList.contains('active'));
   const answer = async (cls) => { await page.waitForFunction(() => document.getElementById('unsaved-lock-overlay').classList.contains('active'), null, { timeout: 3000 });
@@ -112,7 +118,7 @@ const proj = (name, comp) => ({
   console.log('\n[B] 載入專案鈕');
   await page.evaluate(() => { window.__db.projects.Z = { project_name: 'Gamma', rf_data: [], digital_data: [], pwr_data: [] }; window.__refresh = 0; });
   await page.evaluate(() => switchTab('validation'));
-  await page.click('#vd-load-btn');
+  await page.evaluate(() => switchTab('validation')); await page.click('#sg-load-btn');   // 「重新載入」在頂端工具列，任何分頁都按得到
   await page.waitForFunction(() => document.getElementById('sg-project-select').options.length === 4);
   s = await S();
   ok('驗證頁按「載入專案」→ 只重讀一次資料庫、四頁的列表都有新專案、仍開著 Y', s.opts.every(n => n === 4) && same(s, 'Y') && await page.evaluate(() => window.__refresh === 1), { s, refresh: await page.evaluate(() => window.__refresh) });
@@ -169,32 +175,34 @@ const proj = (name, comp) => ({
   await page.waitForFunction(() => vdProjectId === 'NEW');
   ok('沒有未存變更 → 新增後四頁一起切到新專案', same(await S(), 'NEW') && await page.evaluate(() => !!window.__db.projects.NEW));
 
-  console.log('\n[F] 右側工具列收起時常駐解鎖／儲存');
-  await page.evaluate(() => { relock(); railToggleCollapse(); });
-  const R = await page.evaluate(() => {
-    const vis = (el) => !!el && el.offsetParent !== null && el.getBoundingClientRect().width > 0;
-    const lock = document.getElementById('rail-lock-btn'), save = document.querySelector('#gm-rail-pinned [data-tip="儲存資料"]');
-    const tg = document.getElementById('gm-rail-toggle');
-    const bodyBtns = [...document.querySelectorAll('#gm-rail-body button')];
-    return { lock: vis(lock), save: vis(save), toggle: vis(tg), bodyHidden: bodyBtns.every(b => !vis(b)),
-      order: vis(lock) && tg.getBoundingClientRect().top < lock.getBoundingClientRect().top && lock.getBoundingClientRect().top < save.getBoundingClientRect().top,
-      railH: Math.round(document.getElementById('gm-rail').getBoundingClientRect().height) };
-  });
-  ok('收起後：展開鈕、解鎖、儲存看得到，其他按鈕收起來', R.lock && R.save && R.toggle && R.bodyHidden && R.order, R);
-  await page.click('#rail-lock-btn');
-  ok('收起時點解鎖 → 開出密碼框', await page.evaluate(() => document.getElementById('rail-lock-popover').style.display === 'flex'));
-  await page.fill('#rail-lock-pwd', '0000');
-  await page.press('#rail-lock-pwd', 'Enter');
+  console.log('\n[F] 頂端固定工具列：專案／儲存／編輯鎖在任何分頁、捲到哪裡都按得到');
+  await page.evaluate(() => { relock(); });
+  for (const t of ['specgen', 'complist', 'validation', 'via', 'calc', 'feedback']) {
+    const F = await page.evaluate((t) => {
+      switchTab(t); window.scrollTo(0, 99999);
+      const top = (id) => { const el = document.getElementById(id), r = el.getBoundingClientRect();
+        const e = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+        return r.top >= 0 && r.bottom <= 60 && (e === el || el.contains(e)); };
+      return { sel: top('sg-project-select'), save: top('sg-comp-save-btn'), lock: top('lock-pill'), load: top('sg-load-btn'),
+               rail: !!document.getElementById('gm-rail') };
+    }, t);
+    ok(`${t}：捲到最底，專案下拉／重新載入／儲存／編輯鎖仍在頂端、點得到；沒有浮動工具列`, F.sel && F.save && F.lock && F.load && !F.rail, F);
+  }
+  await page.evaluate(() => { switchTab('complist'); window.scrollTo(0, 99999); });
+  await page.click('#lock-pill-btn');
+  await page.fill('#lock-pill-pwd', '0000');
+  await page.press('#lock-pill-pwd', 'Enter');
   await page.waitForFunction(() => !isProtected);
-  await page.evaluate(() => { thermalSpecs['RailSave'] = { note: '從收起的工具列存' }; window.__writes = 0; });
-  await page.click('#gm-rail-pinned [data-tip="儲存資料"]');
+  await page.evaluate(() => { thermalSpecs['RailSave'] = { note: '從頂端工具列存' }; window.__writes = 0; abDirtySync(); });
+  ok('有未儲存的修改 → 儲存鈕標出來（圓點）', await page.evaluate(() => document.getElementById('sg-comp-save-btn').classList.contains('ab-dirty')));
+  await page.click('#sg-comp-save-btn');
   await page.waitForFunction(() => window.__writes >= 1);
-  ok('收起時點儲存 → 存檔（目前開著的 NEW）', await page.evaluate(() => window.__db.projects.NEW.thermal_specs.RailSave.note === '從收起的工具列存' && !hasUnsavedEdits()));
-  await page.evaluate(() => railToggleCollapse());
-  ok('展開後所有按鈕都在、解鎖／儲存仍在最下面', await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('#gm-rail button')].filter(b => b.offsetParent !== null);
-    return btns.length >= 10 && btns[btns.length - 1].getAttribute('data-tip') === '儲存資料' && btns[btns.length - 2].id === 'rail-lock-btn';
-  }));
+  ok('在 TH/ME 頁按頂端的儲存 → 存檔（目前開著的 NEW）', await page.evaluate(() => window.__db.projects.NEW.thermal_specs.RailSave.note === '從頂端工具列存' && !hasUnsavedEdits()));
+  await page.evaluate(() => abDirtySync());
+  ok('存完 → 圓點消失', await page.evaluate(() => !document.getElementById('sg-comp-save-btn').classList.contains('ab-dirty')));
+  ok('各頁原本的專案下拉／載入／儲存鈕不再顯示（只留頂端那一組）', await page.evaluate(() =>
+    ['project-select', 'vd-project-select', 'via-project-select', 'load-projects-btn', 'vd-load-btn', 'via-load-btn', 'vd-save-btn', 'via-save-btn', 'save-btn']
+      .every(id => { const el = document.getElementById(id); return el && el.offsetParent === null; })));
 
   ok('沒有 JS 錯誤', errors.length === 0, errors);
   await browser.close();

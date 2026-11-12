@@ -91,20 +91,32 @@ const fileDb = {
     return _fdbClone(dbCache[colName]?.[docId] ?? null);
   },
 
+  /* 在複本上套用、寫入成功才算數：寫入失敗（唯讀保護、沒有寫入權限…）時快取退回寫入前，
+     沒存成功的修改不會留在快取裡被下一次寫入一起帶進檔案。版本衝突時 _writeFile 已把快取換成
+     磁碟上的最新內容（不是這份複本）→ 不退回。 */
+  async _commit(mutate, opts) {
+    const base = dbCache;
+    const draft = _fdbClone(base) || {};
+    mutate(draft);
+    dbCache = draft;
+    try { await this._writeFile(opts); }
+    catch (e) { if (dbCache === draft) dbCache = base; throw e; }
+  },
+
   async setDoc(colName, docId, data) {
     this._assertReady();
-    if (!dbCache[colName]) dbCache[colName] = {};
-    dbCache[colName][docId] = _fdbClone(data);
-    await this._writeFile();
+    const copy = _fdbClone(data);
+    await this._commit(c => { if (!c[colName]) c[colName] = {}; c[colName][docId] = copy; });
   },
 
   async updateDoc(colName, docId, fields) {
     this._assertReady();
     const existing = dbCache[colName]?.[docId];
     const f = _fdbFields(fields, existing);
-    if (!dbCache[colName]) dbCache[colName] = {};
-    dbCache[colName][docId] = { ...(existing ?? {}), ...f };
-    await this._writeFile();
+    await this._commit(c => {
+      if (!c[colName]) c[colName] = {};
+      c[colName][docId] = { ...(c[colName][docId] ?? {}), ...f };
+    });
   },
 
   /**
@@ -115,27 +127,22 @@ const fileDb = {
    */
   async writeBatch(ops) {
     this._assertReady();
-    // 先把每一筆要寫的內容算好；任何一筆丟例外（例如合併有未決定的衝突）→ 整批都不動快取
+    // 先把整批要寫的內容算完（任何一筆丟例外 → 整批不寫、快取不動）
     const plan = ops.map(op => ({ op, value: op.type === 'update'
       ? _fdbFields(op.fields, (dbCache[op.col] || {})[op.id]) : _fdbClone(op.data) }));
-    for (const { op, value } of plan) {
-      if (!dbCache[op.col]) dbCache[op.col] = {};
-      if (op.type === 'update') {
-        const existing = dbCache[op.col][op.id] ?? {};
-        dbCache[op.col][op.id] = { ...existing, ...value };
-      } else {
-        dbCache[op.col][op.id] = value;
+    await this._commit(c => {
+      for (const { op, value } of plan) {
+        if (!c[op.col]) c[op.col] = {};
+        if (op.type === 'update') c[op.col][op.id] = { ...(c[op.col][op.id] ?? {}), ...value };
+        else c[op.col][op.id] = value;
       }
-    }
-    await this._writeFile();
+    });
   },
 
   async deleteDoc(colName, docId) {
     this._assertReady();
     if (dbCache[colName]) {
-      delete dbCache[colName][docId];
-      // 使用者刻意刪除專案（含最後一筆）是合法操作 → 放行並同步保險絲基準
-      await this._writeFile({ allowEmptyProjects: colName === 'projects' });
+      await this._commit(c => { delete c[colName][docId]; }, { allowEmptyProjects: colName === 'projects' });
       if (colName === 'projects') {
         lastReadProjects = Object.keys(dbCache.projects || {}).length;   // 刪除後磁碟即此筆數
       }
@@ -253,9 +260,12 @@ const fileDb = {
 
     // Step 3: Write with new version (strictly increasing to avoid
     // same-millisecond collisions across rapid sequential writes)
-    dbCache.version = Math.max(Date.now(), currentVersion + 1);
-    currentVersion = dbCache.version;
+    // currentVersion 等寫入成功才提交：寫檔失敗（沒有寫入權限…）時磁碟上還是舊版本，
+    // 先提交的話之後每一次寫入都會被誤判成「版本衝突」。
+    const newVersion = Math.max(Date.now(), currentVersion + 1);
+    dbCache.version = newVersion;
     await this._writeFileRaw();
+    currentVersion = newVersion;
     // 已成功持久化含 projects 的資料 → 標記本 session 曾有實際資料（截斷偵測用）
     if (Object.keys((dbCache && dbCache.projects) || {}).length > 0) sawRealData = true;
   },
