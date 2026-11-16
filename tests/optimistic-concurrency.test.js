@@ -65,6 +65,7 @@ global.fetch = async (url, opts = {}) => {
     server.putAttempts++;
     if (server.alwaysBump) server.etag++;
     if (server.beforePut) { const h = server.beforePut; server.beforePut = null; h(); }
+    if (server.failPut) return { ok: false, status: server.failPut, statusText: 'Fail', json: async () => ({}), text: async () => 'denied' };
     const ifMatch = opts.headers && (opts.headers['If-Match'] || opts.headers['if-match']);
     if (ifMatch && ifMatch !== server.eTagStr()) {
       return { ok: false, status: 412, statusText: 'Precondition Failed',
@@ -230,6 +231,16 @@ async function expectThrow(name, fn, predicate) {
   check('寫入先得到 412（eTag 沒被換成新的）→ 以磁碟為準重讀後才寫', server.putAttempts === base + 2);
   check('磁碟上的新內容（pExt）沒有被舊快取蓋掉', server.db().projects.pExt?.e === 1);
   check('我方的寫入也成功', server.db().projects.pMine?.m === 1);
+
+  console.log('[T17] 寫入失敗（非 412，例：403 權限不足）→ 快取退回寫入前，沒存成功的修改不會留在快取裡');
+  await graphDb.refresh();
+  server.failPut = 403;
+  base = server.puts;
+  await expectThrow('403 原樣丟出', () => graphDb.updateDoc('projects', 'p1', { unsaved: 'x' }), e => e.status === 403);
+  server.failPut = 0;
+  check('快取沒有留下沒存成功的修改', (await graphDb.getDoc('projects', 'p1')).unsaved === undefined);
+  await graphDb.setDoc('projects', 'pAfter', { z: 1 });     // 之後另一筆寫入
+  check('之後的寫入不會把那份修改一起寫進資料庫', server.db().projects.p1.unsaved === undefined && server.db().projects.pAfter?.z === 1);
 
   console.log('[T16] 本 session 第一次讀檔就讀到空內容：檔案大小不是 0 → 唯讀保護；真的是 0 → 建立空骨架');
   delete window.graphDb;

@@ -67,7 +67,7 @@ async function setupDb(page) {
   const errors = [];
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => typeof lockPillSync === 'function' && typeof saveAllTabs === 'function' && document.getElementById('gm-rail'));
+  await page.waitForFunction(() => typeof lockPillSync === 'function' && typeof saveAllTabs === 'function' && document.getElementById('appbar'));
   await setupDb(page);
 
   const pill = () => page.evaluate(() => {
@@ -90,15 +90,16 @@ async function setupDb(page) {
     return {
       bars: document.querySelectorAll('.protect-bar').length,
       oldIds: ['sg-protect-bar', 'protect-bar', 'vd-protect-bar', 'via-protect-bar', 'fb-protect-bar'].filter(id => document.getElementById(id)).length,
-      badgeInRow: !!vb.closest('.tabnav-side') && !vb.closest('.header') && vb.nextElementSibling === document.getElementById('lock-pill'),
+      badgeInRow: !!vb.closest('.tabnav-row .tabnav-side') && !vb.closest('#appbar'),
       badgeFont: parseFloat(getComputedStyle(vb).fontSize),
-      pillInRow: !!document.getElementById('lock-pill').closest('.tabnav-row'),
+      pillInBar: !!document.getElementById('lock-pill').closest('#appbar') && getComputedStyle(document.getElementById('appbar')).position === 'sticky',
+      barH: Math.round(document.getElementById('appbar').getBoundingClientRect().height),
       rowH: Math.round(document.querySelector('.tabnav-row').getBoundingClientRect().height),
     };
   });
   ok('各頁的密碼保護橫幅都拿掉了（沒有 .protect-bar、舊 id 都不在）', A.bars === 0 && A.oldIds === 0, A);
-  ok('版本徽章在分頁列、編輯鎖左邊（不在標題列，登入後標題列才不會換行）、字小（≤ 10.5px）', A.badgeInRow && A.badgeFont <= 10.5, A);
-  ok('編輯鎖在分頁列裡，分頁列只有一行高（≤ 50px）', A.pillInRow && A.rowH <= 50, A);
+  ok('版本徽章在分頁列右邊（不在頂端工具列）、字小（≤ 11.5px）', A.badgeInRow && A.badgeFont <= 11.5, A);
+  ok('編輯鎖在頂端固定工具列裡（捲動時一直看得到）；工具列 ≤ 60px、分頁列一行 ≤ 62px', A.pillInBar && A.barH <= 60 && A.rowH <= 62, A);
 
   console.log('\n[B] 資料庫範圍（EE/RF/PWR 頁）');
   let P = await pill();
@@ -130,7 +131,6 @@ async function setupDb(page) {
   P = await pill();
   const saveOn = await page.evaluate(() => !document.getElementById('sg-comp-save-btn').disabled && !document.getElementById('save-btn').disabled && !document.getElementById('vd-save-btn').disabled);
   ok('0000 → 🔓 編輯中（可儲存）＋「鎖定」，各頁儲存鈕可用', /unlocked/.test(P.cls) && !/open/.test(P.cls) && P.text === '編輯中（可儲存）' && P.btn === '鎖定' && !P.isProtected && saveOn, P);
-  ok('解鎖後工具列🔒同步為「鎖定資料庫」', await page.evaluate(() => document.getElementById('rail-lock-btn').getAttribute('data-tip') === '鎖定資料庫'));
   await page.click('#lock-pill-btn');
   await page.waitForTimeout(30);
   P = await pill();
@@ -199,24 +199,15 @@ async function setupDb(page) {
   ok('回饋頁按「鎖定」→ 回饋管理唯讀', P.fbIsProtected && P.text === '回饋管理唯讀', P);
   await page.evaluate(() => switchTab('specgen'));
 
-  console.log('\n[E] 右側工具列🔒');
+  console.log('\n[E] 只有一個解鎖入口');
+  ok('右側浮動工具列與它的密碼框已移除（解鎖／儲存固定在頂端，不會有兩個密碼框）', await page.evaluate(() =>
+    !document.getElementById('gm-rail') && !document.getElementById('rail-lock-popover') && !document.getElementById('rail-lock-btn')
+    && document.querySelectorAll('input[type=password]#lock-pill-pwd').length === 1));
+  await page.evaluate(() => { window.scrollTo(0, 99999); });
   await page.click('#lock-pill-btn');
-  await page.evaluate(() => railToggleLock());
   P = await pill();
-  ok('開工具列密碼框 → 膠囊的密碼框收起（不同時開兩個）', !/open/.test(P.cls) && await page.evaluate(() => document.getElementById('rail-lock-popover').style.display === 'flex'), P);
-  await page.fill('#rail-lock-pwd', '0000');
-  await page.evaluate(() => railConfirmUnlock());
-  await page.waitForTimeout(40);
-  P = await pill();
-  ok('工具列解鎖 → 膠囊同步顯示編輯中', !P.isProtected && P.text === '編輯中（可儲存）', P);
-  await page.evaluate(() => railToggleLock());
-  await page.waitForTimeout(30);
-  P = await pill();
-  ok('工具列鎖定 → 膠囊同步回唯讀', P.isProtected && P.text === '唯讀', P);
-  await page.evaluate(() => railToggleLock());
-  await page.click('#lock-pill-btn');
-  ok('開膠囊密碼框 → 工具列密碼框收起', await page.evaluate(() => document.getElementById('rail-lock-popover').style.display === 'none' && document.getElementById('lock-pill').classList.contains('open')));
-  await page.evaluate(() => lockPillCollapse());
+  ok('捲到頁面最底也能直接按編輯鎖（不必捲回頂端）', /open/.test(P.cls) && P.pwdVis, P);
+  await page.evaluate(() => { lockPillCollapse(); window.scrollTo(0, 0); });
 
   console.log('\n[F] 唯讀時點編輯區');
   await page.evaluate(() => { applyReadonlyLock(); document.getElementById('sg-project-components').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
@@ -251,7 +242,7 @@ async function setupDb(page) {
   const errors2 = [];
   p2.on('pageerror', e => errors2.push(String(e)));
   await p2.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await p2.waitForFunction(() => typeof lockPillSync === 'function' && document.getElementById('gm-rail'));
+  await p2.waitForFunction(() => typeof lockPillSync === 'function' && document.getElementById('appbar'));
   await p2.waitForFunction(() => document.getElementById('version-badge').classList.contains('is-latest'), null, { timeout: 15000 }).catch(() => {});
   await setupDb(p2);
   await p2.evaluate(() => {
@@ -275,32 +266,30 @@ async function setupDb(page) {
       await p2.waitForTimeout(60);
       const g = await p2.evaluate(() => {
         const R = (el) => el.getBoundingClientRect();
+        const vw = document.documentElement.clientWidth;
+        const bar = document.getElementById('appbar'), br = R(bar);
+        const kids = [...bar.querySelectorAll('button, select, #lock-pill, .ab-brand')].filter(e => e.offsetParent !== null && !e.closest('.ab-pop') && !e.closest('#lock-pill button')).map(R);
         const p = R(document.getElementById('lock-pill'));
-        const b = R(document.getElementById('version-badge'));
-        const n = R(document.querySelector('.tab-nav'));
+        const tip = document.getElementById('lock-pill-tip'), tr = tip.offsetParent !== null ? R(tip) : null;
         const row = R(document.querySelector('.tabnav-row'));
-        const rail = R(document.getElementById('gm-rail'));
-        const fab = R(document.getElementById('tc-fab'));
-        const hdr = document.querySelector('.header');
-        const kids = [...hdr.children].filter(e => e.offsetParent !== null).map(e => e.getBoundingClientRect());
-        const clear = (r) => r.width === 0 || p.right <= r.left - 2 || p.bottom <= r.top || p.top >= r.bottom;
-        const stacked = b.bottom <= p.top + 1;
+        const tabs = [...document.querySelectorAll('.tab-nav .tab-btn')].map(R);
+        const b = R(document.getElementById('version-badge'));
         return {
-          oneLine: p.top >= n.top - 4 && p.bottom <= n.bottom + 4 && b.top >= row.top - 1 && row.height <= n.height + 6,
-          badgeOk: b.width > 40 && (stacked ? (b.right <= p.right + 1 && b.right >= p.right - 40) : (b.right <= p.left && p.left - b.right <= 12)),
-          stacked, railClear: clear(rail) && clear(fab),
-          hscroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          headerOneLine: kids.every(r => Math.abs(r.top - kids[0].top) < 30),
-          rowH: Math.round(row.height), spare: Math.round(p.left - n.right - (stacked ? 0 : b.width + 8)),
+          barOneLine: br.height <= 60 && kids.every(k => k.top >= br.top && k.bottom <= br.bottom && k.left >= 0 && k.right <= vw),
+          noOverlap: kids.every((a, i) => kids.every((c, j) => i >= j || a.right <= c.left + 1 || c.right <= a.left + 1)),
+          tipIn: !tr || (tr.left >= 0 && tr.right <= vw),
+          tabsOneLine: tabs.every(t => Math.abs(t.top - tabs[0].top) < 2) && row.height <= 62,
+          badgeOk: b.width > 40 && b.right <= vw && b.left >= tabs[tabs.length - 1].right && b.top >= row.top && b.bottom <= row.bottom,
+          hscroll: document.documentElement.scrollWidth - vw,
+          rowH: Math.round(row.height) + Math.round(br.height), pillW: Math.round(p.width),
         };
       });
       heights.push(g.rowH);
       const label = { locked: '', open: '（展開密碼框）', unlocked: '（已解鎖）', 'fb-open': '（回饋頁展開密碼框）' }[mode];
-      const where = g.stacked ? '徽章在編輯鎖上方' : '徽章在編輯鎖左邊';
-      ok(`${w}px${label}：分頁列一行（${where}）、不被工具列蓋住、沒有橫向捲軸、標題列一行`, g.oneLine && g.badgeOk && g.railClear && g.hscroll <= 0 && g.headerOneLine, g);
-      if (w >= 1536) ok(`${w}px${label}：徽章在編輯鎖左邊`, !g.stacked, g);
+      ok(`${w}px${label}：頂端工具列一行、按鈕都在畫面內不重疊、提示文字不超出畫面；分頁列一行、版本徽章在分頁列右邊；沒有橫向捲軸`,
+        g.barOneLine && g.noOverlap && g.tipIn && g.tabsOneLine && g.badgeOk && g.hscroll <= 0, g);
     }
-    ok(`${w}px：鎖定／展開／解鎖切換時分頁列高度不變（內容不跳）`, Math.max(...heights) - Math.min(...heights) <= 1, heights);
+    ok(`${w}px：鎖定／展開／解鎖切換時頂端工具列＋分頁列高度不變（內容不跳）`, Math.max(...heights) - Math.min(...heights) <= 1, heights);
   }
   await p2.evaluate(() => { relock(); switchTab('specgen'); lockPillCollapse(); });
   ok('1366px 已解鎖：文字收成「編輯中」，完整說明在 tooltip', await p2.evaluate(() => {
@@ -314,11 +303,11 @@ async function setupDb(page) {
   const H = await p2.evaluate(() => ({
     text: document.getElementById('vb-ver').textContent, title: document.getElementById('version-badge').title,
     latest: document.getElementById('version-badge').classList.contains('is-latest'),
-    inRow: !!document.getElementById('version-badge').closest('.tabnav-row'), inHeader: !!document.getElementById('version-badge').closest('.header'),
+    inRow: !!document.getElementById('version-badge').closest('.tabnav-row'), inHeader: !!document.getElementById('version-badge').closest('#appbar'),
   }));
   ok('徽章只顯示日期時間（不含 commit）、tooltip 有完整版本號＋「已是最新版本」', H.text === 'v2026.10.13.1557' && H.title === '軟體版本 v' + VER + '（已是最新版本）', H);
   ok('與線上版本相同 →「✓ 最新」', H.latest, H);
-  ok('徽章在分頁列（編輯鎖旁），不在標題列', H.inRow && !H.inHeader, H);
+  ok('徽章在分頁列右邊，不在頂端工具列', H.inRow && !H.inHeader, H);
   ok('沒有 JS 錯誤（版面頁）', errors2.length === 0, errors2);
   await b2.close();
 

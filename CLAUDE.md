@@ -898,6 +898,63 @@ await dbAdapter.updateDoc('projects', docId, {
    否則 workflow 戳的版本不會上線。
 4. 參考 PR #140（`claude/version-conflict-single-user-IQ20W`）。
 
+## 頁面外殼（V4）：頂端固定工具列＋底線式分頁列＋「儀表」視覺層 ⚠️ 改版面前先看這裡
+
+2026-11 整體改版（使用者要求：介面／操作／視覺全面優化，不必被原本格局綁住）。**以下取代**本文件其他地方對
+「各頁專案卡片」「右側浮動工具列（`#gm-rail`／`#tc-rail-wrapper`）」「編輯鎖在分頁列右邊」的描述 —— 那些段落保留作為歷史脈絡，
+與本節衝突時以本節為準。
+
+### 結構
+
+```
+<header class="appbar" id="appbar">   ← position:sticky; top:0; 高 58px（--ab-h）
+  品牌 ｜ 專案 [#sg-project-select] [重新載入 #sg-load-btn] ｜ [＋新增][✎改名][🗑刪除]   …   [存檔訊息] [儲存 #sg-comp-save-btn] [#lock-pill] [Teams #tc-fab] [登入][帳號選單 ▾]
+<div class="tabnav-row">               ← 底線式分頁，右邊是版本徽章（不固定，會捲走）
+<div id="tab-…">                       ← 各頁只剩「頁名＋匯出鈕」一列（.page-bar／.card.proj-card 被 CSS 攤平）
+```
+
+- **專案選單、重新載入、儲存、編輯鎖只有頂端這一組**，任何分頁、捲到哪裡都按得到。四頁同步開同一個專案的機制不變
+  （`PROJ_SELECTS`）：`#sg-project-select` 是使用者操作的那一個（整顆元素搬進頂端工具列，id 與 `onchange` 不變）；
+  `#project-select`／`#vd-project-select`／`#via-project-select` 與各頁的載入／儲存鈕**仍在 DOM 裡當鏡像**（CSS 隱藏
+  `.sg-proj-toolbar .sg-proj-field, .sg-proj-actions`），JS 照舊同步它們 —— 不要刪，很多函式用 id 取值。
+- **右側浮動工具列整個移除**（它會蓋住表格右緣的刪除鈕／備註欄；功能全部重複）：備份、載入離線資料庫、系統管理、登出收進
+  帳號選單（`#ab-acct-pop`，`abMenuToggle`／`abMenuClose`）；切換分頁的捷徑、關於視窗、工具列密碼框（`#rail-lock-popover`）拿掉。
+  `railIsFeedbackActive`／`railCurrentLocked`／`railSyncLockIcon`（＝`lockPillSync`）／`railSave` 名稱沿用，呼叫端不必改。
+  原本為了讓出工具列而加的右側 padding 一律歸零。
+- **儲存鈕是整個工具唯一的實心主要按鈕**（文字「儲存」，原「儲存元件變更」；訊息裡一律寫「儲存」）。有未儲存的修改 → 右上角琥珀色圓點
+  （`.ab-dirty`，`abDirtySync`：input／change／click／keyup 後合併 250ms 比對 `hasUnsavedEdits()`；只是提示，不改存檔流程）。
+- 新增專案表單（`#sg-new-project-form.active`）是頂端工具列下方的浮動面板（fixed），不再把整頁往下推。
+- 狀態訊息（`.comp-status`：「成功載入 N 個專案」等）是畫面下方置中的浮動提示（fixed），不佔版面；只顯示作用中分頁的那一則。
+- **窄螢幕的讓位順序**（1366 已登入＋長姓名＋存檔訊息也要一行）：存檔訊息先縮 → 帳號名稱截斷 → 品牌副標收掉 → 「專案」標籤收掉；
+  專案下拉至少 160px。新增頂端工具列的按鈕前先跑 `tests/sg-head-layout.test.js`（[E] 最後一段）與 `tests/lock-pill.test.js` [G]。
+
+### 視覺層（`index.html` 的 `/* ▣V4-BEGIN */ … /* ▣V4-END */`，最後一層）
+
+**風格＝方案 C「Thermal Spectrum」**（使用者看過三個方案的預覽後選定：A 台達藍圖斜切風／B 深色機房風／C；
+第一版的中性灰藍被評為「跟一般 AI 基本款很像」）。區塊前半是 V4 基礎規則，後半「使用者選定的風格：方案 C」蓋過它，色票在後半的 `:root`。
+
+- **識別**：頁面最上方一條 4px 的**熱影像色帶**（`--heat`：深藍→台達藍→青→綠→黃→橘→紅，`body::before`，固定）；品牌方塊與 Total 功耗讀值用同一條漸層。
+  主色台達藍 `#0079c8`（近似值，不是官方色號；使用者提供標準色號時換 `--gm-primary*`）。不放台達商標圖形。
+- **造型**：膠囊形按鈕與下拉（999px）、卡片圓角 12px＋柔和陰影、**作用中的分頁是實心藍色膠囊**（使用者要求：分頁標題像以前一樣整顆上色）、
+  儲存鈕是深色實心膠囊。頂端工具列 58px（`--ab-h`）。
+- **分類色**：RF 藍 `#0f6fc6`／Digital 紫 `#5b3fc4`／PWR 橘 `#c05a12`（白字對比 ≥ 4.5:1；**不用紅色**，紅色只給錯誤／刪除）。
+  分類標題列**整條塗滿分類色＋白字**（使用者要求），右端有「散熱鰭片」直紋。PDF 匯出的 `CAT_COLORS` 用同一組值（三方同步）。
+- **分類圖示是同一套線條 SVG**（`CAT_ICONS`）：RF＝天線訊號、Digital＝**晶片**（使用者指出原本的 💲 是錢的符號）、PWR＝閃電。不要換回 emoji。
+- **Teams 鈕**（`#tc-fab`，頂端工具列）：Teams 紫色方塊＋白色 T 與人像（使用者要求：要一眼認得出是 Teams）。
+- **數字用等寬字** JetBrains Mono（Google Fonts，載不到退回 Cascadia Mono／Consolas）；下拉與文字欄照 UI 字型（等寬字較寬，下拉用了會被截斷）。
+- **表頭與資料同一個對齊方式**（使用者回報沒對齊）：EE 頁文字欄（Component、Type）靠左、數字欄置中，表頭跟著。
+- **24 吋用滿畫面**（使用者常用 17 吋與 24 吋）：`.container` 沒有寬度上限。TH/ME 頁在 ≥1700px 把上下疊的格子改成並排
+  （TIM Type｜型號、凸台模式｜尺寸、元件大小｜E-PAD）→ 列高 72 → 約 35px，StarKcore 整個專案一屏看完；較窄的螢幕維持上下疊（放不下）。
+  **改這三欄的內容或選項長度要跑 `tests/complist-layout.test.js`**（1920 也會量有沒有被截斷）。
+- **表格密度**：EE 頁列高約 35px（原 55px）—— 限溫＋限溫對象並排、TH Via 的下拉＋數字並排（選了「自行輸入」後下拉縮成一顆小箭頭）、
+  Temp Sensor 的 Local／Remote 並排；`.sg-comp-list-table` 是 `table-layout:fixed`，欄寬寫死（`th:nth-child(n)`）
+  → 三個分類的欄位上下對齊，多出來的寬度全部給元件名稱。**加欄位／改欄寬要一起改那組 nth-child**。
+- **唯讀（未解鎖）時輸入框顯示成純文字**（透明底、無框線、無下拉箭頭），解鎖後才出現底色（UX 慣例 2）。
+- 匯出／次要工具鈕統一成外框膠囊鈕（原本每顆一個顏色、半高）。
+- 前面的 Gamma 層、Claude 暖色層**還留在檔案裡**被 V4 蓋過（很多規則帶 `!important`，V4 因此也得帶）。之後整理 CSS 時可以刪掉被完全蓋過的舊規則，
+  但要逐頁截圖比對；不要再往上疊一層。
+- 5G-RRU 用同一套風格（同色票、同分類色、同熱影像色帶）。
+
 ## 四個功能頁同步開同一個專案（`projSelectChange` / `projOpenAll` / `projLoadAll`）⚠️
 
 EE/RF/PWR（Tab1）、TH/ME（Tab2）、模擬與實測驗證（Tab3）、Thermal Via 四頁**永遠開同一個專案**：任何一頁的專案下拉
@@ -915,7 +972,7 @@ EE/RF/PWR（Tab1）、TH/ME（Tab2）、模擬與實測驗證（Tab3）、Therma
 - 各頁原本的載入函式（`sgOnProjectChange`／`onProjectChange`／`vdOnProjectChange`）仍是單頁載入、保留給程式與測試；
   文件其他地方「兩頁同專案才推導／比對」的守衛**不要拿掉** —— 平常一定同專案，但某一頁載入失敗時仍可能不同。
 - 契約測試：`tests/project-sync.test.js`（四頁一起切換、載入鈕只重讀一次、未存變更的取消／放棄／儲存／存不成、清空、
-  刪除／新增專案、工具列收起時常駐解鎖／儲存）。
+  刪除／新增專案、頂端固定工具列在每一頁捲到最底都按得到、儲存鈕的未儲存圓點）。
 
 ## 編輯鎖：分頁列右邊一顆膠囊（`#lock-pill`），取代各頁的「密碼保護」橫幅 ⚠️
 

@@ -128,26 +128,21 @@ const TIM_LIB = { a: { model: 'TG-A1250', timType: 'Pad', k: 12.5, thickness: 1.
     ok(`${w}px：值沒有被截斷（12.5×12.5、無凸台，刻花定位、0.05mm以下、Copper Coin…）、鎖定值與 ✂ 同一行`, p.cut.length === 0 && p.split === 0, p);
   }
 
-  console.log('\n[B] 右側浮動工具列不蓋住備註欄');
-  const railGap = () => page.evaluate(() => {
-    const rail = document.getElementById('tc-rail-wrapper').getBoundingClientRect();
+  console.log('\n[B] 右側浮動工具列已移除（解鎖／儲存在頂端固定工具列）→ 備註欄不會被蓋住、表格用滿寬度');
+  const noteHit = () => page.evaluate(() => {
     const btns = [...document.querySelectorAll('#comp-container .comp-table .note-col .sg-note-btn')].filter(b => b.offsetParent);
-    const right = Math.max(...btns.map(b => b.getBoundingClientRect().right));
-    const tab = getComputedStyle(document.getElementById('tab-complist')).paddingRight;
-    return { railLeft: Math.round(rail.left), noteRight: Math.round(right), pad: tab };
+    const b = btns[0]; b.scrollIntoView({ block: 'center' });
+    const r = b.getBoundingClientRect(), e = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    return { rail: !!document.getElementById('gm-rail') || !!document.getElementById('tc-rail-wrapper'), hit: e === b || b.contains(e),
+             pad: getComputedStyle(document.getElementById('tab-complist')).paddingRight };
   });
   for (const w of [1366, 1536, 1600, 1920]) {
     await page.setViewportSize({ width: w, height: 900 });
     await page.waitForTimeout(80);
-    const g = await railGap();
-    ok(`${w}px：📝 在工具列左邊（不被蓋住）`, g.noteRight <= g.railLeft, g);
+    const g = await noteHit();
+    ok(`${w}px：沒有浮動工具列、📝 點得到、頁面不必讓位（padding 0）`, !g.rail && g.hit && g.pad === '0px', g);
   }
-  ok('1920px 本來就不重疊 → 不讓位（padding 0）', (await railGap()).pad === '0px');
   await page.setViewportSize({ width: 1536, height: 900 });
-  await page.evaluate(() => document.getElementById('tc-rail-wrapper').classList.add('gm-moved'));
-  await page.waitForTimeout(50);
-  ok('工具列被拖走（.gm-moved）→ 不讓位，表格用滿寬度', (await railGap()).pad === '0px');
-  await page.evaluate(() => document.getElementById('tc-rail-wrapper').classList.remove('gm-moved'));
 
   console.log('\n[C] 備註 📝 icon');
   const sel = (n) => `#comp-container tr[data-speckey="${n}"] button.sg-note-btn`;

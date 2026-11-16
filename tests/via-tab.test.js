@@ -127,7 +127,7 @@ const PROJ = () => ({
     const lists = [document.getElementById('fb-tab-sel'), document.querySelector('.fb-filter-item select[onchange*="fbFilters.tab"]')];
     return lists.every(sel => { const o = sel ? [...sel.options].map(x => x.text) : []; const i = o.indexOf('Thermal Via 計算'); return i > 0 && o[i - 1] === '凸台&TIM尺寸速算'; });
   }));
-  ok('右側工具列有「切換到 Thermal Via 計算」', await page.evaluate(() => !!document.querySelector('#gm-rail-body [data-tip="切換到 Thermal Via 計算"]')));
+  ok('右側浮動工具列已移除（分頁列就能切換，不放重複的按鈕）', await page.evaluate(() => !document.getElementById('gm-rail')));
   await page.evaluate(() => switchTab('via'));
   ok('沒選專案 → 空白提示、匯出／儲存停用', await page.evaluate(() => !!document.querySelector('#via-container .empty-state') && document.getElementById('via-export-excel-btn').disabled && document.getElementById('via-save-btn').disabled));
 

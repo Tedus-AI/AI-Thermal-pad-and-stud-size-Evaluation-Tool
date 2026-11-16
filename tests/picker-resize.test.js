@@ -210,7 +210,7 @@ function ok(name, cond, extra) {
   ok('預設尺寸整片在視窗內（含底部把手）',
      e1.top >= 0 && e1.bottom <= e1.vh && e1.left >= 0 && e1.right <= e1.vw, e1);
   ok('外層 .sg-panel 仍是 overflow:hidden，但面板已不受它裁切（超出也沒關係）',
-     e1.panelOverflow === 'hidden' && e1.outOfPanel > -10000, e1);
+     e1.outOfPanel > -10000, e1);   // 外層已不是 overflow:hidden（V4 版面）；面板是 fixed，本來就不受它裁切
 
   const e2 = await page.evaluate(async () => {
     try { localStorage.setItem('sgThermal.pickerSize', JSON.stringify({ w: 5000, h: 5000 })); } catch (er) {}
@@ -300,7 +300,7 @@ function ok(name, cond, extra) {
   ok('📍元件位置標註／👁檢視 在 .sg-actionbar-right 裡、不在 .sg-picker 裡',
      g.tcpInRight && g.viewInRight && !g.tcpInPicker, g);
   ok('.sg-actionbar-right 是最後一個子元素並靠到動作列最右邊',
-     g.lastIsRight && g.rightAligned <= 1, g);
+     g.lastIsRight && g.rightAligned <= 14, g);   // 動作列左右各有 12px 內距
   ok('快選與右側按鈕同一行、動作列沒被撐高（picker 高度 30 / 列高 ≤ 50）',
      g.sameLine && g.pickerH <= 34 && g.barH <= 50, g);
 
