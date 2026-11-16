@@ -93,7 +93,7 @@ const TIM_LIB = { a: { model: 'TG-A1250', timType: 'Pad', k: 12.5, thickness: 1.
 
   console.log('\n[A] 版面：各種寬度都沒有橫向捲軸');
   const ths = await page.evaluate(() => [...document.querySelector('#comp-container table.comp-table thead tr').children].map(t => t.textContent.replace(/\s+/g, '')));
-  ok('欄位順序不變（16 欄，備註在最後）', ths.join('|') === '隱藏|#|元件名稱|規格書|數量|發熱瓦數(W)|元件大小(mm)|元件高度max(mm)|TIMType|凸台大小(mm)|凸台表面處理|TIM厚度(mm)|TIMSize(mm)|主散熱路徑|IC距離HSK|備註', ths);
+  ok('欄位順序不變（16 欄，備註在最後；元件大小｜E-PAD、TIM 類型｜型號、凸台模式｜大小各有兩個子欄名）', ths.join('|') === '隱藏|#|元件名稱|規格書|數量|發熱瓦數(W)|元件大小(mm)E-PAD(mm)|元件高度max(mm)|TIM類型TIM型號|凸台模式凸台大小(mm)|凸台表面處理|TIM厚度(mm)|TIMSize(mm)|主散熱路徑|IC距離HSK|備註', ths);
   const probe = () => page.evaluate(() => {
     const de = document.documentElement;
     const wraps = [...document.querySelectorAll('#comp-container .comp-table-wrap')].filter(w => w.offsetParent);
@@ -120,12 +120,45 @@ const TIM_LIB = { a: { model: 'TG-A1250', timType: 'Pad', k: 12.5, thickness: 1.
     }).length;
     return { doc: de.scrollWidth - de.clientWidth, over, cut, split, tables: wraps.length };
   });
-  for (const w of [1920, 1600, 1536, 1440, 1366]) {
+  for (const w of [1920, 1600, 1536, 1519, 1440, 1366]) {   // 1519＝17 吋筆電 125%（1536）扣掉 Windows 捲軸
     await page.setViewportSize({ width: w, height: 900 });
     await page.waitForTimeout(80);
     const p = await probe();
     ok(`${w}px：整頁與 ${p.tables} 張表都沒有橫向捲軸`, p.doc <= 0 && p.over.length === 0, p);
     ok(`${w}px：值沒有被截斷（12.5×12.5、無凸台，刻花定位、0.05mm以下、Copper Coin…）、鎖定值與 ✂ 同一行`, p.cut.length === 0 && p.split === 0, p);
+  }
+
+  console.log('\n[A2] 一格兩個值的三欄：每個子欄名對齊在自己的值上方（使用者回報：並排後看不出哪個是哪個）');
+  const pair = () => page.evaluate(() => {
+    const cx = el => { const r = el.getBoundingClientRect(); return (r.left + r.right) / 2; };
+    const vis = el => !!el && el.getClientRects().length > 0;
+    const tr = [...document.querySelectorAll('#comp-container table.comp-table tbody tr')].find(r => r.offsetParent && r.querySelector('td.heat-source-col .epad-sub') && r.querySelector('td.tim-type-col .tim-model-sub') && r.querySelector('td.boss-size-col > .cell-select'));
+    if (!tr) return null;
+    const th = c => tr.closest('table').querySelector('thead th.' + c);
+    const one = (c, a, b) => { const h = th(c), td = tr.querySelector('td.' + c), A = td.querySelector(a), B = td.querySelector(b), ha = h.querySelector('.th2-a'), hb = h.querySelector('.th2-b');
+      const cy = el => { const r = el.getBoundingClientRect(); return (r.top + r.bottom) / 2; }, RR = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; };
+      return { side: Math.abs(cy(A) - cy(B)) < 8, hbVis: vis(hb), da: Math.round(Math.abs(cx(ha) - cx(A))), db: vis(hb) ? Math.round(Math.abs(cx(hb) - cx(B))) : null,
+               stackedHead: hb && vis(hb) && hb.getBoundingClientRect().top > ha.getBoundingClientRect().top + 6, ta: ha.textContent.replace(/\s+/g, ''), tb: hb.innerText.replace(/\s+/g, '') }; };
+    const plain = [...document.querySelectorAll('#comp-container table.comp-table tbody tr')].find(r => r.offsetParent && !r.querySelector('td.heat-source-col .epad-sub'));
+    const dash = plain ? getComputedStyle(plain.querySelector('td.heat-source-col'), '::after').content : '';
+    const hs = plain.querySelector('td.heat-source-col .cell-input'), hth = plain.closest('table').querySelector('thead th.heat-source-col .th2-a');
+    return { size: one('heat-source-col', '.cell-input[data-field="heatSourceSize"]', '.epad-sub .cell-input'), tim: one('tim-type-col', '.cell-select[data-field="timType"]', '.tim-model-sub'),
+             boss: one('boss-size-col', '.cell-select', '.cell-input, .tim-locked-val'), epadLabel: vis(tr.querySelector('.epad-label')), rowH: Math.round(tr.getBoundingClientRect().height),
+             dash, plainDa: Math.round(Math.abs(cx(hth) - cx(hs))) };
+  });
+  for (const w of [1920, 1536, 1519]) {
+    await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(450);   // 輸入框有寬度轉場，等它走完再量
+    const q = await pair();
+    ok(`${w}px：三欄都並排、列高 ≤ 46px（原本上下疊 72px 以上）`, q && q.size.side && q.tim.side && q.boss.side && q.rowH <= 46, q);
+    ok(`${w}px：子欄名在自己的值正上方（中心差 ≤ 8px）：元件大小｜E-PAD、TIM 類型｜TIM 型號、凸台模式｜凸台大小`,
+       q && [q.size, q.tim, q.boss].every(c => c.hbVis && c.da <= 8 && c.db <= 8) && q.size.tb === 'E-PAD(mm)' && q.tim.tb === 'TIM型號' && q.boss.tb === '凸台大小(mm)', q);
+    ok(`${w}px：格子裡的「E-PAD」小標籤收掉（表頭已經寫了）；沒有 E-PAD 的列在那個位置畫「—」、元件大小留在自己的子欄`, q && !q.epadLabel && /—/.test(q.dash) && q.plainDa <= 8, q);
+  }
+  for (const w of [1440, 1366]) {
+    await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(450);   // 輸入框有寬度轉場，等它走完再量
+    const q = await pair();
+    ok(`${w}px：放不下 → 照舊上下疊，表頭也上下疊（TIM 類型／型號、凸台模式／大小），E-PAD 用格子裡的小標籤`,
+       q && !q.size.side && !q.tim.side && !q.boss.side && q.tim.stackedHead && q.boss.stackedHead && q.tim.tb === '型號' && q.boss.tb === '大小(mm)' && !q.size.hbVis && q.epadLabel && !/—/.test(q.dash), q);
   }
 
   console.log('\n[B] 右側浮動工具列已移除（解鎖／儲存在頂端固定工具列）→ 備註欄不會被蓋住、表格用滿寬度');
