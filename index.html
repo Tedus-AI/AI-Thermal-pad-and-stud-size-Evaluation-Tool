@@ -227,47 +227,12 @@
   }
 
   /* === Password Protection Bar === */
-  .protect-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #fce8e8;
-    border: 1.5px solid #ef9a9a;
-    border-radius: 8px;
-    padding: 10px 18px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-    color: #c00000;
-    font-weight: 600;
-    flex-wrap: wrap;
-  }
-  .protect-bar.unlocked {
-    background: #e8f5e9;
-    border-color: #a5d6a7;
-    color: #217346;
-  }
-  .protect-bar .protect-status {
-    flex: 1;
-    min-width: 160px;
-  }
-  .protect-bar input {
-    padding: 6px 10px;
-    border: 1.5px solid #d0d8e0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    width: 120px;
-    outline: none;
-  }
-  .protect-bar input:focus { border-color: #2e6bb5; }
-  .protect-bar button {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
+  
+  
+  
+  
+  
+  
   .protect-unlock-btn {
     background: #2e6bb5;
     color: #fff;
@@ -284,7 +249,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  .protect-bar.unlocked .protect-hint { display: none; }
+  
 
   /* ── 唯讀點擊回饋（未解鎖時）── */
   /* 讓被禁用欄位的點擊「穿透」落到容器，由容器監聽後跳出提示；整區顯示禁止游標 */
@@ -298,7 +263,7 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
     30%      { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.55); }
   }
-  .protect-bar.ro-flash { animation: roBarPulse 0.7s ease-in-out 3; }
+  
   /* 唯讀提示 toast（琥珀色） */
   #ro-toast {
     position: fixed; top: 22px; left: 50%;
@@ -970,15 +935,7 @@
      內容區置中、重疊逐漸變小。使用者拖走工具列（.gm-moved）就不讓 —— 不知道它被放在哪；
      ≤1100px 工具列本來就隱藏。Thermal Via、模擬與實測驗證頁也整頁讓（儲存鈕、比對環溫的 ✂ 原本被蓋住）；
      EE/RF/PWR 頁只讓專案列（匯出 PDF 原本被蓋住）—— 它的元件表很寬，整頁讓的話 1366 會被裁掉一截。 */
-  @media (min-width: 1101px) {
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-via,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-validation,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-specgen .sg-proj-toolbar {
-      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
-    }
-  }
+  
 
   /* Hidden component collapsible zone (Tab 2 & Tab 3) */
   .hidden-comp-zone {
@@ -2957,7 +2914,6 @@
   .field input, .field select,
   .modal-field input,
   .fb-f input, .fb-f select, .fb-f textarea,
-  .protect-bar input,
   .cell-input, .cell-select {
     border-radius: 10px !important;
     border-color: var(--gm-border) !important;
@@ -2965,8 +2921,7 @@
   }
   .field input:focus, .field select:focus,
   .modal-field input:focus,
-  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus,
-  .protect-bar input:focus {
+  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus{
     border-color: var(--gm-primary) !important;
     box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12) !important;
   }
@@ -2985,7 +2940,6 @@
   .btn-save,
   .modal-confirm-btn,
   .modal-cancel-btn,
-  .protect-bar button,
   .btn-export,
   .fb-btn-clear,
   .fb-btn-submit,
@@ -3103,22 +3057,10 @@
   }
 
   /* ── Protect bar: softer, more banner-like ── */
-  .protect-bar {
-    background: #fef2f2 !important;
-    border: 1px solid #fecaca !important;
-    border-radius: 14px !important;
-    padding: 12px 18px !important;
-  }
-  .protect-bar.unlocked {
-    background: #ecfdf5 !important;
-    border-color: #a7f3d0 !important;
-  }
-  .protect-bar input {
-    border-radius: 8px !important;
-    border-color: #f5cccc !important;
-    background: #fff !important;
-  }
-  .protect-bar.unlocked input { border-color: #a7f3d0 !important; }
+  
+  
+  
+  
   .protect-hint { color: #b91c1c !important; }
   .protect-unlock-btn,
   .protect-lock-btn {
@@ -3360,11 +3302,7 @@
   .gm-action-rail button.gm-ai:hover {
     background: linear-gradient(135deg, #bfdbfe 0%, #c7d2fe 100%);
   }
-  .gm-action-rail .gm-rail-divider {
-    height: 1px;
-    background: var(--gm-border-2);
-    margin: 2px 6px;
-  }
+  
   .gm-action-rail svg { width: 20px; height: 20px; }
   .gm-action-rail button::after {
     content: attr(data-tip);
@@ -3439,7 +3377,7 @@
   }
 
   /* Slight refinement for select arrows */
-  .field select, .fb-f select, .protect-bar select {
+  .field select, .fb-f select{
     appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
     background-repeat: no-repeat;
@@ -3736,7 +3674,6 @@
   .field input, .field select,
   .modal-field input,
   .fb-f input, .fb-f select, .fb-f textarea,
-  .protect-bar input,
   .cell-input, .cell-select {
     border-radius: 9px !important;
     border-color: var(--gm-border) !important;
@@ -3746,8 +3683,7 @@
   }
   .field input:focus, .field select:focus,
   .modal-field input:focus,
-  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus,
-  .protect-bar input:focus {
+  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus{
     border-color: var(--gm-primary) !important;
     box-shadow:
       inset 0 1px 2px rgba(45, 38, 25, 0.04),
@@ -3770,7 +3706,6 @@
   .btn-save,
   .modal-confirm-btn,
   .modal-cancel-btn,
-  .protect-bar button,
   .btn-export,
   .fb-btn-clear,
   .fb-btn-submit,
@@ -3973,25 +3908,9 @@
   }
 
   /* ── Protect bar (parchment warning banner) ── */
-  .protect-bar {
-    background: linear-gradient(180deg, #fef2e9 0%, #fce4d4 100%) !important;
-    border: 1px solid #f5cba8 !important;
-    border-radius: 12px !important;
-    padding: 12px 18px !important;
-    color: #9a3412 !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.5),
-      0 1px 2px rgba(154, 52, 18, 0.06) !important;
-  }
-  .protect-bar.unlocked {
-    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%) !important;
-    border-color: #86efac !important;
-    color: var(--gm-success) !important;
-  }
-  .protect-bar input {
-    border-radius: 8px !important;
-    background: #fff !important;
-  }
+  
+  
+  
   .protect-hint { color: #b45309 !important; }
   .protect-unlock-btn, .protect-lock-btn { padding: 6px 18px !important; }
   .protect-lock-btn {
@@ -4331,11 +4250,7 @@
     color: #fff;
     transform: translateY(-1px);
   }
-  .gm-action-rail .gm-rail-divider {
-    height: 1px;
-    background: var(--gm-border-2);
-    margin: 4px 6px;
-  }
+  
   .gm-action-rail svg { width: 20px; height: 20px; }
   .gm-action-rail button::after {
     content: attr(data-tip);
@@ -4360,14 +4275,12 @@
 
   /* ── 浮動工具列：可收合 + 可拖曳 ──
      預設位置維持原本（右側垂直置中）；拖曳後改用 left/top 絕對定位並記憶於 localStorage。 */
-  .gm-rail-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .gm-rail-body,
-  .gm-rail-pinned { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .gm-action-rail .gm-rail-grip { cursor: grab; height: 22px; }
-  .gm-action-rail .gm-rail-grip svg { width: 18px; height: 18px; opacity: 0.55; }
-  .gm-action-rail .gm-rail-grip:hover svg { opacity: 0.9; }
-  .gm-action-rail.gm-dragging,
-  .gm-action-rail.gm-dragging .gm-rail-grip { cursor: grabbing; }
+  
+  
+  
+  
+  
+  .gm-action-rail.gm-dragging{ cursor: grabbing; }
   .gm-action-rail.gm-dragging { user-select: none; }
   /* 拖曳後：解除原本的右側定位與垂直置中位移，改吃 inline left/top。
      ⚠ 必須作用在 .tc-rail-wrapper 上：rail 被 `.tc-rail-wrapper .gm-action-rail`
@@ -4375,16 +4288,15 @@
      真正被定位（position:fixed）的是外層 wrapper，它同時裝著 Teams FAB 與 rail。
      另注意：不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉我們設的
      inline top，垂直位置會失效；基礎規則的 top:50% 非 !important，inline 本來就蓋得過。 */
-  .tc-rail-wrapper.gm-moved { right: auto !important; transform: none !important; }
+  
   /* 收合：body 與把手隱藏 → 只剩展開鈕＋常駐的解鎖／儲存（.gm-rail-pinned） */
-  .gm-action-rail.gm-collapsed .gm-rail-body,
-  .gm-action-rail.gm-collapsed .gm-rail-grip { display: none; }
+  
   .gm-action-rail.gm-collapsed { padding: 6px; cursor: grab; }
   .gm-action-rail.gm-collapsed.gm-dragging { cursor: grabbing; }
   /* 展開/收合圖示切換 */
-  .gm-rail-ico-expand { display: none; }
-  .gm-action-rail.gm-collapsed .gm-rail-ico-collapse { display: none; }
-  .gm-action-rail.gm-collapsed .gm-rail-ico-expand { display: block; }
+  
+  
+  
 
   /* AI popover */
   .gm-ai-popover {
@@ -4441,7 +4353,7 @@
   }
 
   /* Select arrow recolored to warm */
-  .field select, .fb-f select, .protect-bar select {
+  .field select, .fb-f select{
     appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a877f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") !important;
     background-repeat: no-repeat !important;
@@ -4512,25 +4424,9 @@
   }
   .tc-fab:hover::after { opacity: 1; }
   /* Wrapper: stacks FAB above the rail as one fixed unit */
-  .tc-rail-wrapper {
-    position: fixed;
-    right: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1em;
-  }
-  .tc-rail-wrapper .gm-action-rail,
-  .tc-rail-wrapper .tc-fab {
-    position: static;
-    right: auto; top: auto; bottom: auto;
-    transform: none;
-    z-index: auto;
-  }
-  @media (max-width: 1100px) { .tc-rail-wrapper { display: none; } }
+  
+  
+  
 
   /* 工具列解鎖鈕：已解鎖時的視覺狀態 */
   .gm-action-rail #rail-lock-btn.rail-unlocked {
@@ -4538,51 +4434,13 @@
     background: rgba(31,157,85,0.12);
   }
   /* 工具列浮動密碼框 */
-  .rail-lock-popover {
-    position: fixed;
-    z-index: 1400;
-    transform: translate(-100%, -50%);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: #fff;
-    border: 1px solid #d7dde6;
-    border-radius: 10px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
-    padding: 10px 12px;
-    width: max-content;
-  }
-  .rail-lock-popover .rail-lock-hint {
-    font-size: 0.72rem;
-    color: #6b7785;
-    font-weight: 600;
-  }
-  .rail-lock-popover .rail-lock-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .rail-lock-popover input {
-    width: 130px;
-    padding: 6px 9px;
-    border: 1.5px solid #d0d8e0;
-    border-radius: 7px;
-    font-size: 0.85rem;
-    outline: none;
-  }
-  .rail-lock-popover input:focus { border-color: #6264a7; }
-  .rail-lock-popover button {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 7px;
-    background: #6264a7;
-    color: #fff;
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .rail-lock-popover button:hover { background: #50529a; }
+  
+  
+  
+  
+  
+  
+  
 
   /* 刪除專案浮動密碼框 */
   .sg-del-popover {
@@ -4884,11 +4742,7 @@
   .tabnav-row > .tab-nav { margin-bottom: 0 !important; }
   .tabnav-side { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   /* 右側浮動工具列在預設位置時會蓋住分頁列最右邊 → 讓出空間（與 TH/ME 頁 #tab-complist 同一條規則） */
-  @media (min-width: 1101px) {
-    body:has(#tc-rail-wrapper:not(.gm-moved)) .tabnav-row {
-      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
-    }
-  }
+  
 
   /* ── 編輯鎖（原本每頁一條「密碼保護」橫幅，收成分頁列右邊這一顆）──
      鎖定＝琥珀（提醒，不是錯誤；UX 慣例 7）、已解鎖＝綠。按「解鎖編輯」才展開密碼框。 */
