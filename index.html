@@ -227,47 +227,12 @@
   }
 
   /* === Password Protection Bar === */
-  .protect-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: #fce8e8;
-    border: 1.5px solid #ef9a9a;
-    border-radius: 8px;
-    padding: 10px 18px;
-    margin-bottom: 16px;
-    font-size: 0.9rem;
-    color: #c00000;
-    font-weight: 600;
-    flex-wrap: wrap;
-  }
-  .protect-bar.unlocked {
-    background: #e8f5e9;
-    border-color: #a5d6a7;
-    color: #217346;
-  }
-  .protect-bar .protect-status {
-    flex: 1;
-    min-width: 160px;
-  }
-  .protect-bar input {
-    padding: 6px 10px;
-    border: 1.5px solid #d0d8e0;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    width: 120px;
-    outline: none;
-  }
-  .protect-bar input:focus { border-color: #2e6bb5; }
-  .protect-bar button {
-    padding: 6px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
+  
+  
+  
+  
+  
+  
   .protect-unlock-btn {
     background: #2e6bb5;
     color: #fff;
@@ -284,7 +249,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  .protect-bar.unlocked .protect-hint { display: none; }
+  
 
   /* ── 唯讀點擊回饋（未解鎖時）── */
   /* 讓被禁用欄位的點擊「穿透」落到容器，由容器監聽後跳出提示；整區顯示禁止游標 */
@@ -298,7 +263,7 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
     30%      { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.55); }
   }
-  .protect-bar.ro-flash { animation: roBarPulse 0.7s ease-in-out 3; }
+  
   /* 唯讀提示 toast（琥珀色） */
   #ro-toast {
     position: fixed; top: 22px; left: 50%;
@@ -904,7 +869,7 @@
   }
   .lock-modal-info {
     background: #fff7e6;
-    border-left: 4px solid #f39c12;
+    border: 1px solid #f5c26b;
     padding: 12px 14px;
     border-radius: 4px;
     font-size: 0.9rem;
@@ -970,15 +935,7 @@
      內容區置中、重疊逐漸變小。使用者拖走工具列（.gm-moved）就不讓 —— 不知道它被放在哪；
      ≤1100px 工具列本來就隱藏。Thermal Via、模擬與實測驗證頁也整頁讓（儲存鈕、比對環溫的 ✂ 原本被蓋住）；
      EE/RF/PWR 頁只讓專案列（匯出 PDF 原本被蓋住）—— 它的元件表很寬，整頁讓的話 1366 會被裁掉一截。 */
-  @media (min-width: 1101px) {
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-complist,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-calc,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-via,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-validation,
-    body:has(#tc-rail-wrapper:not(.gm-moved)) #tab-specgen .sg-proj-toolbar {
-      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
-    }
-  }
+  
 
   /* Hidden component collapsible zone (Tab 2 & Tab 3) */
   .hidden-comp-zone {
@@ -1277,7 +1234,7 @@
   .sg-comp-list-table td.sg-limit-col .sg-cell-input.sg-suspect { border: 2px dashed #d97706; background: #fffbeb; }
   .sg-lim-sus { margin-top: 3px; font-size: 0.68rem; color: #92400e; line-height: 1.3; white-space: nowrap; }
   .sg-lim-sus button { padding: 0 5px; font-size: 0.66rem; margin-left: 2px; cursor: pointer; }
-  .sg-lim-sus-banner { background: #fffbeb; border: 1px solid #fcd34d; border-left: 5px solid #d97706; color: #78350f;
+  .sg-lim-sus-banner { background: #fffbeb; border: 1px solid #fcd34d; color: #78350f;
     border-radius: 8px; padding: 9px 14px; margin: 0 0 12px; font-size: 0.84rem; line-height: 1.6; }
   .sg-lim-sus-banner ul { margin: 4px 0 0 18px; } .sg-lim-sus-banner li { margin: 2px 0; }
   .sg-lim-sus-banner .cat { margin-left: 4px; font-size: 0.7rem; font-weight: 800; color: #92400e; }
@@ -1659,7 +1616,7 @@
   .sg-rth-btn:hover { background: #eef2f7; border-color: #94a3b8; }
   .sg-rth-btn.has-rth { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; font-weight: 600; }
   /* θJC 與主散熱路徑對不上（例：IC top 卻只有 θJC,bottom）→ 琥珀色提醒（不是錯誤、不擋存檔） */
-  .sg-rth-fallback { margin-top: 6px; padding: 6px 10px; border-left: 4px solid #d97706; background: #fffbeb;
+  .sg-rth-fallback { margin-top: 6px; padding: 6px 10px; border: 1px solid #fcd34d; border-radius: 8px; background: #fffbeb;
                      color: #78350f; border-radius: 4px; font-size: 0.82rem; line-height: 1.5; }
   .sg-rth-btn.has-rth:hover { background: #ede9fe; border-color: #c4b5fd; }
   /* 熱阻編輯視窗的表格 */
@@ -2957,7 +2914,6 @@
   .field input, .field select,
   .modal-field input,
   .fb-f input, .fb-f select, .fb-f textarea,
-  .protect-bar input,
   .cell-input, .cell-select {
     border-radius: 10px !important;
     border-color: var(--gm-border) !important;
@@ -2965,8 +2921,7 @@
   }
   .field input:focus, .field select:focus,
   .modal-field input:focus,
-  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus,
-  .protect-bar input:focus {
+  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus{
     border-color: var(--gm-primary) !important;
     box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12) !important;
   }
@@ -2985,7 +2940,6 @@
   .btn-save,
   .modal-confirm-btn,
   .modal-cancel-btn,
-  .protect-bar button,
   .btn-export,
   .fb-btn-clear,
   .fb-btn-submit,
@@ -3103,22 +3057,10 @@
   }
 
   /* ── Protect bar: softer, more banner-like ── */
-  .protect-bar {
-    background: #fef2f2 !important;
-    border: 1px solid #fecaca !important;
-    border-radius: 14px !important;
-    padding: 12px 18px !important;
-  }
-  .protect-bar.unlocked {
-    background: #ecfdf5 !important;
-    border-color: #a7f3d0 !important;
-  }
-  .protect-bar input {
-    border-radius: 8px !important;
-    border-color: #f5cccc !important;
-    background: #fff !important;
-  }
-  .protect-bar.unlocked input { border-color: #a7f3d0 !important; }
+  
+  
+  
+  
   .protect-hint { color: #b91c1c !important; }
   .protect-unlock-btn,
   .protect-lock-btn {
@@ -3360,11 +3302,7 @@
   .gm-action-rail button.gm-ai:hover {
     background: linear-gradient(135deg, #bfdbfe 0%, #c7d2fe 100%);
   }
-  .gm-action-rail .gm-rail-divider {
-    height: 1px;
-    background: var(--gm-border-2);
-    margin: 2px 6px;
-  }
+  
   .gm-action-rail svg { width: 20px; height: 20px; }
   .gm-action-rail button::after {
     content: attr(data-tip);
@@ -3439,7 +3377,7 @@
   }
 
   /* Slight refinement for select arrows */
-  .field select, .fb-f select, .protect-bar select {
+  .field select, .fb-f select{
     appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
     background-repeat: no-repeat;
@@ -3736,7 +3674,6 @@
   .field input, .field select,
   .modal-field input,
   .fb-f input, .fb-f select, .fb-f textarea,
-  .protect-bar input,
   .cell-input, .cell-select {
     border-radius: 9px !important;
     border-color: var(--gm-border) !important;
@@ -3746,8 +3683,7 @@
   }
   .field input:focus, .field select:focus,
   .modal-field input:focus,
-  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus,
-  .protect-bar input:focus {
+  .fb-f input:focus, .fb-f select:focus, .fb-f textarea:focus{
     border-color: var(--gm-primary) !important;
     box-shadow:
       inset 0 1px 2px rgba(45, 38, 25, 0.04),
@@ -3770,7 +3706,6 @@
   .btn-save,
   .modal-confirm-btn,
   .modal-cancel-btn,
-  .protect-bar button,
   .btn-export,
   .fb-btn-clear,
   .fb-btn-submit,
@@ -3973,25 +3908,9 @@
   }
 
   /* ── Protect bar (parchment warning banner) ── */
-  .protect-bar {
-    background: linear-gradient(180deg, #fef2e9 0%, #fce4d4 100%) !important;
-    border: 1px solid #f5cba8 !important;
-    border-radius: 12px !important;
-    padding: 12px 18px !important;
-    color: #9a3412 !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.5),
-      0 1px 2px rgba(154, 52, 18, 0.06) !important;
-  }
-  .protect-bar.unlocked {
-    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%) !important;
-    border-color: #86efac !important;
-    color: var(--gm-success) !important;
-  }
-  .protect-bar input {
-    border-radius: 8px !important;
-    background: #fff !important;
-  }
+  
+  
+  
   .protect-hint { color: #b45309 !important; }
   .protect-unlock-btn, .protect-lock-btn { padding: 6px 18px !important; }
   .protect-lock-btn {
@@ -4331,11 +4250,7 @@
     color: #fff;
     transform: translateY(-1px);
   }
-  .gm-action-rail .gm-rail-divider {
-    height: 1px;
-    background: var(--gm-border-2);
-    margin: 4px 6px;
-  }
+  
   .gm-action-rail svg { width: 20px; height: 20px; }
   .gm-action-rail button::after {
     content: attr(data-tip);
@@ -4360,14 +4275,12 @@
 
   /* ── 浮動工具列：可收合 + 可拖曳 ──
      預設位置維持原本（右側垂直置中）；拖曳後改用 left/top 絕對定位並記憶於 localStorage。 */
-  .gm-rail-head { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .gm-rail-body,
-  .gm-rail-pinned { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .gm-action-rail .gm-rail-grip { cursor: grab; height: 22px; }
-  .gm-action-rail .gm-rail-grip svg { width: 18px; height: 18px; opacity: 0.55; }
-  .gm-action-rail .gm-rail-grip:hover svg { opacity: 0.9; }
-  .gm-action-rail.gm-dragging,
-  .gm-action-rail.gm-dragging .gm-rail-grip { cursor: grabbing; }
+  
+  
+  
+  
+  
+  .gm-action-rail.gm-dragging{ cursor: grabbing; }
   .gm-action-rail.gm-dragging { user-select: none; }
   /* 拖曳後：解除原本的右側定位與垂直置中位移，改吃 inline left/top。
      ⚠ 必須作用在 .tc-rail-wrapper 上：rail 被 `.tc-rail-wrapper .gm-action-rail`
@@ -4375,16 +4288,15 @@
      真正被定位（position:fixed）的是外層 wrapper，它同時裝著 Teams FAB 與 rail。
      另注意：不可寫 top:auto !important —— stylesheet 的 !important 會蓋掉我們設的
      inline top，垂直位置會失效；基礎規則的 top:50% 非 !important，inline 本來就蓋得過。 */
-  .tc-rail-wrapper.gm-moved { right: auto !important; transform: none !important; }
+  
   /* 收合：body 與把手隱藏 → 只剩展開鈕＋常駐的解鎖／儲存（.gm-rail-pinned） */
-  .gm-action-rail.gm-collapsed .gm-rail-body,
-  .gm-action-rail.gm-collapsed .gm-rail-grip { display: none; }
+  
   .gm-action-rail.gm-collapsed { padding: 6px; cursor: grab; }
   .gm-action-rail.gm-collapsed.gm-dragging { cursor: grabbing; }
   /* 展開/收合圖示切換 */
-  .gm-rail-ico-expand { display: none; }
-  .gm-action-rail.gm-collapsed .gm-rail-ico-collapse { display: none; }
-  .gm-action-rail.gm-collapsed .gm-rail-ico-expand { display: block; }
+  
+  
+  
 
   /* AI popover */
   .gm-ai-popover {
@@ -4441,7 +4353,7 @@
   }
 
   /* Select arrow recolored to warm */
-  .field select, .fb-f select, .protect-bar select {
+  .field select, .fb-f select{
     appearance: none;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a877f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") !important;
     background-repeat: no-repeat !important;
@@ -4512,25 +4424,9 @@
   }
   .tc-fab:hover::after { opacity: 1; }
   /* Wrapper: stacks FAB above the rail as one fixed unit */
-  .tc-rail-wrapper {
-    position: fixed;
-    right: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1em;
-  }
-  .tc-rail-wrapper .gm-action-rail,
-  .tc-rail-wrapper .tc-fab {
-    position: static;
-    right: auto; top: auto; bottom: auto;
-    transform: none;
-    z-index: auto;
-  }
-  @media (max-width: 1100px) { .tc-rail-wrapper { display: none; } }
+  
+  
+  
 
   /* 工具列解鎖鈕：已解鎖時的視覺狀態 */
   .gm-action-rail #rail-lock-btn.rail-unlocked {
@@ -4538,51 +4434,13 @@
     background: rgba(31,157,85,0.12);
   }
   /* 工具列浮動密碼框 */
-  .rail-lock-popover {
-    position: fixed;
-    z-index: 1400;
-    transform: translate(-100%, -50%);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: #fff;
-    border: 1px solid #d7dde6;
-    border-radius: 10px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
-    padding: 10px 12px;
-    width: max-content;
-  }
-  .rail-lock-popover .rail-lock-hint {
-    font-size: 0.72rem;
-    color: #6b7785;
-    font-weight: 600;
-  }
-  .rail-lock-popover .rail-lock-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .rail-lock-popover input {
-    width: 130px;
-    padding: 6px 9px;
-    border: 1.5px solid #d0d8e0;
-    border-radius: 7px;
-    font-size: 0.85rem;
-    outline: none;
-  }
-  .rail-lock-popover input:focus { border-color: #6264a7; }
-  .rail-lock-popover button {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 7px;
-    background: #6264a7;
-    color: #fff;
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .rail-lock-popover button:hover { background: #50529a; }
+  
+  
+  
+  
+  
+  
+  
 
   /* 刪除專案浮動密碼框 */
   .sg-del-popover {
@@ -4884,11 +4742,7 @@
   .tabnav-row > .tab-nav { margin-bottom: 0 !important; }
   .tabnav-side { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   /* 右側浮動工具列在預設位置時會蓋住分頁列最右邊 → 讓出空間（與 TH/ME 頁 #tab-complist 同一條規則） */
-  @media (min-width: 1101px) {
-    body:has(#tc-rail-wrapper:not(.gm-moved)) .tabnav-row {
-      padding-right: clamp(0px, calc((1648px - 100vw) / 2), 56px);
-    }
-  }
+  
 
   /* ── 編輯鎖（原本每頁一條「密碼保護」橫幅，收成分頁列右邊這一顆）──
      鎖定＝琥珀（提醒，不是錯誤；UX 慣例 7）、已解鎖＝綠。按「解鎖編輯」才展開密碼框。 */
@@ -5468,7 +5322,7 @@
 
   /* 提醒橫幅（琥珀）：收斂成一條細的 */
   .sg-lim-sus-banner {
-    background: var(--st-warn-bg) !important; border: 1px solid var(--st-warn-bd) !important; border-left: 3px solid #d97706 !important;
+    background: var(--st-warn-bg) !important; border: 1px solid var(--st-warn-bd) !important;
     border-radius: var(--r) !important; color: var(--st-warn-fg) !important; padding: 8px 12px !important; margin-bottom: 10px !important;
     font-size: .8rem !important; box-shadow: none !important;
   }
@@ -5904,33 +5758,53 @@
   .sg-rth-btn { border-radius: 999px !important; }
 
 
-  /* TH/ME 頁在寬螢幕（24 吋）把上下疊的兩格改成並排：TIM Type｜型號、凸台模式｜尺寸、元件大小｜E-PAD → 每列 72 → 約 40px */
-  @media (min-width: 1700px) {
+  /* TH/ME 頁：一格裡有兩個值的三欄（元件大小｜E-PAD、TIM 類型｜型號、凸台模式｜大小）。
+     使用者回報 24 吋並排後「欄名只有一個、兩個值離很遠，看不出哪個是哪個」→ 表頭拆成兩個子欄名（.th2-a／.th2-b），
+     寬度與下面兩個輸入格用同一組比例（--a／--b）→ 每個欄名正好在自己的值上方。
+     · 表格寬 < 1470px（上下疊）：表頭也上下疊成兩行（TIM 類型／型號、凸台模式／大小），E-PAD 照舊用格子裡的小標籤。
+     · 表格寬 ≥ 1470px（17 吋筆電 125%＝1536，扣掉捲軸仍成立）並排、列高 72 → 約 36px；≥ 1660px（24 吋）用較寬的比例。
+       用容器查詢（.comp-table-wrap）不用視窗寬：Windows 捲軸佔 17px，視窗寬判斷會剛好差那一點而擠出橫向捲軸。
+     改這三欄的內容或選項長度要跑 tests/complist-layout.test.js（會量有沒有被截斷）。 */
+  .comp-table th .th2 { display: block; }
+  .comp-table th .th2-a, .comp-table th .th2-b { display: block; }
+  .comp-table th .th2-wide, .comp-table th .th2-pre { display: none; }
+  .comp-table-wrap { container-type: inline-size; container-name: cl; }
+  @container cl (min-width: 1470px) {
+    .comp-table th .th2 { display: flex; justify-content: space-between; align-items: center; gap: 2%; }
+    .comp-table th .th2-a { width: var(--a); } .comp-table th .th2-b { width: var(--b); }
+    .comp-table th .th2-wide { display: block; } .comp-table th .th2-pre { display: inline; }
+    .comp-table .heat-source-col { --a: 55%; --b: 42%; }
+    .comp-table th.heat-dir-col, .comp-table td.heat-dir-col { min-width: 112px !important; }
+    .comp-table .tim-type-col { --a: 38%; --b: 60%; }
+    .comp-table .boss-size-col { --a: 61%; --b: 36.5%; }
+    .comp-table .spec-col { min-width: 40px !important; width: 40px !important; } .comp-table .note-col { min-width: 38px !important; width: 38px !important; }
+    .comp-table th.heat-source-col, .comp-table td.heat-source-col { min-width: 164px !important; width: 164px !important; }
+    .comp-table th.tim-type-col, .comp-table td.tim-type-col { min-width: 192px !important; width: 192px !important; }
+    .comp-table th.boss-size-col, .comp-table td.boss-size-col { min-width: 218px !important; width: 218px !important; }
     .comp-table td.tim-type-col, .comp-table td.boss-size-col, .comp-table td.heat-source-col { white-space: nowrap; }
-    .comp-table td.tim-type-col > .cell-select { width: 44% !important; display: inline-block; vertical-align: middle; }
-    .comp-table td.tim-type-col > .tim-model-sub { display: inline-block; width: 54%; vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
-    .comp-table td.boss-size-col > .cell-select { width: 52% !important; display: inline-block; vertical-align: middle; }
-    .comp-table td.boss-size-col > .cell-input, .comp-table td.boss-size-col > span, .comp-table td.boss-size-col > div { width: 44% !important; display: inline-block; vertical-align: middle; margin: 0 !important; }
-    .comp-table td.heat-source-col > .cell-input { width: 46% !important; display: inline-block; vertical-align: middle; }
-    .comp-table td.heat-source-col > .epad-sub { display: inline-flex; align-items: center; gap: 3px; width: 52%; vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
-    .comp-table td.heat-source-col > .epad-sub .epad-label { margin: 0 !important; font-size: .62rem !important; }
-    .comp-table td.heat-source-col:not(:has(.epad-sub)) > .cell-input { width: 100% !important; }
+    .comp-table td.tim-type-col > .cell-select, .comp-table td.boss-size-col > .cell-select, .comp-table td.heat-source-col > .cell-input { width: var(--a) !important; display: inline-block; vertical-align: middle; }
+    .comp-table td.tim-type-col > .tim-model-sub { display: inline-block; width: var(--b); vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
+    .comp-table td.boss-size-col > .cell-input, .comp-table td.boss-size-col > span, .comp-table td.boss-size-col > div { width: var(--b) !important; display: inline-block; vertical-align: middle; margin: 0 !important; }
+    .comp-table td.heat-source-col > .epad-sub { display: inline-block; width: var(--b); vertical-align: middle; margin: 0 !important; padding: 0 !important; border: none !important; }
+    .comp-table td.heat-source-col > .epad-sub .epad-label { display: none !important; }
+    .comp-table td.heat-source-col > .epad-sub .cell-input { width: 100% !important; }
+    .comp-table td.heat-source-col .cell-input, .comp-table td.tim-type-col .cell-select, .comp-table td.boss-size-col .cell-select, .comp-table td.boss-size-col .cell-input, .comp-table td.boss-size-col .tim-locked-val { font-size: 12px !important; }
+    .comp-table td.heat-source-col .cell-input, .comp-table td.boss-size-col .cell-input { padding-left: 5px !important; padding-right: 5px !important; }
+    /* 這一列沒有第二個值（不是 Thermal Via → 沒有 E-PAD；TIM 類型沒有型號可選）→ 那個位置畫「—」，第一個值留在自己的子欄 */
+    .comp-table td.heat-source-col:not(:has(.epad-sub))::after, .comp-table td.tim-type-col:not(:has(.tim-model-sub))::after {
+      content: '—'; display: inline-block; width: var(--b); text-align: center; vertical-align: middle; color: #b3bfcc; }
   }
-  @media (min-width: 1700px) {
+  @container cl (min-width: 1660px) {
+    .comp-table .heat-source-col { --a: 52%; --b: 45%; }
+    .comp-table td.heat-source-col .cell-input, .comp-table td.tim-type-col .cell-select, .comp-table td.boss-size-col .cell-select, .comp-table td.boss-size-col .cell-input, .comp-table td.boss-size-col .tim-locked-val { font-size: 13px !important; }
+    .comp-table .tim-type-col { --a: 36%; --b: 62%; }
+    .comp-table .boss-size-col { --a: 58%; --b: 40%; }
+    .comp-table .spec-col { min-width: 46px !important; width: 46px !important; } .comp-table .note-col { min-width: 44px !important; width: 44px !important; }
+    .comp-table th.heat-source-col, .comp-table td.heat-source-col { min-width: 200px !important; width: 200px !important; }
     .comp-table th.tim-type-col, .comp-table td.tim-type-col { min-width: 250px !important; width: 250px !important; }
-    .comp-table th.heat-source-col, .comp-table td.heat-source-col { min-width: 190px !important; width: 190px !important; }
-    .comp-table td.tim-type-col > .cell-select { width: 34% !important; }
-    .comp-table td.tim-type-col > .tim-model-sub { width: 64%; }
-    .comp-table td.heat-source-col > .cell-input { width: 42% !important; }
-    .comp-table td.heat-source-col > .epad-sub { width: 56%; }
-    .comp-table td.heat-source-col > .epad-sub .cell-input { min-width: 0; flex: 1; }
+    .comp-table th.boss-size-col, .comp-table td.boss-size-col { min-width: 270px !important; width: 270px !important; }
   }
   .comp-table td select, .vd-table td select, .comp-table td .tim-locked-val { font-family: var(--ui-font) !important; }
-  @media (min-width: 1700px) {
-    .comp-table th.boss-size-col, .comp-table td.boss-size-col { min-width: 270px !important; width: 270px !important; }
-    .comp-table td.boss-size-col > .cell-select { width: 58% !important; }
-    .comp-table td.boss-size-col > .cell-input, .comp-table td.boss-size-col > span, .comp-table td.boss-size-col > div { width: 38% !important; }
-  }
   /* ▣V4-END */
 </style>
 </head>
@@ -8249,10 +8123,10 @@ function renderCategoryTable(catKey, catInfo, items, customItems) {
           <th class="readonly-col spec-col" title="規格書線上瀏覽（唯讀）。上傳／取代／刪除請到「EE/RF/PWR-專案元件清單」">規格書</th>
           <th class="readonly-col qty-col">數量</th>
           <th class="readonly-col power-col">發熱瓦數<br>(W)</th>
-          <th class="editable-col heat-source-col">元件大小<br>(mm)</th>
+          <th class="editable-col heat-source-col"><span class="th2"><span class="th2-a">元件大小<br>(mm)</span><span class="th2-b th2-wide" title="E-PAD 大小（mm）：IC 的散熱焊墊長×寬，不是元件外型尺寸。主散熱路徑＝Thermal Via 才需要填">E-PAD<br>(mm)</span></span></th>
           <th class="editable-col heat-source-height-col">元件高度<br>max (mm)</th>
-          <th class="editable-col tim-type-col" title="TIM 種類。存檔時寫回共用資料庫的元件欄位（＝5G-RRU 元件清單的「介面材料」）；底下若有選型號會連型號一起寫，5G-RRU 就以該型號的 k 與填縫厚度算 R_TIM">TIM Type</th>
-          <th class="editable-col boss-size-col">凸台大小<br>(mm)</th>
+          <th class="editable-col tim-type-col" title="TIM 種類。存檔時寫回共用資料庫的元件欄位（＝5G-RRU 元件清單的「介面材料」）；底下若有選型號會連型號一起寫，5G-RRU 就以該型號的 k 與填縫厚度算 R_TIM"><span class="th2"><span class="th2-a">TIM 類型</span><span class="th2-b"><span class="th2-pre">TIM </span>型號</span></span></th>
+          <th class="editable-col boss-size-col"><span class="th2"><span class="th2-a">凸台模式</span><span class="th2-b"><span class="th2-pre">凸台</span>大小 (mm)</span></span></th>
           <th class="editable-col boss-surface-col">凸台<br>表面處理</th>
           <th class="editable-col tim-thickness-col">TIM 厚度<br>(mm)</th>
           <th class="editable-col tim-size-col">TIM Size<br>(mm)</th>
