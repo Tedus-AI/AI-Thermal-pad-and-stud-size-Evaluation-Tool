@@ -121,6 +121,19 @@ function ok(name, cond, extra) {
      r6.viaMark === 'heatDirection', r6.viaMark);
   ok('沒選主散熱路徑 → 不動 Board_Type/Pad，也不標記', r6.none.join(',') === 'Thermal Via,1,2,Pad' && r6.noneMark === undefined, r6.none);
 
+  // _tim_from：TIM 類型由 Tab2 帶入的來源標記（5G-RRU 在「介面材料」欄標成 AI-Thermal 推導值）
+  const rm = await page.evaluate(() => {
+    const a = { TIM_Type:'Grease' }; sgDeriveFromSpec(a, { timType:'Pad', timModel:'TG-A6200' });
+    const b = { TIM_Type:'Pad', _tim_from:'timType' }; sgDeriveFromSpec(b, { timType:'' });          // Tab2 改回「—」
+    const c = { TIM_Type:'Pad2' }; sgDeriveFromSpec(c, { timType:'Pad' });                           // 舊類型沒被收斂
+    const d = { TIM_Type:'Putty', _tim_from:'timType' }; const chD = sgDeriveFromSpec(d, { timType:'Putty' });
+    return { a: a._tim_from, b: b._tim_from, bType: b.TIM_Type, c: c._tim_from, d: d._tim_from, chD };
+  });
+  ok('Tab2 選了 TIM 類型並寫進元件 → 標 _tim_from = timType', rm.a === 'timType', rm);
+  ok('Tab2 改回「—」→ 拿掉標記、值不動', rm.b === undefined && rm.bType === 'Pad', rm);
+  ok('舊類型沒被收斂（沒寫進元件）→ 不標', rm.c === undefined, rm);
+  ok('已經是同一個值與標記 → 不算變更', rm.d === 'timType' && rm.chD === false, rm);
+
   console.log('\n[5] 整批推導');
   const r7 = await page.evaluate(() => {
     const data = { rf_data:[{Component:'Final PA', TIM_Type:'Grease'}], digital_data:[{Component:'CPU (FPGA)'}], pwr_data:[] };

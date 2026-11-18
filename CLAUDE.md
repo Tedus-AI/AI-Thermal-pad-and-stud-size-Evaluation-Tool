@@ -146,7 +146,7 @@ materials:[{ id, vendor, model, tim_type, type_label, family:'Pad'|'Putty'|'Grea
 >
 > 內部欄位（底線開頭，兩個工具都原樣保留、**不列入** carry 白名單）：`_cid`（元件 id，存檔三方合併配對用，
 > 兩邊都會補發，見下方「存檔三方合併」）、`_defaults_ok`（5G-RRU 寫：使用者確認過這顆不是舊版罐頭預設值）、
-> `_rjc_from`／`_bt_from`／`_pad_from`（本工具寫：推導來源）、`_excluded`（5G-RRU 的排除）、`_ref_*`（兩個工具的快選參照；
+> `_rjc_from`／`_bt_from`／`_pad_from`／`_tim_from`（本工具寫：推導來源）、`_excluded`（5G-RRU 的排除）、`_ref_*`（兩個工具的快選參照；
 > 來源不存在時存檔會清掉，見「快選參照的來源專案名稱用 id 查」）、
 > `_renamed_from`（5G-RRU 寫：改過名的元件，本工具以名稱當 key 的資料還掛在哪個名稱底下；本工具存檔搬完就清掉，
 > 見下方「元件改名」）、`_limit_ok`（兩邊都會寫：使用者確認「限溫疑似範例值」其實是實際規格時，記下**確認的那個限溫數字**，
@@ -448,6 +448,10 @@ Tab2「TIM Type」欄底下多一個**型號**下拉，只列出 `tim_library` �
 
 取消選型一律 `delete comp.TIM_Model`，不可寫 `''`。
 
+**來源標記 `_tim_from = 'timType'`**（同 `_bt_from`／`_pad_from`）：Tab2 選了 TIM 類型、而且真的寫進元件 → 標；Tab2 改回「—」或舊類型沒被收斂
+→ 拿掉標記（值不動）。5G-RRU 據此在「介面材料」欄標藍邊（AI-Thermal 自動帶入）。三方合併裡跟 `TIM_Type`／`TIM_Model` 綁成一組。
+契約測試：`tests/tim-type-derive.test.js`。
+
 #### TIM Type 選 `None` → 凸台大小／凸台表面處理／TIM 厚度／TIM Size 反灰「不適用」
 
 使用者要求：不使用介面材料時這四欄沒有意義，直接屏蔽反灰（`timNaFor`／`timNaTd`，`td.tim-na-cell`）。
@@ -528,7 +532,7 @@ Tab1 的「✏️ 重新命名」（`sgAskRenameProject` / `sgConfirmRenameProje
   （412 重讀後重算；本機檔模式的 `ConflictError` 由 `CompMerge.saveWithMerge` 重試），逐顆元件、逐欄比對：
   我沒改 → 用資料庫的；只有我改 → 用我的；**兩邊改得不一樣 → 存檔前跳衝突視窗**，每一列選「用我的／用資料庫的」，
   全部選完才能存；取消 → 什麼都不寫、狀態列說明。相依欄位整組比對（E-Pad 長寬＋`_pad_from`、`R_jc`＋`_rjc_from`、
-  `Board_Type`＋`_bt_from`、`TIM_Type`＋`TIM_Model`、`Limit(C)`＋`Limit_Ref`）。本工具自己推導的欄位（`sgSyncRjcAll`、`sgDeriveAllFromSpecs`
+  `Board_Type`＋`_bt_from`、`TIM_Type`＋`TIM_Model`＋`_tim_from`、`Limit(C)`＋`Limit_Ref`）。本工具自己推導的欄位（`sgSyncRjcAll`、`sgDeriveAllFromSpecs`
   在存檔前算好）屬於「我的修改」，照常寫入。
 - 本工具專屬、不與 5G-RRU 共寫的欄位（`param_*`、`tcPlacement`、`thermal_specs`、`validation_data`…）不做三方合併。
 - 存檔成功 → 畫面換成實際寫入的內容（含併入的 5G-RRU 修改）並當作新快照；兩頁同專案時 TH/ME 頁那份元件清單

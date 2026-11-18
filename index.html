@@ -10361,6 +10361,11 @@ function sgDeriveFromSpec(comp, spec) {
       if (!legacyBlocked && comp.TIM_Type !== timType) { comp.TIM_Type = timType; changed = true; }
     }
   }
+  // 來源標記：TIM 類型由 Tab2 帶入 → 5G-RRU 在「介面材料」欄標成 AI-Thermal 推導值（同 _bt_from／_pad_from）。
+  // Tab2 沒選 TIM 類型（或舊類型沒被收斂）→ 不是本工具給的值 → 拿掉標記（值本身不動）。
+  const timOwned = !!timType && TIM_TYPE_OPTIONS.includes(timType) && comp.TIM_Type === timType;
+  if (timOwned) { if (comp._tim_from !== 'timType') { comp._tim_from = 'timType'; changed = true; } }
+  else if (comp._tim_from !== undefined) { delete comp._tim_from; changed = true; }
 
   const cfg = HEAT_PATH_MAP[(spec && spec.heatDirection) || ''];
   if (!cfg) return changed;            // 未選主散熱路徑 → 不寫 Board_Type/Pad
