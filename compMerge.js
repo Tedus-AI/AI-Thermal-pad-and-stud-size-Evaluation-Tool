@@ -40,7 +40,7 @@
     ['Pad_L', 'Pad_W', '_pad_from'],
     ['R_jc', '_rjc_from'],
     ['Board_Type', '_bt_from'],
-    ['TIM_Type', 'TIM_Model'],
+    ['TIM_Type', 'TIM_Model', '_tim_from'],
     ['Limit(C)', 'Limit_Ref'],   // 限溫與它指的是 Tj 還是 Tc：不可拼出「A 的數字＋B 的對象」
   ];
 
