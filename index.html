@@ -7483,10 +7483,21 @@ async function initDatabase() {
   }
 }
 
+/* 標題列帳號：email 的 @ 前面；沒有 email 才退回顯示名稱 */
+function spShortAccount(acct) {
+  const mail = String((acct && acct.email) || '').trim();
+  const local = mail.includes('@') ? mail.split('@')[0] : '';
+  return local || String((acct && acct.name) || '').trim() || '已登入';
+}
+
 function _updateSpHeaderSignedIn() {
   const acct = dbAdapter.getAccountInfo();
   if (!acct) return;
-  updateDbStatusText('✅ SharePoint ｜ ' + acct.name, 'success');
+  // 標題列只放 @ 前面的帳號（完整顯示名稱常含中文名＋部門，17 吋筆電會被截成「T...」）；全名與 email 放 tooltip
+  const shortName = spShortAccount(acct);
+  updateDbStatusText('✅ SharePoint ｜ ' + shortName, 'success');
+  const acctBtn = document.getElementById('ab-acct-btn');
+  if (acctBtn) acctBtn.title = '資料庫與帳號\n' + [acct.name, acct.email].filter(Boolean).join('\n');
   const btnLogin = document.getElementById('btn-sp-login');
   const btnLogout = document.getElementById('btn-sp-logout');
   const userInfo = document.getElementById('sp-user-info');
@@ -7536,6 +7547,8 @@ async function recordLoginHistory() {
 
 function _updateSpHeaderSignedOut() {
   updateDbStatusText('SharePoint ｜ 未登入', '');
+  const acctBtn = document.getElementById('ab-acct-btn');
+  if (acctBtn) acctBtn.title = '資料庫與帳號';
   const btnLogin = document.getElementById('btn-sp-login');
   const btnLogout = document.getElementById('btn-sp-logout');
   const userInfo = document.getElementById('sp-user-info');

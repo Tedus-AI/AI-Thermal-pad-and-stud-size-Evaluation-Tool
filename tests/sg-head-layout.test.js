@@ -165,6 +165,23 @@ const PROJ = {
       t1.barH <= 60 && t1.sticky === 'sticky' && t1.inside && t1.noOverlap && t1.selW >= 150 && t1.exports === 2 && t1.hscroll <= 0, t1);
     await page.evaluate(() => { const st = document.getElementById('sg-comp-save-status'); st.textContent = ''; st.className = 'save-status'; });
   }
+  // 登入帳號：標題列只顯示 @ 前面的帳號，完整名稱與 email 放 tooltip；沒有 email 退回名稱
+  const acc = await page.evaluate(() => {
+    const keep = dbAdapter.getAccountInfo, keepHist = window.recordLoginHistory;
+    window.recordLoginHistory = () => {};
+    dbAdapter.getAccountInfo = () => ({ name: 'TEDUS.CHEN 陳慶峰 (Thermal Team)', email: 'Tedus.Chen@deltaww.com' });
+    _updateSpHeaderSignedIn();
+    const a = { txt: document.getElementById('db-status-text').textContent, title: document.getElementById('ab-acct-btn').title,
+                pop: document.getElementById('sp-user-info').textContent };
+    dbAdapter.getAccountInfo = () => ({ name: 'Guest User', email: '' });
+    _updateSpHeaderSignedIn();
+    a.noMail = document.getElementById('db-status-text').textContent;
+    dbAdapter.getAccountInfo = keep; window.recordLoginHistory = keepHist;
+    return a;
+  });
+  ok('標題列帳號只顯示 @ 前面（Tedus.Chen）、tooltip 有全名＋email、選單仍列完整 email',
+     acc.txt === '✅ SharePoint ｜ Tedus.Chen' && /陳慶峰/.test(acc.title) && /deltaww\.com/.test(acc.title) && acc.pop === 'Tedus.Chen@deltaww.com', acc);
+  ok('沒有 email 時退回顯示名稱', /Guest User/.test(acc.noMail), acc);
   await page.setViewportSize({ width: 1536, height: 900 });
   await page.evaluate(() => switchTab('complist'));
   const ex = await page.evaluate(() => {
